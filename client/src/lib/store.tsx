@@ -1,23 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AppState, Profile } from "./types";
+import { getLocalStore } from "./persist-local";
 import { nutritionTargets, trainingDaysPerWeek, type NutritionTargets } from "./engine";
 
 const KEY = "corpus.v1";
 
-/* storage that survives sandboxed iframes: tries localStorage, falls back to memory */
+/* persistence: localStorage when built for standalone hosting, memory otherwise */
 const memory: Record<string, string> = {};
-let storageOK = true;
-const ls = (() => {
-  try {
-    const t = "__corpus_test__";
-    window.localStorage.setItem(t, "1");
-    window.localStorage.removeItem(t);
-    return window.localStorage;
-  } catch {
-    storageOK = false;
-    return null;
-  }
-})();
+const ls: Storage | null = import.meta.env.VITE_PERSIST === "local" ? getLocalStore() : null;
+const storageOK = !!ls;
 export const storageAvailable = () => storageOK;
 function readRaw(): string | null {
   try { return ls ? ls.getItem(KEY) : memory[KEY] ?? null; } catch { return memory[KEY] ?? null; }
