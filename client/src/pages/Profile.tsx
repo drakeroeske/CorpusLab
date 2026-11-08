@@ -1,3 +1,4 @@
+import { EngineHeader, setGrain, useGrain } from "@/components/riso";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, KeyRound, Lock, Copy, Database, Download, Eye, LogOut, MessageSquare, RefreshCw, Upload, UserCog, X } from "lucide-react";
 import { useAuth, type PubUser } from "@/lib/auth";
@@ -30,7 +31,7 @@ export default function Profile() {
 
   return (
     <div>
-      <header className="topbar"><h1>Profile</h1></header>
+      <EngineHeader title="Profile" section="ME" />
       <div className="screen">
         {(mode !== "readonly" && ((mode === "offline" && !storageAvailable() && !remoteAvailable()) || saveError)) && (
           <div className="card-flat flex gap-3 mb-3" style={{ borderColor: "var(--orange)" }} data-testid="text-storage-warning">
@@ -39,7 +40,7 @@ export default function Profile() {
           </div>
         )}
         <div className="card flex items-center gap-3">
-          <span className="avatar" style={{ width: 48, height: 48, fontSize: 17, borderColor: "var(--lime)", color: "var(--lime)" }}>{initials(profile.name)}</span>
+          <span className="avatar" style={{ width: 48, height: 48, fontSize: 17 }}>{initials(profile.name)}</span>
           <div className="flex-1 min0">
             <input className="input" style={{ fontWeight: 600 }} value={profile.name} onChange={(e) => upd({ name: e.target.value })} aria-label="Name" data-testid="input-profile-name" />
           </div>
@@ -49,6 +50,7 @@ export default function Profile() {
 
         <div className="section-title"><h2>App</h2></div>
         <InstallCard />
+        <GrainCard />
         <a href="#/privacy" className="btn btn-block mt-2" data-testid="link-profile-privacy">Privacy · what's stored and who sees it</a>
 
         <div className="section-title"><h2>Body & goal</h2></div>
@@ -537,6 +539,18 @@ function LiveCoachDashboard() {
           openAccount: () => { setOpen(null); auth.viewAs({ id: client.id, name: client.name, state: { ...emptyState(), ...raw.state! } }); },
         }} />
       )}
+    </div>
+  );
+}
+
+
+function GrainCard() {
+  const g = useGrain();
+  return (
+    <div className="card mt-3" data-testid="card-grain">
+      <div className="label mb-2">Paper grain</div>
+      <Seg value={g} onChange={(v) => setGrain(v)} options={[{ v: "off", l: "Off" }, { v: "subtle", l: "Subtle" }, { v: "full", l: "Full" }]} testId="seg-grain" />
+      <p className="text-xs mt-2">Photocopy texture over the app. Turn it off if you prefer a clean screen.</p>
     </div>
   );
 }

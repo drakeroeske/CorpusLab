@@ -5,18 +5,20 @@ import { useUI } from "@/App";
 import { useToday, prWhyStat } from "@/lib/derived";
 import { Empty, Seg, Sheet, initials } from "@/components/ui";
 import { PRCardSheet, type PRData } from "@/components/PRCard";
-import { dateKey, dots, e1rmSeries, fmtW, fromKg, matchScore, r1, sessionPRs, toKg, trainingDaysPerWeek, userStreak } from "@/lib/engine";
+import { addDays, dateKey, dayForDate, dots, e1rmSeries, fmtW, fromKg, matchScore, r1, sessionPRs, toKg, trainingDaysPerWeek, userStreak } from "@/lib/engine";
 import { EX, newId } from "@/lib/exercises";
 import type { FeedPost, Spotter } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
 import SpottersLive from "@/pages/SpottersLive";
+import { PostCard } from "@/components/PostCard";
+import { EngineHeader, StreakCells, Tag } from "@/components/riso";
 
 type Sub = "feed" | "crews" | "gym" | "find" | "leaders";
 
 export default function Spotters() {
   const { live, viewing } = useAuth();
   if (viewing) return (
-    <div><header className="topbar"><h1>Spotters</h1></header>
+    <div><EngineHeader title="Spotters" section="FEED" brand="SPOTTER" />
       <div className="screen"><Empty>Spotters is private to {viewing.name}. Coaches see training, recovery and nutrition only.</Empty></div></div>
   );
   return live ? <SpottersLive /> : <SpottersDemo />;
@@ -26,7 +28,7 @@ function SpottersDemo() {
   const [sub, setSub] = useState<Sub>("feed");
   return (
     <div>
-      <header className="topbar"><h1>Spotters</h1></header>
+      <EngineHeader title="Spotters" section="FEED" brand="SPOTTER" />
       <nav className="subtabs" aria-label="Spotters sections">
         {([["feed", "Feed"], ["crews", "Crews"], ["gym", "Gym"], ["find", "Find"], ["leaders", "Leaders"]] as const).map(([id, l]) => (
           <button key={id} aria-pressed={sub === id ? "true" : "false"} onClick={() => setSub(id)} data-testid={`subtab-spotters-${id}`}>{l}</button>
@@ -62,19 +64,14 @@ const ago = (ts: number) => {
 function Feed() {
   const { state, set, profile, targets } = useStore();
   const name = useNames();
-  const [comment, setComment] = useState<Record<string, string>>({});
-  const [openC, setOpenC] = useState<string | null>(null);
   const [card, setCard] = useState<PRData | null>(null);
   const friends = new Set(state.spotters.filter((s) => s.friend).map((s) => s.id));
   const posts = state.feed.filter((p) => p.author === "me" || friends.has(p.author)).sort((a, b) => b.ts - a.ts).slice(0, 40);
 
   const update = (id: string, f: (p: FeedPost) => FeedPost) => set((s) => ({ ...s, feed: s.feed.map((p) => (p.id === id ? f(p) : p)) }));
   const like = (p: FeedPost) => update(p.id, (x) => ({ ...x, likes: x.likes.includes("me") ? x.likes.filter((l) => l !== "me") : [...x.likes, "me"] }));
-  const send = (p: FeedPost) => {
-    const txt = (comment[p.id] || "").trim();
-    if (!txt) return;
+  const send = (p: FeedPost, txt: string) => {
     update(p.id, (x) => ({ ...x, comments: [...x.comments, { id: newId("c"), author: "me", text: txt, ts: Date.now() }] }));
-    setComment({ ...comment, [p.id]: "" });
   };
   const prCard = (p: FeedPost) => {
     const sess = state.sessions.find((s) => s.id === p.sessionId);
@@ -86,55 +83,21 @@ function Feed() {
   };
 
   if (!posts.length) return <Empty>No posts yet. Finish a workout and it auto-posts here; add Spotters from Find.</Empty>;
+  // PR card numbers count PR posts oldest → newest
+  const prNos = new Map<string, number>();
+  [...posts].reverse().filter((p) => p.prs.length).forEach((p, i) => prNos.set(p.id, i + 1));
   return (
     <div className="stack" data-testid="view-feed">
       {posts.map((p) => {
-        const liked = p.likes.includes("me");
         const n = name(p.author);
         return (
-          <article key={p.id} className="card" data-testid={`card-post-${p.id}`}>
-            <div className="flex items-center gap-3">
-              <Avatar id={p.author} name={n} />
-              <div className="min0 flex-1">
-                <div className="text-sm font-semibold">{p.author === "me" ? "You" : n}</div>
-                <div className="mono text-[11px] muted">{p.sessionName} · {p.durationMin} min · {ago(p.ts)}</div>
-              </div>
-              {p.prs.length > 0 && <span className="chip chip-lime"><Award size={12} /> {p.prs.length} PR</span>}
-            </div>
-            <div className="mt-3" style={{ borderTop: "1px solid var(--border)" }}>
-              {p.topSets.map((t, i) => (
-                <div key={i} className="rowline" style={{ minHeight: 34 }}>
-                  <span className="text-[13px]">{t.name}{p.prs.includes(t.name) && <span className="lime mono text-[10px] ml-2">PR</span>}</span>
-                  <span className="mono text-sm">{fmtW(t.weight)} × {t.reps} <span className="faint text-xs">{t.units}</span></span>
-                </div>
-              ))}
-            </div>
-            <div className="flex items-center gap-1 mt-2">
-              <button className={`btn btn-ghost btn-sm ${liked ? "lime" : ""}`} onClick={() => like(p)} aria-pressed={liked ? "true" : "false"} data-testid={`button-like-${p.id}`}>
-                <Heart size={16} fill={liked ? "currentColor" : "none"} /> <span className="mono">{p.likes.length}</span>
-              </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setOpenC(openC === p.id ? null : p.id)} data-testid={`button-comments-${p.id}`}>
-                <MessageCircle size={16} /> <span className="mono">{p.comments.length}</span>
-              </button>
-              <span className="flex-1" />
-              {p.author === "me" && p.prs.length > 0 && p.sessionId && (
-                <button className="btn btn-outline btn-sm" onClick={() => prCard(p)} data-testid={`button-prcard-${p.id}`}>PR card</button>
-              )}
-            </div>
-            {(openC === p.id || (p.comments.length > 0 && p.comments.length <= 2)) && (
-              <div className="mt-1">
-                {p.comments.map((c) => (
-                  <p key={c.id} className="text-[13px] py-1"><span className="font-semibold">{c.author === "me" ? "You" : name(c.author).split(" ")[0]}</span> <span className="muted">{c.text}</span></p>
-                ))}
-                {openC === p.id && (
-                  <div className="flex gap-2 mt-2">
-                    <input className="input" placeholder="Add a comment" value={comment[p.id] || ""} onChange={(e) => setComment({ ...comment, [p.id]: e.target.value })} onKeyDown={(e) => e.key === "Enter" && send(p)} data-testid={`input-comment-${p.id}`} />
-                    <button className="btn btn-primary" onClick={() => send(p)} aria-label="Send comment" data-testid={`button-send-comment-${p.id}`}><Send size={16} /></button>
-                  </div>
-                )}
-              </div>
-            )}
-          </article>
+          <PostCard key={p.id} id={p.id} author={n} mine={p.author === "me"} ts={p.ts} title={p.sessionName} durationMin={p.durationMin} prNo={prNos.get(p.id)}
+            sets={p.topSets.map((t) => ({ ...t, pr: p.prs.includes(t.name) }))} prCount={p.prs.length}
+            liked={p.likes.includes("me")} likes={p.likes.length}
+            comments={p.comments.map((c) => ({ id: c.id, who: c.author === "me" ? "You" : name(c.author).split(" ")[0], text: c.text }))}
+            onLike={() => like(p)} onComment={(t) => send(p, t)}
+            onChallenge={() => send(p, `[CHALLENGE] Coming for that ${p.prs[0] ?? p.topSets[0]?.name ?? p.sessionName}.`)}
+            onPrCard={p.prs.length > 0 && p.sessionId ? () => prCard(p) : undefined} />
         );
       })}
       {card && <PRCardSheet data={card} onClose={() => setCard(null)} />}
@@ -154,6 +117,12 @@ function Crews() {
   const friends = state.spotters.filter((s) => s.friend);
   const missed = (id: string) => (id === "me" ? false : !!state.spotters.find((s) => s.id === id)?.missedThisWeek);
   const streakOf = (id: string) => (id === "me" ? myStreak : state.spotters.find((s) => s.id === id)?.streak ?? 0);
+  const myLog = Array.from({ length: 14 }, (_, i) => {
+    const date = addDays(today, i - 13);
+    const planned = !!dayForDate(state.program, date);
+    const done = state.sessions.some((s) => s.date === date && s.end);
+    return { date, planned: planned && !done && date < today, done };
+  });
   const adherenceOf = (id: string) => {
     if (id !== "me") return state.spotters.find((s) => s.id === id)?.adherence ?? 0;
     const planned = trainingDaysPerWeek(state.program) * 4;
@@ -171,13 +140,14 @@ function Crews() {
         const board = [...c.members].sort((a, b) => adherenceOf(b) - adherenceOf(a));
         return (
           <div key={c.id} className="card" data-testid={`card-crew-${c.id}`}>
-            <div className="flex items-center justify-between">
-              <span className="font-semibold">{c.name}</span>
-              <span className="chip"><Users size={12} /> {c.members.length}</span>
+            <div className="flex items-start justify-between gap-2">
+              <span className="display text-[34px]">{c.name}.</span>
+              {streak > 0 ? <Tag signal>{streak} session streak</Tag> : <Tag>No streak</Tag>}
             </div>
             <div className="flex items-end gap-4 mt-3">
-              <div><div className="label">Shared streak</div><div className={`big-num ${streak ? "lime" : "orange"}`} data-testid={`text-crew-streak-${c.id}`}>{streak}<span className="text-sm muted"> sessions</span></div></div>
-              <div><div className="label">Best</div><div className="mono text-lg">{Math.max(c.best, streak)}</div></div>
+              <div><div className="label">Shared streak</div><div className="big-num text-[40px]" data-testid={`text-crew-streak-${c.id}`}>{streak}</div></div>
+              <div><div className="label">Best</div><div className="big-num text-[40px]">{Math.max(c.best, streak)}</div></div>
+              <div className="flex-1 min0"><div className="label">Last 14 days · you</div><div className="mt-1"><StreakCells log={myLog} testId={`streak-${c.id}`} /></div></div>
             </div>
             {anyMissed && <p className="text-xs orange mt-1">Streak broken — {c.members.filter(missed).map((m) => name(m).split(" ")[0]).join(", ")} missed a planned session this week.</p>}
             <div className="label mt-4 mb-1">Consistency leaderboard · 4 wk</div>

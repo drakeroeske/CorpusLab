@@ -30,44 +30,57 @@ const SIL = "M60 7 a11 12 0 1 1 -0.01 0 Z M50 30 h20 v6 h-20 Z";
 const OUT: Poly = [[52, 31], [42, 36], [28, 38], [22, 48], [22, 70], [16, 98], [14, 120], [20, 124], [26, 110], [33, 88], [38, 70], [40, 96], [38, 112], [38, 150], [41, 176], [40, 204], [43, 236], [55, 236], [56, 204], [58, 176], [60, 156]];
 const outline = [...OUT, ...mir([...OUT].reverse())];
 
+/** Hatch density by fatigue: blank → sparse → dense → solid ink. */
+export function fatigueLevel(v: number): 0 | 1 | 2 | 3 | 4 {
+  return v < 4 ? 0 : v < 25 ? 1 : v < 50 ? 2 : v < 70 ? 3 : 4;
+}
 export function fatigueColor(v: number) {
-  if (v < 4) return "#E1E5E8";
-  const t = Math.min(1, v / 100);
-  // tan (#B08A68) → red (#B42318)
-  const a = [176, 138, 104], b = [180, 35, 24];
-  const c = a.map((x, i) => Math.round(x + (b[i] - x) * t));
-  return `rgba(${c[0]},${c[1]},${c[2]},${0.28 + 0.62 * Math.min(1, v / 70)})`;
+  const l = fatigueLevel(v);
+  return l === 0 ? "transparent" : l === 4 ? "currentColor" : `url(#hatch${l})`;
+}
+function HatchDefs() {
+  return (
+    <defs>
+      {[[1, 5], [2, 3], [3, 1.8]].map(([n, gap]) => (
+        <pattern key={n} id={`hatch${n}`} width={gap} height={gap} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <line x1="0" y1="0" x2="0" y2={gap} stroke="currentColor" strokeWidth="0.7" />
+        </pattern>
+      ))}
+    </defs>
+  );
 }
 
 export function BodyMap({ values, view, onTap, selected, testId, height = 280 }: { values: Partial<Record<Muscle, number>>; view: "front" | "back"; onTap?: (m: Muscle) => void; selected?: Muscle | null; testId?: string; height?: number }) {
   const parts = view === "front" ? FRONT : BACK;
   return (
-    <svg viewBox="0 0 120 244" height={height} style={{ display: "block", margin: "0 auto", maxWidth: "100%" }} data-testid={testId} role="img" aria-label={`${view} body diagram`}>
-      <polygon points={pts(outline)} fill="none" stroke="var(--border-strong)" strokeWidth="0.8" />
-      <path d={SIL} fill="none" stroke="var(--border-strong)" strokeWidth="0.8" />
-      <line x1="60" y1="40" x2="60" y2="110" stroke="var(--border)" strokeWidth="0.5" strokeDasharray="1.5 1.5" />
+    <svg viewBox="0 0 120 244" height={height} style={{ display: "block", margin: "0 auto", maxWidth: "100%", color: "var(--ink)" }} data-testid={testId} role="img" aria-label={`${view} body diagram`}>
+      <HatchDefs />
+      <line x1="60" y1="0" x2="60" y2="244" stroke="currentColor" strokeWidth="0.3" strokeDasharray="1.5 1.5" />
+      <polygon points={pts(outline)} fill="none" stroke="currentColor" strokeWidth="1" />
+      <path d={SIL} fill="none" stroke="currentColor" strokeWidth="1" />
       {parts.map(({ m, polys }) =>
         polys.flatMap((p, i) => [p, mir(p)].map((pp, j) => (
           <polygon key={`${m}-${i}-${j}`} points={pts(pp)} className="muscle"
-            fill={fatigueColor(values[m] ?? 0)} stroke={selected === m ? "var(--text)" : "var(--bg)"} strokeWidth={selected === m ? 1.2 : 0.8}
+            fill={fatigueColor(values[m] ?? 0)} stroke="currentColor" strokeWidth={selected === m ? 1.6 : 0.6}
             onClick={() => onTap?.(m)} data-testid={`muscle-${view}-${m}${j ? "-r" : ""}`}>
             <title>{MUSCLE_LABEL[m]}: {Math.round(values[m] ?? 0)}%</title>
           </polygon>
         ))),
       )}
-      <text x="60" y="242" textAnchor="middle" fontSize="6" fill="var(--faint)" fontFamily="JetBrains Mono" letterSpacing="1">{view.toUpperCase()}</text>
+      <text x="60" y="242" textAnchor="middle" fontSize="6" fontWeight="700" fill="currentColor" fontFamily="Space Mono" letterSpacing="1">{view.toUpperCase()}</text>
     </svg>
   );
 }
 
 export function FatigueLegend() {
   return (
-    <div className="flex items-center gap-2 label" style={{ letterSpacing: ".08em" }}>
-      <span>0%</span>
-      <span style={{ display: "flex", flex: 1, height: 6, borderRadius: 3, overflow: "hidden" }}>
-        {[0, 20, 40, 60, 80, 100].map((v) => <i key={v} style={{ flex: 1, background: fatigueColor(v || 5) }} />)}
-      </span>
-      <span>100%</span>
+    <div className="flex items-center gap-2 label">
+      <span>0% recovered</span>
+      <svg style={{ flex: 1, height: 10, color: "var(--ink)" }} preserveAspectRatio="none" viewBox="0 0 100 10">
+        <HatchDefs />
+        {[0, 1, 2, 3, 4].map((l) => <rect key={l} x={l * 20} y="0" width="20" height="10" fill={l === 0 ? "transparent" : l === 4 ? "currentColor" : `url(#hatch${l})`} stroke="currentColor" strokeWidth="0.6" />)}
+      </svg>
+      <span>100% fatigued</span>
     </div>
   );
 }

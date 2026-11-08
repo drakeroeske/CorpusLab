@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { Minus, Plus, X } from "lucide-react";
+import { Logo } from "@/components/riso";
 
 export function Sheet({ title, onClose, children, full, right, testId }: { title: ReactNode; onClose: () => void; children: ReactNode; full?: boolean; right?: ReactNode; testId?: string }) {
   useEffect(() => {
@@ -76,28 +77,26 @@ export function Stepper({ value, onChange, step = 1, min = 0, max = 9999, unit, 
   );
 }
 
-export function Ring({ value, max, size = 92, stroke = 7, color = "var(--lime)", children, over }: { value: number; max: number; size?: number; stroke?: number; color?: string; children?: ReactNode; over?: boolean }) {
+export function Ring({ value, max, size = 92, stroke = 7, color = "currentColor", children, over }: { value: number; max: number; size?: number; stroke?: number; color?: string; children?: ReactNode; over?: boolean }) {
   const r = (size - stroke) / 2, c = 2 * Math.PI * r;
   const pct = max > 0 ? Math.min(1, value / max) : 0;
+  void color;
   return (
     <div style={{ width: size, height: size, position: "relative" }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--border)" strokeWidth={stroke} />
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={over ? "var(--orange)" : color} strokeWidth={stroke} strokeLinecap="butt"
-          strokeDasharray={`${c * pct} ${c}`} transform={`rotate(-90 ${size / 2} ${size / 2})`} style={{ transition: "stroke-dasharray .5s" }} />
-        {Array.from({ length: 20 }).map((_, i) => {
-          const a = (i / 20) * Math.PI * 2 - Math.PI / 2;
-          const r1 = size / 2 - stroke - 3, r2 = r1 - 3;
-          return <line key={i} x1={size / 2 + Math.cos(a) * r1} y1={size / 2 + Math.sin(a) * r1} x2={size / 2 + Math.cos(a) * r2} y2={size / 2 + Math.sin(a) * r2} stroke="var(--border-strong)" strokeWidth="1" />;
-        })}
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeWidth={1} strokeDasharray="2 3" />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="butt"
+          strokeDasharray={over ? `3 3` : `${c * pct} ${c}`} transform={`rotate(-90 ${size / 2} ${size / 2})`} style={{ transition: "stroke-dasharray .5s" }} />
+        {over && <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeWidth={stroke} strokeDasharray={`${c} ${c}`} transform={`rotate(-90 ${size / 2} ${size / 2})`} opacity="0.35" />}
       </svg>
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>{children}</div>
     </div>
   );
 }
 
-export function Bar({ pct, color = "var(--lime)" }: { pct: number; color?: string }) {
-  return <div className="bar"><i style={{ width: `${Math.max(0, Math.min(100, pct))}%`, background: color }} /></div>;
+export function Bar({ pct, color, over }: { pct: number; color?: string; over?: boolean }) {
+  void color;
+  return <div className={`bar ${over || pct > 110 ? "over" : ""}`}><i style={{ width: `${Math.max(0, Math.min(100, pct))}%` }} /></div>;
 }
 
 export function Toast({ msg }: { msg: string | null }) {
@@ -135,34 +134,34 @@ export function LineChart({ series, height = 150, xLabels, yFmt = (v: number) =>
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" style={{ display: "block", overflow: "visible" }} data-testid={testId} role="img">
       {ticks.map((t, i) => (
         <g key={i}>
-          <line x1={L} x2={W - Rr} y1={ys(t)} y2={ys(t)} stroke="var(--border)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-          <text x={L - 6} y={ys(t) + 3} textAnchor="end" fontSize="9" fill="var(--faint)" fontFamily="JetBrains Mono">{yFmt(t)}</text>
+          <line x1={L} x2={W - Rr} y1={ys(t)} y2={ys(t)} stroke="var(--ink)" strokeWidth="1" strokeDasharray="3 3" opacity="0.35" vectorEffect="non-scaling-stroke" />
+          <text x={L - 6} y={ys(t) + 3} textAnchor="end" fontSize="9" fill="var(--ink)" fontFamily="Space Mono">{yFmt(t)}</text>
         </g>
       ))}
-      {band && <rect x={L} width={W - L - Rr} y={ys(band.y1)} height={Math.max(0, ys(band.y0) - ys(band.y1))} fill="var(--lime)" opacity="0.07" />}
+      {band && <rect x={L} width={W - L - Rr} y={ys(band.y1)} height={Math.max(0, ys(band.y0) - ys(band.y1))} fill="var(--ink)" opacity="0.08" />}
       {series.map((s, i) => {
         if (!s.points.length) return null;
         const d = s.points.map((p, j) => `${j ? "L" : "M"}${xs(p.x).toFixed(1)},${ys(p.y).toFixed(1)}`).join(" ");
         return (
           <g key={i}>
-            {s.area && <path d={`${d} L${xs(s.points[s.points.length - 1].x)},${H - B} L${xs(s.points[0].x)},${H - B} Z`} fill={s.color} opacity="0.08" />}
-            <path d={d} fill="none" stroke={s.color} strokeWidth={s.width ?? 1.6} strokeDasharray={s.dashed ? "4 4" : undefined} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-            {s.dots && s.points.map((p, j) => <circle key={j} cx={xs(p.x)} cy={ys(p.y)} r="2.2" fill={s.color} />)}
+            {s.area && <path d={`${d} L${xs(s.points[s.points.length - 1].x)},${H - B} L${xs(s.points[0].x)},${H - B} Z`} fill="var(--ink)" opacity="0.08" />}
+            <path d={d} fill="none" stroke="var(--ink)" strokeWidth={s.width ?? 1.6} strokeDasharray={s.dashed ? "4 4" : undefined} opacity={s.dashed ? 0.6 : 1} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+            {s.dots && s.points.map((p, j) => <rect key={j} x={xs(p.x) - 2.5} y={ys(p.y) - 2.5} width="5" height="5" fill="var(--page)" stroke="var(--ink)" strokeWidth="1.5" />)}
           </g>
         );
       })}
       {markers?.map((m, i) => (
         <g key={i}>
-          <circle cx={xs(m.x)} cy={ys(m.y)} r="4" fill="var(--bg)" stroke={m.color ?? "var(--lime)"} strokeWidth="1.5" />
-          {m.label && <text x={xs(m.x) - 6} y={ys(m.y) - 8} textAnchor="end" fontSize="9" fill={m.color ?? "var(--lime)"} fontFamily="JetBrains Mono">{m.label}</text>}
+          <rect x={xs(m.x) - 4} y={ys(m.y) - 4} width="8" height="8" fill="var(--signal)" stroke="var(--ink)" strokeWidth="1.5" />
+          {m.label && <text x={xs(m.x) - 6} y={ys(m.y) - 8} textAnchor="end" fontSize="9" fill="var(--ink)" fontWeight="700" fontFamily="Space Mono">{m.label}</text>}
         </g>
       ))}
-      {xLabels?.map((l, i) => <text key={i} x={xs(l.x)} y={H - 4} textAnchor={i === 0 ? "start" : i === xLabels.length - 1 ? "end" : "middle"} fontSize="9" fill="var(--faint)" fontFamily="JetBrains Mono">{l.label}</text>)}
+      {xLabels?.map((l, i) => <text key={i} x={xs(l.x)} y={H - 4} textAnchor={i === 0 ? "start" : i === xLabels.length - 1 ? "end" : "middle"} fontSize="9" fill="var(--ink)" fontFamily="Space Mono">{l.label}</text>)}
     </svg>
   );
 }
 
-export function Spark({ values, width = 72, height = 22, color = "var(--lime)" }: { values: number[]; width?: number; height?: number; color?: string }) {
+export function Spark({ values, width = 72, height = 22, color = "currentColor" }: { values: number[]; width?: number; height?: number; color?: string }) {
   if (values.length < 2) return null;
   const min = Math.min(...values), max = Math.max(...values), sp = max - min || 1;
   const d = values.map((v, i) => `${i ? "L" : "M"}${((i / (values.length - 1)) * width).toFixed(1)},${(height - 2 - ((v - min) / sp) * (height - 4)).toFixed(1)}`).join(" ");
@@ -173,11 +172,11 @@ export function Empty({ children }: { children: ReactNode }) {
   return <div className="empty text-sm">{children}</div>;
 }
 
-export function Wordmark({ size = 17 }: { size?: number }) {
+export function Wordmark({ size = 22 }: { size?: number }) {
   return (
     <span className="inline-flex items-center gap-2" aria-label="RXS" data-testid="wordmark">
-      <span style={{ width: size * 0.62, height: size * 0.62, background: "var(--brown)", borderRadius: 2, display: "inline-block" }} />
-      <span style={{ fontWeight: 700, fontSize: size, letterSpacing: "0.02em" }}>RXS</span>
+      <Logo size={size * 1.1} />
+      <span className="display" style={{ fontSize: size * 1.3 }}>RXS</span>
     </span>
   );
 }

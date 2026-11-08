@@ -25,7 +25,7 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <Sheet title="AI Coach" onClose={onClose} full testId="sheet-coach"
+    <Sheet title="Coach" onClose={onClose} full testId="sheet-coach"
       right={state.chat.length ? <button className="btn btn-ghost btn-sm" onClick={() => set((s) => ({ ...s, chat: [] }))} data-testid="button-clear-chat">Clear</button> : undefined}>
       <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
         <p className="text-xs muted mb-3">Answers come from your logged data and the RXS engine (readiness, fatigue, plateau, and progression rules), not generic advice.</p>

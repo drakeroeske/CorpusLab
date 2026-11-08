@@ -136,7 +136,7 @@ export function NutritionSheet({ onClose }: { onClose: () => void }) {
   const bsum = basket.reduce((a, x) => ({ cal: a.cal + x.cal, p: a.p + x.p, c: a.c + x.c, f: a.f + x.f }), { cal: 0, p: 0, c: 0, f: 0 });
 
   return (
-    <Sheet title="Nutrition log" onClose={onClose} testId="sheet-nutrition">
+    <Sheet title="Fuel" onClose={onClose} testId="sheet-nutrition">
       <div className="flex items-center justify-around">
         <div className="flex flex-col items-center gap-1"><Ring value={tot.cal} max={calT} size={86} over={tot.cal > calT * 1.08}><span className="mono font-semibold">{Math.round(tot.cal)}</span><span className="mono text-[10px] muted">/{calT}</span></Ring><span className="label">kcal</span></div>
         <div className="flex flex-col items-center gap-1"><Ring value={tot.p} max={targets.protein} size={86} color="var(--blue)"><span className="mono font-semibold">{Math.round(tot.p)}</span><span className="mono text-[10px] muted">/{targets.protein}g</span></Ring><span className="label">protein</span></div>

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Award, Check, Copy, Heart, MapPin, MessageCircle, RefreshCw, Send, Share, Trash2, UserMinus, UserPlus, X } from "lucide-react";
 import { inviteLink } from "@/lib/invite";
+import { PostCard } from "@/components/PostCard";
+import { EngineHeader } from "@/components/riso";
 import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
 import { api } from "@/lib/api";
@@ -38,7 +40,7 @@ export default function SpottersLive() {
   useEffect(() => { api<{ incoming: unknown[] }>("GET", "/api/friends").then((r) => setPending(r.incoming.length)).catch(() => {}); }, [sub]);
   return (
     <div>
-      <header className="topbar"><h1>Spotters</h1></header>
+      <EngineHeader title="Spotters" section="FEED" brand="SPOTTER" />
       <nav className="subtabs" aria-label="Spotters sections">
         {([["feed", "Feed"], ["friends", pending ? `Friends · ${pending}` : "Friends"], ["gym", "Gym"], ["leaders", "Leaders"]] as const).map(([id, l]) => (
           <button key={id} aria-pressed={sub === id ? "true" : "false"} onClick={() => setSub(id)} data-testid={`subtab-spotters-${id}`}>{l}</button>
@@ -73,8 +75,6 @@ function Feed({ goFriends }: { goFriends: () => void }) {
   const { me } = useAuth();
   const ui = useUI();
   const { data, err, reload } = useLoad<{ posts: LivePost[] }>("/api/feed", 20000);
-  const [comment, setComment] = useState<Record<string, string>>({});
-  const [openC, setOpenC] = useState<string | null>(null);
   const [card, setCard] = useState<PRData | null>(null);
   const [posts, setPosts] = useState<LivePost[]>([]);
   useEffect(() => { if (data) setPosts(data.posts); }, [data]);
@@ -83,10 +83,7 @@ function Feed({ goFriends }: { goFriends: () => void }) {
     setPosts((ps) => ps.map((x) => (x.id === p.id ? { ...x, liked: !x.liked, likes: x.likes + (x.liked ? -1 : 1) } : x)));
     try { await api("POST", `/api/posts/${p.id}/like`); } catch (e) { ui.toast((e as Error).message); reload(); }
   };
-  const send = async (p: LivePost) => {
-    const txt = (comment[p.id] || "").trim();
-    if (!txt) return;
-    setComment({ ...comment, [p.id]: "" });
+  const send = async (p: LivePost, txt: string) => {
     try { await api("POST", `/api/posts/${p.id}/comments`, { text: txt }); reload(); } catch (e) { ui.toast((e as Error).message); }
   };
   const remove = async (p: LivePost) => {
@@ -102,6 +99,8 @@ function Feed({ goFriends }: { goFriends: () => void }) {
     setCard({ lift: EX[best.exId].name, weight: best.weight, reps: best.reps, e1rm: Math.round(best.e1rm), units: profile.units, why: prWhyStat(state, sess.date, targets.protein), name: profile.name, date: sess.date });
   };
 
+  const prNos = new Map<string, number>();
+  [...posts].reverse().filter((p) => (p.body.prs ?? []).length).forEach((p, i) => prNos.set(p.id, i + 1));
   if (!data && !err) return <p className="text-sm muted" data-testid="status-feed-loading">Loading feed…</p>;
   if (err && !data) return <div className="stack"><Empty>{err}</Empty><button className="btn btn-block" onClick={reload}><RefreshCw size={15} /> Try again</button></div>;
   return (
@@ -115,55 +114,16 @@ function Feed({ goFriends }: { goFriends: () => void }) {
       )}
       {posts.map((p) => {
         const prs = p.body.prs ?? [];
+        const sets = (p.body.topSets ?? []).map((t) => ({ ...t, pr: prs.includes(t.name) }));
+        const title = p.kind === "checkin" ? `Checked in · ${p.body.gym ?? ""}` : p.body.sessionName ?? "Session";
         return (
-          <article key={p.id} className="card" data-testid={`card-post-${p.id}`}>
-            <div className="flex items-center gap-3">
-              <Avatar name={p.author?.displayName ?? "?"} me={p.mine} />
-              <div className="min0 flex-1">
-                <div className="text-sm font-semibold">{p.mine ? "You" : p.author?.displayName}</div>
-                <div className="mono text-[11px] muted">
-                  {p.kind === "checkin" ? <>checked in at {p.body.gym} · {ago(p.ts)}</> : <>{p.body.sessionName} · {p.body.durationMin} min · {ago(p.ts)}</>}
-                </div>
-              </div>
-              {prs.length > 0 && <span className="chip chip-lime"><Award size={12} /> {prs.length} PR</span>}
-            </div>
-            {p.kind === "session" && (
-              <div className="mt-3" style={{ borderTop: "1px solid var(--border)" }}>
-                {(p.body.topSets ?? []).map((t, i) => (
-                  <div key={i} className="rowline" style={{ minHeight: 34 }}>
-                    <span className="text-[13px]">{t.name}{prs.includes(t.name) && <span className="lime mono text-[10px] ml-2">PR</span>}</span>
-                    <span className="mono text-sm">{fmtW(t.weight)} × {t.reps} <span className="faint text-xs">{t.units}</span></span>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="flex items-center gap-1 mt-2">
-              <button className={`btn btn-ghost btn-sm ${p.liked ? "lime" : ""}`} onClick={() => like(p)} aria-pressed={p.liked ? "true" : "false"} data-testid={`button-like-${p.id}`}>
-                <Heart size={16} fill={p.liked ? "currentColor" : "none"} /> <span className="mono">{p.likes}</span>
-              </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setOpenC(openC === p.id ? null : p.id)} data-testid={`button-comments-${p.id}`}>
-                <MessageCircle size={16} /> <span className="mono">{p.comments.length}</span>
-              </button>
-              <span className="flex-1" />
-              {p.mine && prs.length > 0 && p.body.sessionId && state.sessions.some((s) => s.id === p.body.sessionId) && (
-                <button className="btn btn-outline btn-sm" onClick={() => prCard(p)} data-testid={`button-prcard-${p.id}`}>PR card</button>
-              )}
-              {p.mine && <button className="icon-btn" onClick={() => remove(p)} aria-label="Delete post" data-testid={`button-delete-post-${p.id}`}><Trash2 size={15} /></button>}
-            </div>
-            {(openC === p.id || (p.comments.length > 0 && p.comments.length <= 2)) && (
-              <div className="mt-1">
-                {p.comments.map((c) => (
-                  <p key={c.id} className="text-[13px] py-1"><span className="font-semibold">{c.author?.id === me?.id ? "You" : c.author?.displayName.split(" ")[0]}</span> <span className="muted">{c.text}</span></p>
-                ))}
-                {openC === p.id && (
-                  <div className="flex gap-2 mt-2">
-                    <input className="input" placeholder="Add a comment" maxLength={280} value={comment[p.id] || ""} onChange={(e) => setComment({ ...comment, [p.id]: e.target.value })} onKeyDown={(e) => e.key === "Enter" && send(p)} data-testid={`input-comment-${p.id}`} />
-                    <button className="btn btn-primary" onClick={() => send(p)} aria-label="Send comment" data-testid={`button-send-comment-${p.id}`}><Send size={16} /></button>
-                  </div>
-                )}
-              </div>
-            )}
-          </article>
+          <PostCard key={p.id} id={p.id} author={p.author?.displayName ?? "?"} mine={p.mine} ts={p.ts} title={title} durationMin={p.kind === "session" ? p.body.durationMin : undefined}
+            prNo={prNos.get(p.id)} sets={sets} prCount={prs.length} liked={p.liked} likes={p.likes}
+            comments={p.comments.map((c) => ({ id: c.id, who: c.author?.id === me?.id ? "You" : c.author?.displayName.split(" ")[0] ?? "?", text: c.text }))}
+            onLike={() => like(p)} onComment={(t) => send(p, t)}
+            onChallenge={() => send(p, `[CHALLENGE] Coming for that ${prs[0] ?? sets[0]?.name ?? title}.`)}
+            onPrCard={prs.length > 0 && p.body.sessionId && state.sessions.some((s) => s.id === p.body.sessionId) ? () => prCard(p) : undefined}
+            onDelete={() => remove(p)} />
         );
       })}
       {card && <PRCardSheet data={card} onClose={() => setCard(null)} />}

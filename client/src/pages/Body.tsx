@@ -5,6 +5,7 @@ import { useUI } from "@/App";
 import { useToday } from "@/lib/derived";
 import { BodyMap, FatigueLegend } from "@/components/BodyMap";
 import { Bar, Empty, LineChart, Seg, Sheet } from "@/components/ui";
+import { EngineHeader, FigCaption } from "@/components/riso";
 import {
   addDays, avgSleep, bodyComp, bodyWeightSeries, daysBetween, e1rmSeries, fmtDate, mean, projection, proteinHitRate, r1,
   strengthTrendPct, weeklySets, whatIfMultiplier, VOLUME_RANGE,
@@ -16,7 +17,7 @@ export default function Body() {
   const [sub, setSub] = useState<"fatigue" | "trends" | "vault">("fatigue");
   return (
     <div>
-      <header className="topbar"><h1>Body</h1></header>
+      <EngineHeader title="Body" section="BODY" />
       <nav className="subtabs" aria-label="Body sections">
         {([["fatigue", "Fatigue & volume"], ["trends", "Trends"], ["vault", "Private vault"]] as const).map(([id, l]) => (
           <button key={id} aria-pressed={sub === id ? "true" : "false"} onClick={() => setSub(id)} data-testid={`subtab-body-${id}`}>{l}</button>
@@ -40,10 +41,7 @@ function FatigueView() {
   return (
     <div>
       <div className="card">
-        <div className="flex justify-between items-center mb-2">
-          <span className="label">Muscle fatigue · now</span>
-          <span className="label">48h half-life</span>
-        </div>
+        <FigCaption n={1} title="Muscle fatigue · now" stat="T½ 48H" />
         <div className="grid grid-cols-2 gap-1">
           <BodyMap values={t.fatigue} view="front" onTap={setSel} selected={sel} testId="bodymap-front" height={260} />
           <BodyMap values={t.fatigue} view="back" onTap={setSel} selected={sel} testId="bodymap-back" height={260} />

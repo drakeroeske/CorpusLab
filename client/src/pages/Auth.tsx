@@ -6,6 +6,8 @@ import type { PubUser } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { useAuth, type Me } from "@/lib/auth";
 import { Seg, Wordmark } from "@/components/ui";
+import { Tag, shortDate } from "@/components/riso";
+import { dateKey } from "@/lib/engine";
 import { RecoveryCodeView } from "@/components/Recovery";
 
 export default function AuthScreen() {
@@ -56,20 +58,20 @@ export default function AuthScreen() {
     <div className="app">
       <div className="topbar"><Wordmark /></div>
       <div className="screen" style={{ paddingBottom: 60 }}>
-        <p className="label mt-4">Training engine · v1</p>
-        <h1 className="text-[28px] font-semibold leading-tight mt-2" style={{ letterSpacing: "-0.02em" }}>Every rep, meal, and night's sleep — connected.</h1>
-        <p className="text-sm muted mt-3">Your account keeps your data synced across devices and connects you with Spotters and your coach.</p>
+        <p className="label mt-4">Training engine · v1 · {shortDate(dateKey())}</p>
+        <h1 className="display mt-2" style={{ fontSize: "clamp(40px, 13vw, 56px)" }}>Every rep. Every meal. Every night.</h1>
+        <p className="text-sm mt-3">Your account keeps your data synced across devices and connects you with Spotters and your coach.</p>
 
         {inviter && mode !== "reset" && (
-          <div className="card mt-5 flex items-start gap-3" style={{ borderColor: "var(--lime)" }} data-testid="card-invited-by">
-            <UserPlus size={18} className="lime shrink-0 mt-0.5" />
-            <div className="min0"><div className="text-sm font-semibold">{inviter.displayName} invited you</div>
+          <div className="card mt-5 flex items-start gap-3" data-testid="card-invited-by">
+            <UserPlus size={18} className="shrink-0 mt-0.5" />
+            <div className="min0"><div className="text-sm font-bold uppercase"><Tag signal>Invite</Tag> {inviter.displayName} invited you</div>
               <div className="text-xs muted">{mode === "signup" ? "Create an account and you'll be Spotters automatically." : "Sign in and we'll ask before adding them as a Spotter."}</div></div>
           </div>
         )}
         <div className="mt-6">
           {mode === "reset"
-            ? <div><h2 className="text-lg font-semibold">Reset your password</h2><p className="text-sm muted mt-1">Enter your username, the recovery code you saved when you made your account, and a new password.</p></div>
+            ? <div><h2 className="display text-[32px]">Reset password.</h2><p className="text-sm muted mt-1">Enter your username, the recovery code you saved when you made your account, and a new password.</p></div>
             : <Seg value={mode} onChange={(m) => { setMode(m); setErr(""); }} options={[{ v: "signin", l: "Sign in" }, { v: "signup", l: "Create account" }]} testId="seg-auth-mode" />}
         </div>
 

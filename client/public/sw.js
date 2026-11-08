@@ -1,5 +1,5 @@
 /* Corpus service worker: keeps the app shell available offline. Never caches API calls. */
-const VERSION = "rxs-v2";
+const VERSION = "rxs-v3";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./favicon.svg", "./icon-192.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {

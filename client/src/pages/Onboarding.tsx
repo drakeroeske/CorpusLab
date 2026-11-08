@@ -7,6 +7,7 @@ import { TEMPLATES, buildTemplate, newId } from "@/lib/exercises";
 import { dateKey, nutritionTargets, trainingDaysPerWeek } from "@/lib/engine";
 import { NumInput, Seg, Wordmark } from "@/components/ui";
 import { ProgramEditor } from "@/components/ProgramEditor";
+import { PledgeStep } from "@/components/Pledge";
 import { buildDemo } from "@/lib/demo";
 import { useAuth } from "@/lib/auth";
 
@@ -31,24 +32,24 @@ export default function Onboarding() {
     ui.toast("Program ready. Do your first check-in.");
   };
 
-  const steps = ["Welcome", "Profile", "Goal", "Program", "Targets"];
+  const steps = ["Welcome", "Profile", "Goal", "Program", "Targets", "Pledge"];
   return (
-    <div className="app">
+    <div className="app surface-riso">
       <div className="topbar">
         {step > 0 ? <button className="icon-btn" onClick={() => setStep(step - 1)} aria-label="Back" data-testid="button-onboard-back"><ArrowLeft size={18} /></button> : <Wordmark />}
         <div className="flex-1" />
-        {step > 0 && <span className="label">Step {step}/4 · {steps[step]}</span>}
+        {step > 0 && <span className="label">Step {step}/5 · {steps[step]}</span>}
       </div>
       <div className="screen" style={{ paddingBottom: 120 }}>
         {step === 0 && (
           <div className="pt-6">
-            <div className="tick-grid card" style={{ padding: 20, background: "var(--bg)" }}>
+            <div className="card" style={{ padding: 20 }}>
               <div className="label">Training engine · v1</div>
-              <h1 className="text-[28px] leading-tight font-semibold mt-3" style={{ letterSpacing: "-0.02em" }}>Every rep, meal, and night's sleep — connected.</h1>
-              <p className="muted mt-3">RXS reads your sleep, recovery, and nutrition, then tells you exactly what to lift today. It learns from every set you log.</p>
-              <div className="grid grid-cols-3 gap-2 mt-5">
+              <h1 className="display mt-3" style={{ fontSize: "clamp(40px, 13vw, 56px)" }}>Every rep. Every meal. Every night.</h1>
+              <p className="mt-3 text-sm">RXS reads your sleep, recovery, and nutrition, then tells you exactly what to lift today. It learns from every set you log.</p>
+              <div className="stat-grid cols-3 mt-5">
                 {[["Readiness", "0–100"], ["Progress", "per set"], ["Fatigue", "14 groups"]].map(([a, b]) => (
-                  <div key={a} className="card-flat" style={{ padding: 10, background: "var(--surface)" }}><div className="label">{a}</div><div className="mono text-sm mt-1">{b}</div></div>
+                  <div key={a} className="stat"><div className="label">{a}</div><div className="mono text-sm mt-1 font-bold">{b}</div></div>
                 ))}
               </div>
             </div>
@@ -132,7 +133,7 @@ export default function Onboarding() {
           <div className="stack">
             <div className="card">
               <div className="label">Daily calories</div>
-              <div className="big-num text-[40px] mt-2" data-testid="text-target-calories">{targets.cal}<span className="text-base muted ml-1">kcal</span></div>
+              <div className="big-num text-[48px] mt-2" data-testid="text-target-calories">{targets.cal}<span className="text-base ml-1">kcal</span></div>
               <div className="mono text-xs muted mt-2">BMR {targets.bmr} (Mifflin–St Jeor) × {targets.activity} activity = {targets.tdee} TDEE {targets.goalAdj >= 0 ? "+" : "−"} {Math.abs(targets.goalAdj)} goal</div>
               <div className="divider" />
               <div className="flex justify-between mono text-sm"><span className="muted">Training days</span><span>{targets.trainingCal}</span></div>
@@ -140,19 +141,20 @@ export default function Onboarding() {
             </div>
             <div className="card">
               <div className="label">Daily protein</div>
-              <div className="big-num text-[40px] mt-2" data-testid="text-target-protein">{targets.protein}<span className="text-base muted ml-1">g</span></div>
+              <div className="big-num text-[48px] mt-2" data-testid="text-target-protein">{targets.protein}<span className="text-base ml-1">g</span></div>
               <div className="mono text-xs muted mt-2">{targets.proteinPerKg} g/kg body weight (range 1.6–2.2)</div>
             </div>
             <div className="card-flat text-sm muted">{finalProgram.name} · {finalProgram.days.length} days/week · {finalProgram.days.reduce((a, d) => a + d.exercises.length, 0)} exercises</div>
           </div>
         )}
+        {step === 5 && <PledgeStep name={prof.name} onSigned={finish} />}
       </div>
-      {step > 0 && (
-        <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, padding: "12px 16px calc(12px + env(safe-area-inset-bottom))", background: "var(--bg)", borderTop: "1px solid var(--border)" }}>
+      {step > 0 && step < 5 && (
+        <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, padding: "12px 16px calc(12px + env(safe-area-inset-bottom))", background: "var(--page)", borderTop: "3px solid var(--ink)" }}>
           {step < 4 ? (
             <button className="btn btn-primary btn-lg btn-block" disabled={step === 3 && program != null && program.days.every((d) => !d.exercises.length || !d.weekdays.length)} onClick={() => setStep(step + 1)} data-testid="button-onboard-next">Continue <ArrowRight size={18} /></button>
           ) : (
-            <button className="btn btn-primary btn-lg btn-block" onClick={finish} data-testid="button-finish-onboarding">Start training</button>
+            <button className="btn btn-primary btn-lg btn-block" onClick={() => setStep(5)} data-testid="button-finish-onboarding">Sign the pledge <ArrowRight size={18} /></button>
           )}
         </div>
       )}

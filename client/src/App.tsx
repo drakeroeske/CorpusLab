@@ -1,9 +1,10 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { Activity, Dumbbell, Eye, Gauge, User, Users } from "lucide-react";
+import { createContext, useContext, useEffect, useState } from "react";
+import { Eye } from "lucide-react";
 import { StoreProvider, useStore } from "@/lib/store";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import AuthScreen from "@/pages/Auth";
 import { Toast, useToast } from "@/components/ui";
+import { GrainOverlay } from "@/components/riso";
 import Onboarding from "@/pages/Onboarding";
 import Today from "@/pages/Today";
 import Train from "@/pages/Train";
@@ -57,16 +58,17 @@ function Shell() {
   );
   if (!state.profile?.onboarded) return <UICtx.Provider value={ui}><Onboarding /><Toast msg={t.msg} /></UICtx.Provider>;
 
-  const tabs: { id: Tab; label: string; icon: ReactNode }[] = [
-    { id: "today", label: "Today", icon: <Gauge size={20} /> },
-    { id: "train", label: "Train", icon: <Dumbbell size={20} /> },
-    { id: "body", label: "Body", icon: <Activity size={20} /> },
-    { id: "spotters", label: "Spotters", icon: <Users size={20} /> },
-    { id: "profile", label: "Profile", icon: <User size={20} /> },
+  const tabs: { id: Tab; label: string }[] = [
+    { id: "today", label: "Today" },
+    { id: "train", label: "Train" },
+    { id: "body", label: "Body" },
+    { id: "spotters", label: "Spotters" },
+    { id: "profile", label: "Me" },
   ];
+  const surface = tab === "spotters" ? "surface-riso" : "surface-lab";
   return (
     <UICtx.Provider value={ui}>
-      <div className={`app ${viewing ? "viewing" : ""}`}>
+      <div className={`app ${surface} ${viewing ? "viewing" : ""}`}>
         <ViewBanner />
         {tab === "today" && <Today />}
         {tab === "train" && <Train />}
@@ -76,9 +78,7 @@ function Shell() {
         <nav className="tabbar" aria-label="Main">
           {tabs.map((x) => (
             <button key={x.id} aria-current={tab === x.id ? "page" : undefined} onClick={() => setTab(x.id)} data-testid={`tab-${x.id}`}>
-              {x.icon}
               <span>{x.label}</span>
-              <span className="tab-dot" />
             </button>
           ))}
         </nav>
@@ -110,5 +110,5 @@ function Root() {
 }
 
 export default function App() {
-  return <AuthProvider><Root /><InviteHandler /></AuthProvider>;
+  return <AuthProvider><Root /><InviteHandler /><GrainOverlay /></AuthProvider>;
 }

@@ -5,6 +5,7 @@ import { useUI } from "@/App";
 import Logger from "./Logger";
 import { ProgramEditor } from "@/components/ProgramEditor";
 import { Bar, Empty, Seg, Sheet } from "@/components/ui";
+import { EngineHeader } from "@/components/riso";
 import {
   addDays, dateKey, EXPERIMENT_TEMPLATES, experimentPhase, experimentReport, fmtDate, fmtW, r1, weekStart, weeklyReport, VOLUME_RANGE,
   sessionVolume, sessionPRs,
@@ -18,7 +19,7 @@ export default function Train() {
   const subs = [["session", "Workout"], ["program", "Program"], ["lab", "Lab report"], ["experiments", "Experiments"], ["history", "History"]] as const;
   return (
     <div>
-      <header className="topbar"><h1>Train</h1></header>
+      <EngineHeader title="Train" section="LOG" />
       <nav className="subtabs" aria-label="Train sections">
         {subs.map(([id, l]) => <button key={id} aria-pressed={ui.trainSub === id ? "true" : "false"} onClick={() => ui.setTrainSub(id)} data-testid={`subtab-${id}`}>{l}</button>)}
       </nav>
