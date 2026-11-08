@@ -185,8 +185,8 @@ export function computeReadiness(ci: CheckIn | undefined, baseline: number | nul
     hrvDelta = ci.hrv / baseline - 1;
     raw.hrv = hrvDelta >= 0 ? 1 : clamp(1 - -hrvDelta / 0.15, 0, 1);
   }
-  const soreVals = targetMuscles.map((m) => ci.soreness?.[m] ?? 1);
-  if (targetMuscles.length) raw.soreness = clamp((5 - mean(soreVals)) / 4, 0, 1);
+  const soreVals = targetMuscles.map((m) => ci.soreness?.[m] ?? 0); // 0 none → 5 severe
+  if (targetMuscles.length) raw.soreness = clamp(1 - mean(soreVals) / 5, 0, 1);
   else raw.soreness = 1;
 
   const presentKeys = (Object.keys(raw) as (keyof typeof BASE_WEIGHTS)[]).filter((k) => raw[k] != null);
@@ -207,7 +207,7 @@ export function computeReadiness(ci: CheckIn | undefined, baseline: number | nul
   const bits: string[] = [];
   if (ci.sleepH != null && ci.sleepH < 7) bits.push(`${r1(ci.sleepH)}h sleep`);
   if (hrvDelta != null && hrvDelta < -0.05) bits.push(`HRV ${Math.round(-hrvDelta * 100)}% below baseline`);
-  const sore = targetMuscles.filter((m) => (ci.soreness?.[m] ?? 1) >= 3);
+  const sore = targetMuscles.filter((m) => (ci.soreness?.[m] ?? 0) >= 3);
   if (sore.length) bits.push(`sore ${sore.slice(0, 2).map((m) => MUSCLE_LABEL[m].toLowerCase()).join(" & ")}`);
   if (ci.energy != null && ci.energy <= 2) bits.push("low energy");
   if (ci.stress != null && ci.stress >= 4) bits.push("high stress");

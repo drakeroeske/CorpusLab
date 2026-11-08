@@ -6,7 +6,7 @@ import type { CheckIn, Muscle } from "@/lib/types";
 import { dateKey, experimentPhase, hrvBaseline, mean } from "@/lib/engine";
 import { MUSCLE_LABEL } from "@/lib/exercises";
 import { Seg, Sheet, Stepper } from "@/components/ui";
-import { BodyMap } from "@/components/BodyMap";
+import { BodyMap, FatigueLegend } from "@/components/BodyMap";
 
 const FIVE = [1, 2, 3, 4, 5].map((v) => ({ v, l: String(v) }));
 
@@ -40,11 +40,14 @@ export function CheckInSheet({ onClose }: { onClose: () => void }) {
   };
 
   const tapMuscle = (m: Muscle) => {
-    const cur = c.soreness[m] ?? 1;
-    upd({ soreness: { ...c.soreness, [m]: cur >= 5 ? 1 : cur + 1 } });
+    const cur = c.soreness[m] ?? 0;
+    const next = cur >= 5 ? 0 : cur + 1;
+    const soreness = { ...c.soreness };
+    if (next === 0) delete soreness[m]; else soreness[m] = next;
+    upd({ soreness });
   };
-  const soreVals = Object.fromEntries(Object.entries(c.soreness).map(([k, v]) => [k, v && v > 1 ? (v - 1) * 25 : 0]));
-  const sore = Object.entries(c.soreness).filter(([, v]) => (v ?? 1) > 1) as [Muscle, number][];
+  const soreVals = Object.fromEntries(Object.entries(c.soreness).map(([k, v]) => [k, (v ?? 0) * 20]));
+  const sore = Object.entries(c.soreness).filter(([, v]) => (v ?? 0) > 0) as [Muscle, number][];
 
   const save = () => {
     set((s) => {
@@ -75,12 +78,13 @@ export function CheckInSheet({ onClose }: { onClose: () => void }) {
         </div>
         <div className="card" style={{ padding: 12 }}>
           <div className="flex items-center justify-between mb-2">
-            <span className="label">Soreness · tap to cycle 1–5</span>
+            <span className="label">Soreness · tap to cycle</span>
             <Seg value={view} onChange={setView} options={[{ v: "front", l: "Front" }, { v: "back", l: "Back" }]} className="w-[140px]" testId="seg-soreness-view" />
           </div>
           <BodyMap values={soreVals} view={view} onTap={tapMuscle} height={240} testId="bodymap-soreness" />
+          <div className="mt-2"><FatigueLegend left="None" right="Severe" /></div>
           <div className="flex flex-wrap gap-1.5 mt-2 min-h-[24px]">
-            {sore.length ? sore.map(([m, v]) => <button key={m} className={`chip ${v >= 4 ? "chip-orange" : ""}`} onClick={() => upd({ soreness: { ...c.soreness, [m]: 1 } })}>{MUSCLE_LABEL[m]} {v}</button>) : <span className="text-xs faint">No soreness logged</span>}
+            {sore.length ? sore.map(([m, v]) => <button key={m} className={`chip ${v >= 4 ? "chip-orange" : ""}`} onClick={() => { const soreness = { ...c.soreness }; delete soreness[m]; upd({ soreness }); }}>{MUSCLE_LABEL[m]} {v}</button>) : <span className="text-xs faint">No soreness logged</span>}
           </div>
         </div>
         {exp && expPh?.phase === "experiment" && (

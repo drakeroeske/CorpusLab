@@ -5,6 +5,7 @@ import { useAuth, type PubUser } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { clientFromState } from "@/lib/social";
 import { useStore, emptyState, storageAvailable, remoteAvailable } from "@/lib/store";
+import { upgradeState } from "@/lib/empty";
 import { useUI } from "@/App";
 import { NumInput, Seg, Sheet, Spark, Stepper, initials } from "@/components/ui";
 import { ProgramEditor } from "@/components/ProgramEditor";
@@ -507,7 +508,7 @@ function LiveCoachDashboard() {
   if (err) return <div className="card mt-3"><p className="text-sm orange">{err}</p><button className="btn btn-sm mt-2" onClick={load}><RefreshCw size={14} /> Retry</button></div>;
   if (!data) return <p className="text-sm muted mt-3">Loading clients…</p>;
   const withState = data.filter((c) => c.state?.profile?.onboarded);
-  const clients = withState.map((c) => clientFromState(c.id, c.displayName, { ...emptyState(), ...c.state! }, c.notes));
+  const clients = withState.map((c) => clientFromState(c.id, c.displayName, upgradeState(c.state!), c.notes));
   const pendingSetup = data.filter((c) => !c.state?.profile?.onboarded);
   const raw = data.find((c) => c.id === open);
   const client = clients.find((c) => c.id === open);
@@ -557,7 +558,7 @@ function LiveCoachDashboard() {
           saveProgram: async (program) => { await api("PUT", `/api/coach/clients/${client.id}/program`, { program }); await load(); },
           sendProgram: async (program) => { await api("POST", `/api/coach/clients/${client.id}/program-send`, { program }); },
           addNote: async (text) => { await api("POST", `/api/coach/clients/${client.id}/notes`, { text, date: dateKey() }); await load(); },
-          openAccount: () => { setOpen(null); auth.viewAs({ id: client.id, name: client.name, state: { ...emptyState(), ...raw.state! } }); },
+          openAccount: () => { setOpen(null); auth.viewAs({ id: client.id, name: client.name, state: upgradeState(raw.state!) }); },
         }} />
       )}
     </div>

@@ -130,7 +130,7 @@ input::placeholder, textarea::placeholder { color: var(--ink); opacity: 0.5; }
 .rowline { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px dashed var(--ink); min-height: 44px; }
 .rowline:first-child { border-top: 0; }
 .section-title { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; column-gap: 8px; margin: 22px 0 10px; border-bottom: 3px solid var(--ink); padding-bottom: 4px; }
-.section-title h2 { font-family: var(--display); font-size: 26px; line-height: 0.9; text-transform: uppercase; }
+.section-title h2 { font-family: var(--display); font-size: clamp(19px, 5.6vw, 26px); line-height: 0.9; text-transform: uppercase; white-space: nowrap; }
 .section-title h2::after { content: "."; }
 .section-title > :not(h2) { flex-shrink: 0; }
 

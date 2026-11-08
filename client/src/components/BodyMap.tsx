@@ -30,38 +30,29 @@ const SIL = "M60 7 a11 12 0 1 1 -0.01 0 Z M50 30 h20 v6 h-20 Z";
 const OUT: Poly = [[52, 31], [42, 36], [28, 38], [22, 48], [22, 70], [16, 98], [14, 120], [20, 124], [26, 110], [33, 88], [38, 70], [40, 96], [38, 112], [38, 150], [41, 176], [40, 204], [43, 236], [55, 236], [56, 204], [58, 176], [60, 156]];
 const outline = [...OUT, ...mir([...OUT].reverse())];
 
-/** Hatch density by fatigue: blank → sparse → dense → solid ink. */
-export function fatigueLevel(v: number): 0 | 1 | 2 | 3 | 4 {
-  return v < 4 ? 0 : v < 25 ? 1 : v < 50 ? 2 : v < 70 ? 3 : 4;
+/** Heat scale: 0 = rested (dark blue), then 1 yellow → 5 bright red. Input is 0–100 (fatigue %) or soreness × 20. */
+export const HEAT = ["#1B2A6B", "#F7D417", "#F9AE1B", "#F6861F", "#EF5323", "#E3132B"] as const;
+export const HEAT_LABEL = ["Rested", "Light", "Mild", "Moderate", "Heavy", "Fried"] as const;
+export function heatLevel(v: number): 0 | 1 | 2 | 3 | 4 | 5 {
+  if (!(v >= 4)) return 0;
+  return Math.min(5, Math.max(1, Math.ceil(v / 20))) as 1 | 2 | 3 | 4 | 5;
 }
-export function fatigueColor(v: number) {
-  const l = fatigueLevel(v);
-  return l === 0 ? "transparent" : l === 4 ? "currentColor" : `url(#hatch${l})`;
-}
-function HatchDefs() {
-  return (
-    <defs>
-      {[[1, 5], [2, 3], [3, 1.8]].map(([n, gap]) => (
-        <pattern key={n} id={`hatch${n}`} width={gap} height={gap} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-          <line x1="0" y1="0" x2="0" y2={gap} stroke="currentColor" strokeWidth="0.7" />
-        </pattern>
-      ))}
-    </defs>
-  );
-}
+export function heatColor(v: number) { return HEAT[heatLevel(v)]; }
+/** @deprecated use heatLevel */
+export const fatigueLevel = heatLevel;
+export const fatigueColor = heatColor;
 
 export function BodyMap({ values, view, onTap, selected, testId, height = 280 }: { values: Partial<Record<Muscle, number>>; view: "front" | "back"; onTap?: (m: Muscle) => void; selected?: Muscle | null; testId?: string; height?: number }) {
   const parts = view === "front" ? FRONT : BACK;
   return (
     <svg viewBox="0 0 120 244" height={height} style={{ display: "block", margin: "0 auto", maxWidth: "100%", color: "var(--ink)" }} data-testid={testId} role="img" aria-label={`${view} body diagram`}>
-      <HatchDefs />
       <line x1="60" y1="0" x2="60" y2="244" stroke="currentColor" strokeWidth="0.3" strokeDasharray="1.5 1.5" />
       <polygon points={pts(outline)} fill="none" stroke="currentColor" strokeWidth="1" />
       <path d={SIL} fill="none" stroke="currentColor" strokeWidth="1" />
       {parts.map(({ m, polys }) =>
         polys.flatMap((p, i) => [p, mir(p)].map((pp, j) => (
           <polygon key={`${m}-${i}-${j}`} points={pts(pp)} className="muscle"
-            fill={fatigueColor(values[m] ?? 0)} stroke="currentColor" strokeWidth={selected === m ? 1.6 : 0.6}
+            fill={heatColor(values[m] ?? 0)} stroke={selected === m ? "#FFFFFF" : "currentColor"} strokeWidth={selected === m ? 2 : 0.6} style={selected === m ? { paintOrder: "stroke", filter: "drop-shadow(0 0 0.6px var(--ink))" } : undefined}
             onClick={() => onTap?.(m)} data-testid={`muscle-${view}-${m}${j ? "-r" : ""}`}>
             <title>{MUSCLE_LABEL[m]}: {Math.round(values[m] ?? 0)}%</title>
           </polygon>
@@ -72,15 +63,14 @@ export function BodyMap({ values, view, onTap, selected, testId, height = 280 }:
   );
 }
 
-export function FatigueLegend() {
+export function FatigueLegend({ left = "Rested", right = "Fatigued" }: { left?: string; right?: string }) {
   return (
-    <div className="flex items-center gap-2 label">
-      <span>0% recovered</span>
-      <svg style={{ flex: 1, height: 10, color: "var(--ink)" }} preserveAspectRatio="none" viewBox="0 0 100 10">
-        <HatchDefs />
-        {[0, 1, 2, 3, 4].map((l) => <rect key={l} x={l * 20} y="0" width="20" height="10" fill={l === 0 ? "transparent" : l === 4 ? "currentColor" : `url(#hatch${l})`} stroke="currentColor" strokeWidth="0.6" />)}
+    <div className="flex items-center gap-2 label" data-testid="legend-heat">
+      <span>{left}</span>
+      <svg style={{ flex: 1, height: 12, color: "var(--ink)" }} preserveAspectRatio="none" viewBox="0 0 120 12">
+        {HEAT.map((c, l) => <rect key={l} x={l * 20} y="0" width="20" height="12" fill={c} stroke="currentColor" strokeWidth="0.6"><title>{HEAT_LABEL[l]}</title></rect>)}
       </svg>
-      <span>100% fatigued</span>
+      <span>{right}</span>
     </div>
   );
 }

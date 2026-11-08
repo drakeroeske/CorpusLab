@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AppState, Profile } from "./types";
 import { getLocalStore } from "./persist-local";
-import { emptyState } from "./empty";
+import { emptyState, upgradeState } from "./empty";
 import { api, ApiError } from "./api";
 import { computePublicStats } from "./social";
 import { nutritionTargets, trainingDaysPerWeek, type NutritionTargets } from "./engine";
@@ -27,7 +27,7 @@ export { emptyState };
 function load(): AppState {
   const raw = readRaw();
   if (!raw) return emptyState();
-  try { return { ...emptyState(), ...JSON.parse(raw) }; } catch { return emptyState(); }
+  try { return upgradeState(JSON.parse(raw)); } catch { return emptyState(); }
 }
 
 interface Ctx {
@@ -53,7 +53,7 @@ export const remoteAvailable = () => remoteOK;
 export type StoreMode = "offline" | "remote" | "readonly";
 
 export function StoreProvider({ children, mode = "offline", initial, onAuthLost }: { children: ReactNode; mode?: StoreMode; initial?: AppState; onAuthLost?: () => void }) {
-  const [state, setState] = useState<AppState>(() => (initial ? { ...emptyState(), ...initial } : mode === "offline" ? load() : emptyState()));
+  const [state, setState] = useState<AppState>(() => (initial ? upgradeState(initial) : mode === "offline" ? load() : emptyState()));
   const [saveError, setSaveError] = useState(false);
   const [ready, setReady] = useState(mode !== "remote");
   const skipNext = useRef(true);
@@ -65,7 +65,7 @@ export function StoreProvider({ children, mode = "offline", initial, onAuthLost 
       .then((r) => {
         if (!alive) return;
         remoteOK = true;
-        if (r.state) { skipNext.current = true; setState({ ...emptyState(), ...r.state }); }
+        if (r.state) { skipNext.current = true; setState(upgradeState(r.state)); }
         setReady(true);
       })
       .catch((e) => {
@@ -85,7 +85,7 @@ export function StoreProvider({ children, mode = "offline", initial, onAuthLost 
       try {
         const r = await p;
         setSaveError(false);
-        if (r.merged && r.state) { skipNext.current = true; setState({ ...emptyState(), ...r.state }); }
+        if (r.merged && r.state) { skipNext.current = true; setState(upgradeState(r.state)); }
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) onAuthLost?.();
         else setSaveError(true);
@@ -94,7 +94,7 @@ export function StoreProvider({ children, mode = "offline", initial, onAuthLost 
     return () => clearTimeout(t);
   }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
   const set = useCallback((fn: (s: AppState) => AppState) => setState((s) => fn(s)), []);
-  const replace = useCallback((s: AppState) => setState({ ...emptyState(), ...s }), []);
+  const replace = useCallback((s: AppState) => setState(upgradeState(s)), []);
   const profile = state.profile ?? FALLBACK_PROFILE;
   const targets = useMemo(() => nutritionTargets(profile, trainingDaysPerWeek(state.program)), [profile, state.program]);
   if (!ready) return <div style={{ minHeight: "100dvh", display: "grid", placeItems: "center", color: "var(--muted)" }} className="mono text-xs" data-testid="status-loading">Loading</div>;

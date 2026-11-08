@@ -79,7 +79,7 @@ export function buildDemo(o: DemoOpts = {}): AppState {
     if (yday) {
       const ms = new Set<Muscle>();
       yday.exercises.forEach((l) => EX[l.exId].primary.forEach((m) => ms.add(m)));
-      ms.forEach((m) => (soreness[m] = clamp(Math.round(n(2.4, 0.7)), 1, 4)));
+      ms.forEach((m) => { const v = clamp(Math.round(n(1.6, 0.9)), 0, 4); if (v) soreness[m] = v; });
     }
     if (isToday) { soreness.quads = 3; soreness.glutes = 2; soreness.hamstrings = 2; }
     const skipCheckin = !isToday && R() < 0.07;
