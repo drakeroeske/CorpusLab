@@ -3,10 +3,9 @@
 @tailwind utilities;
 
 /* ---------- Riso Lab design system ----------
-   Lab Report (engine screens): black ink on paper, Anton display.
-   Riso (Spotters / social):    cobalt ink on bone, Archivo Black display.
-   Spot colours are fixed; `--ink` and `--page` follow the surface. */
-:root, .surface-lab {
+   Whole app runs on the Riso surface: cobalt ink on bone, pink signal, Archivo Black display.
+   `.surface-lab` (black ink on paper, Anton) is kept for printed-style reports. */
+.surface-lab {
   --ink: #111111;
   --ink-deep: #000000;
   --page: #F2F1EC;
@@ -14,7 +13,7 @@
   --display-lh: 0.88;
   --display-ls: 0;
 }
-.surface-riso {
+:root, .surface-riso {
   --ink: #2B3FD6;
   --ink-deep: #1A2A9E;
   --page: #ECE8DF;
@@ -55,7 +54,7 @@
 .surface-lab, .surface-riso { background: var(--page); color: var(--ink); }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; border-radius: 0 !important; }
-html, body { background: var(--paper); color: #111111; }
+html, body { background: var(--page); color: var(--ink); }
 body {
   font-family: var(--font-mono);
   font-size: 14px;
@@ -88,7 +87,9 @@ input::placeholder, textarea::placeholder { color: var(--ink); opacity: 0.5; }
 .screen { padding: 0 16px calc(var(--tab-h) + 32px); }
 
 /* Corner labels + display title (lab-report header) */
-.pagehead { position: relative; border-bottom: 3px solid var(--ink); padding: calc(8px + env(safe-area-inset-top)) 16px 12px; margin-bottom: 16px; background: var(--page); }
+.pagehead { position: relative; border-bottom: 3px solid var(--ink); padding: calc(8px + env(safe-area-inset-top)) 16px 12px; margin-bottom: 16px; background: var(--signal); }
+.pagehead .btn { background: var(--signal); }
+.pagehead .btn-primary { background: var(--ink); }
 .corner { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
 .corner > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pagehead h1 { font-size: clamp(44px, 16vw, 68px); margin-top: 10px; white-space: nowrap; }
@@ -124,6 +125,7 @@ input::placeholder, textarea::placeholder { color: var(--ink); opacity: 0.5; }
 .section-title { display: flex; align-items: baseline; justify-content: space-between; margin: 22px 0 10px; border-bottom: 3px solid var(--ink); padding-bottom: 4px; }
 .section-title h2 { font-family: var(--display); font-size: 26px; line-height: 0.9; text-transform: uppercase; }
 .section-title h2::after { content: "."; }
+.section-title > :not(h2) { flex-shrink: 0; }
 
 /* Hatched warning frame: 45° ink lines every 6px; content sits on a page-coloured inner box. */
 .hatch { background-image: repeating-linear-gradient(45deg, var(--ink) 0 1px, transparent 1px 6px); }
@@ -169,12 +171,13 @@ input::placeholder, textarea::placeholder { color: var(--ink); opacity: 0.5; }
 .seg button { min-height: 42px; font-family: var(--font-mono); font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--ink); padding: 0 6px; border-left: 2px solid var(--ink); }
 .seg button:first-child { border-left: 0; }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--page); }
-.seg.seg-lime button[aria-pressed="true"] { background: var(--ink); color: var(--page); }
+.seg.seg-lime button[aria-pressed="true"] { background: var(--signal); color: var(--ink); }
 
 .subtabs { display: flex; gap: 6px; overflow-x: auto; padding: 0 16px 12px; scrollbar-width: none; background: var(--page); }
 .subtabs::-webkit-scrollbar { display: none; }
 .subtabs button { min-height: 40px; padding: 0 12px; border: 2px solid var(--ink); font-family: var(--font-mono); font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--ink); white-space: nowrap; flex-shrink: 0; }
 .subtabs button[aria-pressed="true"] { background: var(--ink); color: var(--page); }
+.subtabs button:not([aria-pressed="true"]) { background: var(--page); }
 
 /* ---------- inputs ---------- */
 .field { display: flex; flex-direction: column; gap: 6px; }
@@ -227,8 +230,8 @@ input::placeholder, textarea::placeholder { color: var(--ink); opacity: 0.5; }
   padding: 0 16px calc(24px + env(safe-area-inset-bottom)); animation: up .22s cubic-bezier(.2,.8,.2,1);
 }
 .sheet.full { max-height: 100dvh; height: 100dvh; padding-top: env(safe-area-inset-top); }
-.sheet-head { position: sticky; top: 0; z-index: 2; background: var(--page); display: flex; align-items: flex-end; gap: 12px; padding: 12px 0 10px; border-bottom: 2px solid var(--ink); margin-bottom: 14px; }
-.sheet-head h3 { font-family: var(--display); font-size: 34px; line-height: 0.9; text-transform: uppercase; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.sheet-head { position: sticky; top: 0; z-index: 2; background: var(--signal); margin-left: -16px; margin-right: -16px; padding-left: 16px !important; padding-right: 16px !important; display: flex; align-items: flex-end; gap: 12px; padding: 12px 0 10px; border-bottom: 2px solid var(--ink); margin-bottom: 14px; }
+.sheet-head h3 { font-family: var(--display); font-size: 30px; line-height: 0.9; text-transform: uppercase; flex: 1; min-width: 0; overflow-wrap: normal; }
 .sheet-head h3::after { content: "."; }
 @keyframes up { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
@@ -255,12 +258,13 @@ pre.chat { white-space: pre-wrap; font-family: var(--font-mono); margin: 0; }
 /* toggle: square switch */
 .toggle { appearance: none; -webkit-appearance: none; width: 48px; height: 26px; background: transparent; border: 2px solid var(--ink); position: relative; cursor: pointer; flex-shrink: 0; }
 .toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border: 2px solid var(--ink); background: transparent; transition: transform .15s, background .15s; }
+.toggle:checked { background: var(--signal); }
 .toggle:checked::after { transform: translateX(22px); background: var(--ink); }
 
 /* streak cells */
 .streak { display: flex; gap: 3px; }
 .streak i { flex: 1; height: 16px; border: 1px solid var(--ink); display: block; }
-.streak i.done { background: var(--ink); }
+.streak i.done { background: var(--signal); border-color: var(--ink); }
 .streak i.missed { border-style: dashed; }
 .streak i.rest { border-color: transparent; }
 

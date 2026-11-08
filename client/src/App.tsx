@@ -65,7 +65,7 @@ function Shell() {
     { id: "spotters", label: "Spotters" },
     { id: "profile", label: "Me" },
   ];
-  const surface = tab === "spotters" ? "surface-riso" : "surface-lab";
+  const surface = "surface-riso";
   return (
     <UICtx.Provider value={ui}>
       <div className={`app ${surface} ${viewing ? "viewing" : ""}`}>

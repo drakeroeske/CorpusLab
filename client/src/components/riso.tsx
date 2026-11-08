@@ -79,7 +79,7 @@ export function PageHeader({ title, section = "ENGINE", brand = "RXS", status, c
       <CornerLabels left={`${brand} // ${section}`} center={center} right={status} />
       {back && <button className="btn btn-sm mt-3" onClick={back} data-testid="button-back">← Back</button>}
       <div className="flex items-end justify-between gap-3">
-        <h1 className={`display min0 ${t.length > 12 ? "xlong" : t.length > 7 ? "long" : ""}`}>{t}.</h1>
+        <h1 className={`display min0 ${t.length > 12 ? "xlong" : t.length > (right ? 5 : 7) ? "long" : ""}`}>{t}.</h1>
         {right && <div className="shrink-0 pb-2">{right}</div>}
       </div>
       {sub && <div className="mt-2 mono text-xs uppercase">{sub}</div>}
@@ -137,6 +137,7 @@ export function Rings({ value, size = 140, label, children }: { value: number | 
       <svg viewBox="0 0 100 100" width={size} height={size} role={label ? "img" : undefined} aria-label={label} aria-hidden={label ? undefined : true}>
         <line x1="0" y1={c} x2="100" y2={c} stroke="currentColor" strokeWidth="0.4" />
         <line x1={c} y1="0" x2={c} y2="100" stroke="currentColor" strokeWidth="0.4" />
+        {value != null && <rect x={c - 13} y={c - 13} width="26" height="26" fill="var(--signal)" />}
         {Array.from({ length: n }, (_, i) => {
           const r = 14 + i * 8.5; const on = i < filled;
           return <circle key={i} cx={c} cy={c} r={r} fill="none" stroke="currentColor" strokeWidth={on ? 3 : 0.6} strokeDasharray={on ? undefined : "1.5 2"} />;

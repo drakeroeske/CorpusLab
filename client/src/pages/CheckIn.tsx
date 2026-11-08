@@ -58,7 +58,7 @@ export function CheckInSheet({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <Sheet title="Check-in" onClose={onClose} testId="sheet-checkin" right={<button className="btn btn-sm btn-outline" onClick={sync} data-testid="button-sync-watch"><Watch size={15} /> {synced ? "Synced" : "Sync from watch"}</button>}>
+    <Sheet title="Check in" onClose={onClose} testId="sheet-checkin" right={<button className="btn btn-sm btn-outline" onClick={sync} data-testid="button-sync-watch"><Watch size={15} /> {synced ? "Synced" : "Sync from watch"}</button>}>
       {synced && <p className="text-xs blue mb-3 mono">Simulated sync · sleep, HRV, resting HR, steps filled. Health integrations coming later.</p>}
       <div className="stack">
         <div className="grid grid-cols-2 gap-3">

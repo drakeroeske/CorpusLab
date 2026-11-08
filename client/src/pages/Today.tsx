@@ -116,7 +116,7 @@ export default function Today() {
         {(t.deload.recommend && !t.inDeload) && (
           <section className="warn hatch" data-testid="card-deload">
             <div className="inner">
-              <Tag>Deload</Tag>
+              <Tag signal>Deload</Tag>
               <p className="text-[13px] mt-1">{t.deload.reasons.join(" and ")}. Deload week: 60% of your usual sets, same weights, 7 days.</p>
               <button className="btn btn-block mt-3" onClick={() => { set((s) => ({ ...s, program: s.program ? { ...s.program, deloadUntil: addDays(t.today, 6) } : s.program })); ui.toast("Deload week started"); }} data-testid="button-start-deload">Start deload week</button>
             </div>
@@ -125,7 +125,7 @@ export default function Today() {
         {t.flags.length > 0 && (
           <section className="warn hatch" data-testid="card-plateaus">
             <div className="inner">
-              <Tag>Plateau</Tag>
+              <Tag signal>Plateau</Tag>
               {t.flags.map((f) => (
                 <p key={f.exId} className="text-[13px] mt-1" data-testid={`card-plateau-${f.exId}`}>{EX[f.exId].name}: no e1RM gain in 3 sessions → <b className="uppercase">{f.fix}</b></p>
               ))}
