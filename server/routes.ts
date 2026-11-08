@@ -170,19 +170,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.param(["id", "coachId"], (_req, res, next, v) => (UUID_RE.test(String(v)) ? next() : res.status(400).json({ message: "Invalid id" })));
 
   app.get("/api/health", (_req, res) => res.json({ ok: true, db: !!SUPABASE_URL }));
-  // TEMPORARY setup check: shows whether the server's CORPUS_DB_KEY looks right, without revealing it. Remove once sign-up works.
-  app.get("/api/diag/key", (_req, res) => {
-    const k = CORPUS_DB_KEY;
-    const hash = sha256(k);
-    res.json({
-      keySet: k.length > 0,
-      keyLength: k.length,
-      hasSpacesOrQuotes: /[\s"']/.test(k),
-      keyHashStart: hash.slice(0, 12),
-      matchesOriginalKey: hash === "1ae4944d1bf2ba913ac4cfae1f64d21c607768f4aa4028dd2e891b6a0191561d",
-      supabaseHost: SUPABASE_URL.replace(/^https?:\/\//, "").split("/")[0],
-    });
-  });
 
   /* ---------- food database (USDA proxy; key never leaves the server) ---------- */
   const foodErr = (e: any) => { throw e?.status ? new HttpError(e.status, e.message) : new HttpError(502, "Food database unavailable"); };
