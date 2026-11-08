@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Plus, Search, Trash2 } from "lucide-react";
 import type { Pattern, Program, ProgramDay, ProgramExercise, Units } from "@/lib/types";
 import { EX, EXERCISES, MUSCLE_LABEL, PATTERN_LABEL, isCompound, newId } from "@/lib/exercises";
-import { Seg, Sheet } from "./ui";
+import { NumInput, Seg, Sheet } from "./ui";
 
 const WD = ["S", "M", "T", "W", "T", "F", "S"];
 const WD_LONG = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -45,7 +45,7 @@ function NumField({ label, value, onChange, step = 1, testId }: { label: string;
   return (
     <label className="field min0">
       <span className="label">{label}</span>
-      <input className="input mono" type="number" inputMode="decimal" step={step} value={value} onChange={(e) => onChange(parseFloat(e.target.value) || 0)} data-testid={testId} />
+      <NumInput value={value} min={0} integer={step >= 1 && Number.isInteger(step)} onChange={(v) => v !== null && onChange(v)} data-testid={testId} />
     </label>
   );
 }

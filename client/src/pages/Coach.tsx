@@ -28,12 +28,12 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
     <Sheet title="AI Coach" onClose={onClose} full testId="sheet-coach"
       right={state.chat.length ? <button className="btn btn-ghost btn-sm" onClick={() => set((s) => ({ ...s, chat: [] }))} data-testid="button-clear-chat">Clear</button> : undefined}>
       <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
-        <p className="text-xs muted mb-3">Answers come from your logged data and the Corpus engine (readiness, fatigue, plateau, and progression rules), not generic advice.</p>
+        <p className="text-xs muted mb-3">Answers come from your logged data and the RXS engine (readiness, fatigue, plateau, and progression rules), not generic advice.</p>
         <div className="stack" style={{ flex: 1 }}>
           {state.chat.map((m) => (
             <div key={m.id} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "88%" }} data-testid={`chat-${m.role}`}>
               {m.role === "user"
-                ? <div className="text-sm" style={{ background: "var(--lime-dim)", border: "1px solid rgba(198,244,50,.35)", padding: "10px 12px", borderRadius: 10 }}>{m.text}</div>
+                ? <div className="text-sm" style={{ background: "var(--lime-dim)", border: "1px solid rgba(17,20,24,.18)", padding: "10px 12px", borderRadius: 10 }}>{m.text}</div>
                 : <div className="card-flat" style={{ padding: "10px 12px" }}><div className="label lime mb-1">Coach</div><pre className="chat">{m.text}</pre></div>}
             </div>
           ))}

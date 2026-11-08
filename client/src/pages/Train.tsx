@@ -110,7 +110,7 @@ function LabReport() {
         ))}
       </div>
 
-      <div className="card mt-3" style={{ borderColor: "rgba(198,244,50,.4)" }} data-testid="card-focus">
+      <div className="card mt-3" style={{ borderColor: "rgba(92,58,33,.45)" }} data-testid="card-focus">
         <div className="flex items-center gap-2 label lime"><Target size={14} /> Focus for next week</div>
         <p className="mt-2 text-[15px]">{rep.focus}</p>
       </div>
@@ -170,7 +170,7 @@ function Experiments() {
 
   return (
     <div data-testid="view-experiments">
-      <p className="text-sm muted mb-3">Test one variable at a time: 2-week baseline, then 4 weeks tracking it daily. Corpus compares readiness, strength rate, and body weight between the two windows.</p>
+      <p className="text-sm muted mb-3">Test one variable at a time: 2-week baseline, then 4 weeks tracking it daily. RXS compares readiness, strength rate, and body weight between the two windows.</p>
       {active.map((e) => <ExperimentCard key={e.id} exp={e} onReport={() => setReport(e)} />)}
       {active.length === 0 && <Empty>No experiment running.</Empty>}
       <button className="btn btn-primary btn-block mt-3" onClick={() => setNewOpen(true)} data-testid="button-new-experiment"><FlaskConical size={16} /> Start new experiment</button>

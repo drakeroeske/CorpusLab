@@ -250,7 +250,7 @@ function Vault() {
             {[...state.photos].reverse().map((p) => (
               <button key={p.id} onClick={() => setView(p.id)} style={{ position: "relative", aspectRatio: "3/4", overflow: "hidden", borderRadius: 6, border: "1px solid var(--border)" }} data-testid={`img-photo-${p.id}`}>
                 <img src={p.dataUrl} alt={`${p.label} progress photo ${p.date}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                <span className="mono" style={{ position: "absolute", left: 4, bottom: 4, fontSize: 10, background: "rgba(14,15,12,.8)", padding: "1px 4px", borderRadius: 3 }}>{fmtDate(p.date)}</span>
+                <span className="mono" style={{ position: "absolute", left: 4, bottom: 4, fontSize: 10, background: "rgba(10,12,14,.75)", color: "#EEF0F2", padding: "1px 4px", borderRadius: 3 }}>{fmtDate(p.date)}</span>
               </button>
             ))}
           </div>

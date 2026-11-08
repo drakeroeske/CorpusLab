@@ -8,10 +8,21 @@ import { PRCardSheet, type PRData } from "@/components/PRCard";
 import { dateKey, dots, e1rmSeries, fmtW, fromKg, matchScore, r1, sessionPRs, toKg, trainingDaysPerWeek, userStreak } from "@/lib/engine";
 import { EX, newId } from "@/lib/exercises";
 import type { FeedPost, Spotter } from "@/lib/types";
+import { useAuth } from "@/lib/auth";
+import SpottersLive from "@/pages/SpottersLive";
 
 type Sub = "feed" | "crews" | "gym" | "find" | "leaders";
 
 export default function Spotters() {
+  const { live, viewing } = useAuth();
+  if (viewing) return (
+    <div><header className="topbar"><h1>Spotters</h1></header>
+      <div className="screen"><Empty>Spotters is private to {viewing.name}. Coaches see training, recovery and nutrition only.</Empty></div></div>
+  );
+  return live ? <SpottersLive /> : <SpottersDemo />;
+}
+
+function SpottersDemo() {
   const [sub, setSub] = useState<Sub>("feed");
   return (
     <div>
@@ -240,7 +251,7 @@ function Gym() {
             <div key={s.id} className="card flex items-center gap-3" data-testid={`row-here-${s.id}`}>
               <Avatar id={s.id} name={s.name} />
               <div className="flex-1 min0"><div className="text-sm font-semibold">{s.name}</div><div className="mono text-[11px] muted">{s.split} · streak {s.streak}</div></div>
-              <span className="chip chip-lime"><span className="pulse" style={{ width: 6, height: 6, borderRadius: 3, background: "var(--lime)", display: "inline-block" }} /> now</span>
+              <span className="chip chip-lime"><span className="pulse" style={{ width: 6, height: 6, borderRadius: 3, background: "var(--brown)", display: "inline-block" }} /> now</span>
             </div>
           ))}
         </>

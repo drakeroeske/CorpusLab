@@ -1,3 +1,4 @@
+import { InstallBanner } from "@/components/Install";
 import { useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, ClipboardCheck, FlaskConical, MessageSquare, Play, Plus, TrendingDown } from "lucide-react";
 import { useStore } from "@/lib/store";
@@ -13,8 +14,8 @@ export function readinessColor(score: number | null) {
   return score >= 75 ? "var(--lime)" : score >= 50 ? "var(--blue)" : "var(--orange)";
 }
 
-export function logFavorite(fav: { name: string; cal: number; p: number; c: number; f: number }, date: string): Meal {
-  return { id: newId("meal"), date, time: Date.now(), name: fav.name, cal: fav.cal, p: fav.p, c: fav.c, f: fav.f };
+export function logFavorite(fav: { name: string; cal: number; p: number; c: number; f: number; items?: Meal["items"] }, date: string): Meal {
+  return { id: newId("meal"), date, time: Date.now(), name: fav.name, cal: fav.cal, p: fav.p, c: fav.c, f: fav.f, ...(fav.items ? { items: fav.items } : {}) };
 }
 
 export default function Today() {
@@ -52,6 +53,7 @@ export default function Today() {
         <button className="btn btn-sm btn-outline" onClick={() => ui.open("coach")} data-testid="button-open-coach"><MessageSquare size={15} /> Coach</button>
       </header>
       <div className="screen">
+        <InstallBanner />
         <div className="flex items-center gap-2 mb-3 flex-wrap" data-testid="text-phase">
           <span className="chip">Week {t.phase.week}</span>
           <span className={`chip ${t.phase.phase.includes("Deload") ? "chip-orange" : ""}`}>{t.phase.phase}</span>
@@ -115,7 +117,7 @@ export default function Today() {
 
         {/* Alerts */}
         {(t.deload.recommend && !t.inDeload) && (
-          <section className="card" style={{ borderColor: "rgba(255,106,43,.45)" }} data-testid="card-deload">
+          <section className="card" style={{ borderColor: "rgba(180,35,24,.45)" }} data-testid="card-deload">
             <div className="flex items-center gap-2 orange font-semibold text-sm"><TrendingDown size={16} /> Deload week recommended</div>
             <p className="text-sm muted mt-1">Because {t.deload.reasons.join(" and ")}. 60% volume, same weights, for 7 days.</p>
             <button className="btn btn-warn btn-block mt-3" onClick={() => { set((s) => ({ ...s, program: s.program ? { ...s.program, deloadUntil: addDays(t.today, 6) } : s.program })); ui.toast("Deload week started"); }} data-testid="button-start-deload">Start deload week</button>

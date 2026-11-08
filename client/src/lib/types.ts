@@ -51,6 +51,9 @@ export interface Program {
   startDate: string; // YYYY-MM-DD
   days: ProgramDay[];
   deloadUntil?: string | null;
+  /** set by the server when a coach edits this program */
+  coachEditedAt?: number;
+  coachEditedBy?: string;
 }
 
 export interface Profile {
@@ -123,6 +126,20 @@ export interface Meal {
   p: number;
   c: number;
   f: number;
+  items?: MealItem[];
+}
+
+export interface MealItem {
+  foodId: string;
+  name: string;
+  brand?: string;
+  qty: number;
+  unit: string;
+  grams: number;
+  cal: number;
+  p: number;
+  c: number;
+  f: number;
 }
 
 export interface Favorite {
@@ -132,6 +149,14 @@ export interface Favorite {
   p: number;
   c: number;
   f: number;
+  items?: MealItem[];
+}
+
+export interface RecentFood {
+  food: import("./foodTypes").FoodDef;
+  qty: number;
+  unit: string;
+  ts: number;
 }
 
 export interface Experiment {
@@ -242,6 +267,7 @@ export interface AppState {
   checkins: CheckIn[];
   meals: Meal[];
   favorites: Favorite[];
+  recentFoods?: RecentFood[];
   experiments: Experiment[];
   photos: Photo[];
   measurements: Measurement[];

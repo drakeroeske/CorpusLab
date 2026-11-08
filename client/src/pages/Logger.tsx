@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Check, ChevronDown, ChevronRight, Disc, Flame, Repeat, Timer, Trash2, X } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
+import { useAuth } from "@/lib/auth";
+import { api } from "@/lib/api";
 import { newSession, prescriptionsFor, prWhyStat, sessionSummary, useToday } from "@/lib/derived";
 import { e1rm, fmtDate, fmtW, logsForPe, platesPerSide, prescribe, restDefault, substitutes, warmupSets, type Prescription } from "@/lib/engine";
 import { EX, MUSCLE_LABEL, isCompound, newId } from "@/lib/exercises";
@@ -26,7 +28,7 @@ export function PlateViz({ total, bar, units }: { total: number; bar: number; un
         <div style={{ width: 54, height: 8, background: "var(--border-strong)", borderRadius: 2 }} />
         <div style={{ width: 8, height: 24, background: "var(--muted)", borderRadius: 2 }} />
         {plates.map((p, i) => (
-          <div key={i} title={`${p}`} style={{ width: p >= maxP * 0.5 ? 16 : 11, height: 30 + (p / maxP) * 62, background: p >= maxP ? "var(--lime)" : p >= maxP * 0.5 ? "#9fc42a" : "var(--surface-2)", border: "1px solid var(--border-strong)", borderRadius: 3 }} />
+          <div key={i} title={`${p}`} style={{ width: p >= maxP * 0.5 ? 16 : 11, height: 30 + (p / maxP) * 62, background: p >= maxP ? "var(--lime)" : p >= maxP * 0.5 ? "var(--brown)" : "var(--surface-2)", border: "1px solid var(--border-strong)", borderRadius: 3 }} />
         ))}
         <div style={{ width: 22, height: 8, background: "var(--border-strong)", borderRadius: 2 }} />
       </div>
@@ -203,6 +205,7 @@ function RestBar({ session }: { session: Session }) {
 export default function Logger() {
   const { state, set, profile, targets } = useStore();
   const ui = useUI();
+  const auth = useAuth();
   const t = useToday();
   const now = useNow(1000);
   const s = state.activeSession;
@@ -296,6 +299,10 @@ export default function Logger() {
         topSets: done.exercises.slice(0, 3).map((l) => { const b = l.sets.reduce((x, y) => (e1rm(y.weight, y.reps) > e1rm(x.weight, x.reps) ? y : x), l.sets[0]); return { name: EX[l.exId].name, weight: b.weight, reps: b.reps, units: u }; }),
         prs: sum.prs.map((p) => EX[p.exId].name), durationMin: sum.dur, likes: [], comments: [],
       };
+      if (auth.live && !auth.viewing && auth.me?.shareFeed) {
+        const { likes: _l, comments: _c, author: _a, id: _i, ts: _t, ...body } = post;
+        api("POST", "/api/posts", { kind: "session", body }).catch(() => ui.toast("Saved, but couldn't post to Spotters"));
+      }
       return { ...st, sessions, activeSession: null, feed: [post, ...st.feed] };
     });
     setSummary(done);
@@ -312,7 +319,7 @@ export default function Logger() {
         <button className="btn btn-primary" disabled={totalSets === 0} onClick={finish} data-testid="button-finish-workout">Finish</button>
       </div>
       {t.readiness.effect !== "normal" && t.readiness.score != null && (
-        <div className="card-flat text-xs mb-3 flex gap-2" style={{ borderColor: "rgba(77,163,255,.35)" }}><AlertTriangle size={14} className="blue shrink-0 mt-0.5" /><span className="muted">{t.readiness.reason}</span></div>
+        <div className="card-flat text-xs mb-3 flex gap-2" style={{ borderColor: "rgba(92,58,33,.35)" }}><AlertTriangle size={14} className="blue shrink-0 mt-0.5" /><span className="muted">{t.readiness.reason}</span></div>
       )}
       <div className="stack">
         {s.exercises.map((log, i) => {

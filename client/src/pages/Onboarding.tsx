@@ -5,15 +5,17 @@ import { useUI } from "@/App";
 import type { Experience, Goal, Profile, Program, Sex, Units } from "@/lib/types";
 import { TEMPLATES, buildTemplate, newId } from "@/lib/exercises";
 import { dateKey, nutritionTargets, trainingDaysPerWeek } from "@/lib/engine";
-import { Seg, Wordmark } from "@/components/ui";
+import { NumInput, Seg, Wordmark } from "@/components/ui";
 import { ProgramEditor } from "@/components/ProgramEditor";
 import { buildDemo } from "@/lib/demo";
+import { useAuth } from "@/lib/auth";
 
 export default function Onboarding() {
-  const { set, replace } = useStore();
+  const { set, replace, mode } = useStore();
   const ui = useUI();
   const [step, setStep] = useState(0);
-  const [p, setP] = useState<Profile>({ name: "", units: "lb", bodyWeight: 175, heightCm: 178, age: 30, sex: null, experience: "intermediate", goal: "muscle", gym: "", coachMode: false, onboarded: false, barWeight: 45 });
+  const { me } = useAuth();
+  const [p, setP] = useState<Profile>({ name: me?.displayName ?? "", units: "lb", bodyWeight: 175, heightCm: 178, age: 30, sex: null, experience: "intermediate", goal: "muscle", gym: "", coachMode: me?.role === "coach", onboarded: false, barWeight: 45 });
   const [ft, setFt] = useState({ ft: 5, inch: 10 });
   const [tpl, setTpl] = useState<string>("ul4");
   const [program, setProgram] = useState<Program | null>(null);
@@ -43,7 +45,7 @@ export default function Onboarding() {
             <div className="tick-grid card" style={{ padding: 20, background: "var(--bg)" }}>
               <div className="label">Training engine · v1</div>
               <h1 className="text-[28px] leading-tight font-semibold mt-3" style={{ letterSpacing: "-0.02em" }}>Every rep, meal, and night's sleep — connected.</h1>
-              <p className="muted mt-3">Corpus reads your sleep, recovery, and nutrition, then tells you exactly what to lift today. It learns from every set you log.</p>
+              <p className="muted mt-3">RXS reads your sleep, recovery, and nutrition, then tells you exactly what to lift today. It learns from every set you log.</p>
               <div className="grid grid-cols-3 gap-2 mt-5">
                 {[["Readiness", "0–100"], ["Progress", "per set"], ["Fatigue", "14 groups"]].map(([a, b]) => (
                   <div key={a} className="card-flat" style={{ padding: 10, background: "var(--surface)" }}><div className="label">{a}</div><div className="mono text-sm mt-1">{b}</div></div>
@@ -52,7 +54,7 @@ export default function Onboarding() {
             </div>
             <button className="btn btn-primary btn-lg btn-block mt-6" onClick={() => setStep(1)} data-testid="button-start-setup">Set up my program <ArrowRight size={18} /></button>
             <button className="btn btn-outline btn-lg btn-block mt-3" onClick={() => { replace(buildDemo()); ui.toast("Demo loaded: 8 weeks of history"); }} data-testid="button-load-demo"><Database size={18} /> Load demo data</button>
-            <p className="text-xs faint mt-4 text-center">Everything stays on this device. Export anytime from Profile.</p>
+            <p className="text-xs faint mt-4 text-center">{mode === "remote" ? "Saved to your account and synced across devices. Export anytime from Profile." : "Everything stays on this device. Export anytime from Profile."}</p>
           </div>
         )}
 
@@ -63,16 +65,16 @@ export default function Onboarding() {
               <Seg value={p.units} onChange={(u: Units) => upd({ units: u, bodyWeight: u === "kg" ? Math.round(p.bodyWeight / 2.20462) : Math.round(p.bodyWeight * 2.20462) })} options={[{ v: "lb", l: "lb / ft" }, { v: "kg", l: "kg / cm" }]} testId="seg-units" />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <label className="field"><span className="label">Body weight ({p.units})</span><input className="input mono" type="number" inputMode="decimal" value={p.bodyWeight} onChange={(e) => upd({ bodyWeight: parseFloat(e.target.value) || 0 })} data-testid="input-bodyweight" /></label>
-              <label className="field"><span className="label">Age</span><input className="input mono" type="number" inputMode="numeric" value={p.age} onChange={(e) => upd({ age: parseInt(e.target.value) || 0 })} data-testid="input-age" /></label>
+              <label className="field"><span className="label">Body weight ({p.units})</span><NumInput value={p.bodyWeight} min={0} onChange={(v) => v !== null && upd({ bodyWeight: v })} data-testid="input-bodyweight" /></label>
+              <label className="field"><span className="label">Age</span><NumInput value={p.age} min={0} onChange={(v) => v !== null && upd({ age: v })} data-testid="input-age" /></label>
             </div>
             {p.units === "lb" ? (
               <div className="grid grid-cols-2 gap-3">
-                <label className="field"><span className="label">Height ft</span><input className="input mono" type="number" value={ft.ft} onChange={(e) => setFt({ ...ft, ft: parseInt(e.target.value) || 0 })} data-testid="input-height-ft" /></label>
-                <label className="field"><span className="label">Height in</span><input className="input mono" type="number" value={ft.inch} onChange={(e) => setFt({ ...ft, inch: parseInt(e.target.value) || 0 })} data-testid="input-height-in" /></label>
+                <label className="field"><span className="label">Height ft</span><NumInput integer value={ft.ft} min={0} onChange={(v) => v !== null && setFt({ ...ft, ft: v })} data-testid="input-height-ft" /></label>
+                <label className="field"><span className="label">Height in</span><NumInput integer value={ft.inch} min={0} onChange={(v) => v !== null && setFt({ ...ft, inch: v })} data-testid="input-height-in" /></label>
               </div>
             ) : (
-              <label className="field"><span className="label">Height (cm)</span><input className="input mono" type="number" value={p.heightCm} onChange={(e) => upd({ heightCm: parseInt(e.target.value) || 0 })} data-testid="input-height-cm" /></label>
+              <label className="field"><span className="label">Height (cm)</span><NumInput value={p.heightCm} min={0} onChange={(v) => v !== null && upd({ heightCm: v })} data-testid="input-height-cm" /></label>
             )}
             <div className="field"><span className="label">Sex (optional — used for calorie estimate)</span>
               <Seg value={p.sex ?? "na"} onChange={(v) => upd({ sex: v === "na" ? null : (v as Sex) })} options={[{ v: "m", l: "Male" }, { v: "f", l: "Female" }, { v: "na", l: "Skip" }]} testId="seg-sex" />

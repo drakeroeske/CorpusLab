@@ -4,7 +4,7 @@ import {
   addDays, clamp, daysBetween as daysBetweenK, computeReadiness, dateKey, dayForDate, dayMuscles, e1rm, hrvBaseline, logsForPe,
   nutritionTargets, parseKey, prescribe, sessionPRs, toKg, trainingDaysPerWeek, weekdayOf,
 } from "./engine";
-import { emptyState } from "./store";
+import { emptyState } from "./empty";
 
 function rng(seed: number) {
   let s = seed >>> 0;
@@ -13,8 +13,14 @@ function rng(seed: number) {
 
 const at = (date: string, h: number, m = 0) => { const d = parseKey(date); d.setHours(h, m, 0, 0); return d.getTime(); };
 
-export function buildDemo(): AppState {
-  const R = rng(42);
+export interface DemoOpts {
+  seed?: number; profile?: Partial<Profile>; template?: string; strength?: number; sleepShift?: number;
+  proteinShift?: number; skipRate?: number; todaySleep?: number; todayHrv?: number; bwStart?: number; bwTrend?: number; recentSleepDrop?: number; recentSkipRate?: number;
+}
+
+export function buildDemo(o: DemoOpts = {}): AppState {
+  const R = rng(o.seed ?? 42);
+  const strength = o.strength ?? 1;
   const n = (mu: number, sd: number) => { const u = R() || 1e-9, v = R(); return mu + sd * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
   const today = dateKey();
   // program starts on the Monday 8 weeks back
@@ -23,10 +29,11 @@ export function buildDemo(): AppState {
 
   const profile: Profile = {
     name: "Alex Rivera", units: "lb", bodyWeight: 183, heightCm: 180, age: 29, sex: "m", experience: "intermediate",
-    goal: "muscle", gym: "Forge Athletic Club", coachMode: false, onboarded: true, barWeight: 45,
+    goal: "muscle", gym: "Forge Athletic Club", coachMode: false, onboarded: true, barWeight: 45, ...o.profile,
   };
-  const program = buildTemplate("ul4", "lb", "intermediate", start);
-  const targets = nutritionTargets({ ...profile, bodyWeight: 180 }, trainingDaysPerWeek(program));
+  const program = buildTemplate(o.template ?? "ul4", "lb", profile.experience, start);
+  if (strength !== 1) program.days.forEach((d) => d.exercises.forEach((pe) => { if (pe.startWeight) pe.startWeight = Math.max(5, Math.round((pe.startWeight * strength) / 5) * 5); }));
+  const targets = nutritionTargets({ ...profile, bodyWeight: profile.bodyWeight - 3 }, trainingDaysPerWeek(program));
 
   const sessions: Session[] = [];
   const checkins: CheckIn[] = [];
@@ -35,11 +42,11 @@ export function buildDemo(): AppState {
   program.days.forEach((d) => d.exercises.forEach((pe) => {
     const ex = EX[pe.exId];
     const base = pe.startWeight || (ex.equipment === "bodyweight" ? 25 : 20);
-    trueE1[pe.id] = base * (1 + (pe.repMin + 4) / 30);
+    trueE1[pe.id] = base * (1 + (pe.repMin + 4) / 30) * (pe.startWeight ? 1 : strength);
   }));
-  const ohpPe = program.days.flatMap((d) => d.exercises).find((e) => e.exId === "ohp")!;
+  const ohpPe = program.days.flatMap((d) => d.exercises).find((e) => e.exId === "ohp");
 
-  let bw = 179.6;
+  let bw = o.bwStart ?? 179.6;
   const totalDays = daysBetweenK(start, today);
   const expStart = addDays(today, -23);
   const expLog: Record<string, boolean> = {};
@@ -50,20 +57,21 @@ export function buildDemo(): AppState {
     const isToday = date === today;
     const weekN = i / 7;
     // ---------- sleep (rough patch in week 5) ----------
-    let sleep = n(7.55, 0.55);
+    let sleep = n(7.55 + (o.sleepShift ?? 0), 0.55);
     if (weekN >= 4.2 && weekN < 5.2) sleep -= 1.1;
     if (weekdayOf(date) === 6) sleep += 0.5;
-    if (isToday) sleep = 5.5;
+    if (i >= totalDays - 5) sleep -= o.recentSleepDrop ?? 0;
+    if (isToday) sleep = o.todaySleep ?? 5.5;
     sleep = clamp(Math.round(sleep * 4) / 4, 4.5, 9.25);
     const sleepQ0 = clamp(Math.round(n(sleep >= 7.5 ? 4 : sleep >= 6.5 ? 3.2 : 2.3, 0.6)), 1, 5);
     const sleepQ = isToday ? 3 : sleepQ0;
     const hrvBase = 64;
     let hrv = Math.round(n(hrvBase + (sleep - 7.2) * 5, 4));
-    if (isToday) { const b = hrvBaseline(checkins, date); hrv = Math.round((b ?? 64) * 0.88); }
+    if (isToday) { const b = hrvBaseline(checkins, date); hrv = Math.round((b ?? 64) * (o.todayHrv ?? 0.88)); }
     const rhr = Math.round(n(53 - (sleep - 7.2) * 1.5, 1.5));
     const energy = clamp(Math.round(n(2.5 + (sleep - 5.5) * 0.7, 0.5)), 1, 5);
     const stress = clamp(Math.round(n(weekN >= 4.2 && weekN < 5.2 ? 3.6 : 2.4, 0.8)), 1, 5);
-    bw += n(0.055, 0.05);
+    bw += n(o.bwTrend ?? 0.055, 0.05);
     const bodyWeight = Math.round((bw + n(0, 0.5)) * 10) / 10;
     // soreness from yesterday's session
     const soreness: Partial<Record<Muscle, number>> = {};
@@ -87,7 +95,7 @@ export function buildDemo(): AppState {
     // ---------- nutrition ----------
     const day = dayForDate(program, date);
     const lastWeek = i >= totalDays - 10;
-    const proteinFactor = lastWeek ? (R() < 0.6 ? n(0.78, 0.05) : n(1.02, 0.04)) : weekN >= 4.2 && weekN < 5.2 ? n(0.86, 0.08) : n(1.0, 0.07);
+    const proteinFactor = (o.proteinShift ?? 0) + (lastWeek ? (R() < 0.6 ? n(0.78, 0.05) : n(1.02, 0.04)) : weekN >= 4.2 && weekN < 5.2 ? n(0.86, 0.08) : n(1.0, 0.07));
     const calTarget = day ? targets.trainingCal : targets.restCal;
     const calFactor = n(1.0, 0.06);
     const preCarbs = day && R() < 0.55;
@@ -112,7 +120,7 @@ export function buildDemo(): AppState {
 
     // ---------- training ----------
     if (!day || isToday) continue;
-    if ((i === 17 || i === 38) ) continue; // two missed sessions
+    if (i === 17 || i === 38 || R() < (i >= totalDays - 14 ? o.recentSkipRate ?? o.skipRate ?? 0 : o.skipRate ?? 0)) continue; // missed sessions
     const ci = checkins.find((c) => c.date === date);
     const rd = computeReadiness(ci, hrvBaseline(checkins, date), dayMuscles(day));
     const sStart = at(date, 17, 30 + Math.round(n(0, 10)));
@@ -121,13 +129,13 @@ export function buildDemo(): AppState {
     const perfMod = 1 + ((rd.score ?? 75) - 75) / 1500 + (sleep - 7.4) * 0.01 + (preCarbs ? 0.01 : 0);
     for (const pe of day.exercises) {
       const ex = EX[pe.exId];
-      const growth = pe.id === ohpPe.id ? (weekN < 4 ? 0.02 : 0) : isCompound(ex) ? 0.021 : 0.014;
+      const growth = pe.id === ohpPe?.id ? (weekN < 4 ? 0.02 : 0) : isCompound(ex) ? 0.021 : 0.014;
       trueE1[pe.id] *= 1 + growth;
       const prev = logsForPe(sessions, pe.id);
       const rx = prescribe(pe, prev, rd.score, false, "lb");
       const w = rx.weight > 0 ? rx.weight : 0;
       const sets = [];
-      const cap = trueE1[pe.id] * perfMod * (pe.id === ohpPe.id && weekN >= 4 ? 0.985 : 1);
+      const cap = trueE1[pe.id] * perfMod * (pe.id === ohpPe?.id && weekN >= 4 ? 0.985 : 1);
       for (let k = 0; k < rx.sets; k++) {
         const eff = w > 0 ? w : 20;
         const maxReps = Math.max(1, Math.floor(30 * (cap / eff - 1)));

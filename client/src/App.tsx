@@ -1,6 +1,8 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
-import { Activity, Dumbbell, Gauge, User, Users } from "lucide-react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { Activity, Dumbbell, Eye, Gauge, User, Users } from "lucide-react";
 import { StoreProvider, useStore } from "@/lib/store";
+import { AuthProvider, useAuth } from "@/lib/auth";
+import AuthScreen from "@/pages/Auth";
 import { Toast, useToast } from "@/components/ui";
 import Onboarding from "@/pages/Onboarding";
 import Today from "@/pages/Today";
@@ -10,6 +12,8 @@ import Spotters from "@/pages/Spotters";
 import ProfilePage from "@/pages/Profile";
 import { CheckInSheet } from "@/pages/CheckIn";
 import { NutritionSheet } from "@/pages/Nutrition";
+import { InviteHandler } from "@/components/InviteHandler";
+import PrivacyPage from "@/pages/Privacy";
 import { CoachChat } from "@/pages/Coach";
 
 export type Tab = "today" | "train" | "body" | "spotters" | "profile";
@@ -23,8 +27,21 @@ interface UI {
 const UICtx = createContext<UI | null>(null);
 export const useUI = () => useContext(UICtx)!;
 
+function ViewBanner() {
+  const { viewing, viewAs } = useAuth();
+  if (!viewing) return null;
+  return (
+    <div className="view-banner" data-testid="banner-viewing">
+      <Eye size={15} />
+      <span className="flex-1 min0 truncate text-[13px]">Viewing <b>{viewing.name}</b> · read-only</span>
+      <button className="btn btn-sm" onClick={() => viewAs(null)} data-testid="button-exit-view">Exit</button>
+    </div>
+  );
+}
+
 function Shell() {
   const { state } = useStore();
+  const { viewing, viewAs } = useAuth();
   const [tab, setTabState] = useState<Tab>("today");
   const [trainSub, setTrainSub] = useState("session");
   const [sheet, open] = useState<SheetName>(null);
@@ -32,6 +49,12 @@ function Shell() {
   const setTab = (x: Tab) => { setTabState(x); window.scrollTo({ top: 0 }); };
   const ui: UI = { tab, setTab, trainSub, setTrainSub, sheet, open, toast: t.show };
 
+  if (viewing && !state.profile?.onboarded) return (
+    <div className="app viewing"><ViewBanner />
+      <div className="screen"><div className="empty mt-6">{viewing.name} hasn't finished setting up their account yet.</div>
+        <button className="btn btn-block mt-4" onClick={() => viewAs(null)}>Back to my account</button></div>
+    </div>
+  );
   if (!state.profile?.onboarded) return <UICtx.Provider value={ui}><Onboarding /><Toast msg={t.msg} /></UICtx.Provider>;
 
   const tabs: { id: Tab; label: string; icon: ReactNode }[] = [
@@ -43,7 +66,8 @@ function Shell() {
   ];
   return (
     <UICtx.Provider value={ui}>
-      <div className="app">
+      <div className={`app ${viewing ? "viewing" : ""}`}>
+        <ViewBanner />
         {tab === "today" && <Today />}
         {tab === "train" && <Train />}
         {tab === "body" && <Body />}
@@ -67,6 +91,24 @@ function Shell() {
   );
 }
 
+function useRoute() {
+  const get = () => (location.hash.startsWith("#/privacy") ? "privacy" : "app");
+  const [r, setR] = useState(get);
+  useEffect(() => { const f = () => { setR(get()); window.scrollTo({ top: 0 }); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
+  return r;
+}
+
+function Root() {
+  const auth = useAuth();
+  const route = useRoute();
+  if (auth.status === "loading") return <div style={{ minHeight: "100dvh", display: "grid", placeItems: "center", color: "var(--muted)" }} className="mono text-xs" data-testid="status-loading">Loading</div>;
+  if (route === "privacy") return <PrivacyPage onBack={() => { location.hash = "#/"; }} />;
+  if (auth.status === "anon") return <AuthScreen />;
+  if (auth.viewing) return <StoreProvider key={`view-${auth.viewing.id}`} mode="readonly" initial={auth.viewing.state}><Shell /></StoreProvider>;
+  if (auth.status === "authed" && auth.me) return <StoreProvider key={`u-${auth.me.id}`} mode="remote" onAuthLost={auth.logout}><Shell /></StoreProvider>;
+  return <StoreProvider mode="offline"><Shell /></StoreProvider>;
+}
+
 export default function App() {
-  return <StoreProvider><Shell /></StoreProvider>;
+  return <AuthProvider><Root /><InviteHandler /></AuthProvider>;
 }

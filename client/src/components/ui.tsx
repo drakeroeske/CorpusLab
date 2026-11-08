@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { Minus, Plus, X } from "lucide-react";
 
 export function Sheet({ title, onClose, children, full, right, testId }: { title: ReactNode; onClose: () => void; children: ReactNode; full?: boolean; right?: ReactNode; testId?: string }) {
@@ -33,17 +33,42 @@ export function Seg<T extends string | number>({ options, value, onChange, class
   );
 }
 
+/** Number text box that can be cleared while typing. Commits valid numbers as you type, restores on blur if left empty. */
+export function NumInput({ value, onChange, min = -Infinity, max = Infinity, decimals = 2, integer = false, allowEmpty = false, className = "input mono", ...rest }:
+  { value: number | null | undefined; onChange: (v: number | null) => void; min?: number; max?: number; decimals?: number; integer?: boolean; allowEmpty?: boolean; className?: string } & Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "min" | "max">) {
+  const show = (v: number | null | undefined) => (v === null || v === undefined || Number.isNaN(v) ? "" : String(v));
+  const [txt, setTxt] = useState(show(value));
+  const focused = useRef(false);
+  useEffect(() => { if (!focused.current) setTxt(show(value)); }, [value]);
+  const parse = (t: string) => { const n = integer ? parseInt(t, 10) : parseFloat(t.replace(",", ".")); return Number.isNaN(n) ? null : Math.round(n * 10 ** decimals) / 10 ** decimals; };
+  return (
+    <input {...rest} className={className} type="text" inputMode={integer ? "numeric" : "decimal"} value={txt}
+      onFocus={(e) => { focused.current = true; e.target.select(); rest.onFocus?.(e); }}
+      onChange={(e) => {
+        const t = e.target.value.replace(integer ? /[^0-9]/g : /[^0-9.,]/g, "");
+        setTxt(t);
+        if (t === "") { if (allowEmpty) onChange(null); return; }
+        const n = parse(t);
+        if (n !== null && n >= min && n <= max) onChange(n);
+      }}
+      onBlur={(e) => {
+        focused.current = false;
+        const n = parse(txt);
+        if (n === null) { if (allowEmpty && txt === "") { onChange(null); setTxt(""); } else setTxt(show(value)); }
+        else { const c = Math.min(max, Math.max(min, n)); onChange(c); setTxt(show(c)); }
+        rest.onBlur?.(e);
+      }} />
+  );
+}
+
 export function Stepper({ value, onChange, step = 1, min = 0, max = 9999, unit, testId, decimals = 1 }: { value: number; onChange: (v: number) => void; step?: number; min?: number; max?: number; unit?: string; testId?: string; decimals?: number }) {
-  const [txt, setTxt] = useState(String(value));
-  useEffect(() => setTxt(String(value)), [value]);
   const f = (x: number) => Math.round(x * 10 ** decimals) / 10 ** decimals;
   return (
     <div className="stepper" data-testid={testId}>
       <button type="button" aria-label="Decrease" onClick={() => onChange(f(Math.max(min, value - step)))} data-testid={testId ? `${testId}-minus` : undefined}><Minus size={18} /></button>
       <div className="flex flex-col items-center justify-center min0">
-        <input inputMode="decimal" value={txt} aria-label={unit ?? "value"}
-          onChange={(e) => { setTxt(e.target.value); const n = parseFloat(e.target.value); if (!isNaN(n)) onChange(f(Math.min(max, Math.max(min, n)))); }}
-          onBlur={() => setTxt(String(value))} data-testid={testId ? `${testId}-input` : undefined} />
+        <NumInput className="" value={value} min={min} max={max} decimals={decimals} integer={decimals === 0} aria-label={unit ?? "value"}
+          onChange={(v) => v !== null && onChange(v)} data-testid={testId ? `${testId}-input` : undefined} />
         {unit && <span className="unit -mt-1">{unit}</span>}
       </div>
       <button type="button" aria-label="Increase" onClick={() => onChange(f(Math.min(max, value + step)))} data-testid={testId ? `${testId}-plus` : undefined}><Plus size={18} /></button>
@@ -150,9 +175,9 @@ export function Empty({ children }: { children: ReactNode }) {
 
 export function Wordmark({ size = 17 }: { size?: number }) {
   return (
-    <span className="inline-flex items-center gap-2" aria-label="Corpus" data-testid="wordmark">
-      <span style={{ width: size * 0.62, height: size * 0.62, background: "var(--lime)", borderRadius: 2, display: "inline-block" }} />
-      <span style={{ fontWeight: 700, fontSize: size, letterSpacing: "-0.03em" }}>corpus</span>
+    <span className="inline-flex items-center gap-2" aria-label="RXS" data-testid="wordmark">
+      <span style={{ width: size * 0.62, height: size * 0.62, background: "var(--brown)", borderRadius: 2, display: "inline-block" }} />
+      <span style={{ fontWeight: 700, fontSize: size, letterSpacing: "0.02em" }}>RXS</span>
     </span>
   );
 }

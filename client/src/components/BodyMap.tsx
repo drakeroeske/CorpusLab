@@ -31,10 +31,10 @@ const OUT: Poly = [[52, 31], [42, 36], [28, 38], [22, 48], [22, 70], [16, 98], [
 const outline = [...OUT, ...mir([...OUT].reverse())];
 
 export function fatigueColor(v: number) {
-  if (v < 4) return "#22241F";
+  if (v < 4) return "#E1E5E8";
   const t = Math.min(1, v / 100);
-  // lime (#C6F432) → orange (#FF6A2B)
-  const a = [198, 244, 50], b = [255, 106, 43];
+  // tan (#B08A68) → red (#B42318)
+  const a = [176, 138, 104], b = [180, 35, 24];
   const c = a.map((x, i) => Math.round(x + (b[i] - x) * t));
   return `rgba(${c[0]},${c[1]},${c[2]},${0.28 + 0.62 * Math.min(1, v / 70)})`;
 }
