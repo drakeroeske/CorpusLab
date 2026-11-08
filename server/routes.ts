@@ -1,8 +1,8 @@
 import type { Express, NextFunction, Request, Response } from "express";
 import type { Server } from "node:http";
 import { createClient } from "@supabase/supabase-js";
-import { barcodeLookup, foodPortions, foodsEnabled, searchFoods } from "./foods";
-import { hashPassword, newInviteCode, newRecoveryCode, newToken, recoveryHash, sameHash, sha256, USERNAME_RE, verifyPassword } from "./auth";
+import { barcodeLookup, foodPortions, foodsEnabled, searchFoods } from "./foods.js";
+import { hashPassword, newInviteCode, newRecoveryCode, newToken, recoveryHash, sameHash, sha256, USERNAME_RE, verifyPassword } from "./auth.js";
 
 /* ------------------------------------------------------------------ setup */
 const SUPABASE_URL = process.env.SUPABASE_URL || "";

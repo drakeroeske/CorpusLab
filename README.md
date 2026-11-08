@@ -19,6 +19,13 @@ NODE_ENV=production node dist/index.cjs
 
 Typecheck: `npx tsc --noEmit -p .`
 
+## Deploying to Vercel
+
+`vercel.json` builds the client into `dist/public` and runs the Express API as one
+serverless function (`api/index.ts` → `server/app.ts`). Node is pinned to 22.x.
+In the Vercel project's **Settings → Environment Variables**, add the same values as `.env`:
+`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `CORPUS_DB_KEY`, `USDA_API_KEY`.
+
 ## Secrets
 
 `.env` holds the Supabase URL/anon key and the shared DB key. It is **never** committed —
