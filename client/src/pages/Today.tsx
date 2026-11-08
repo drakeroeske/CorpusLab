@@ -1,4 +1,5 @@
 import { InstallBanner } from "@/components/Install";
+import { NotifNudge } from "@/components/Notifications";
 import { useState } from "react";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { useStore } from "@/lib/store";
@@ -52,6 +53,7 @@ export default function Today() {
         sub={<span className="flex gap-2 flex-wrap" data-testid="text-phase"><Tag>Week {t.phase.week}</Tag><Tag>{t.phase.phase}</Tag>{state.program && <Tag>{state.program.name}</Tag>}</span>} />
       <div className="screen">
         <InstallBanner />
+        <NotifNudge onOpenSettings={() => ui.setTab("profile")} />
 
         {/* Readiness */}
         <section className="card" data-testid="card-readiness">

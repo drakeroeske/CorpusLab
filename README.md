@@ -24,7 +24,19 @@ Typecheck: `npx tsc --noEmit -p .`
 `vercel.json` builds the client into `dist/public` and runs the Express API as one
 serverless function (`api/index.ts` → `server/app.ts`). Node is pinned to 22.x.
 In the Vercel project's **Settings → Environment Variables**, add the same values as `.env`:
-`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `CORPUS_DB_KEY`, `USDA_API_KEY`.
+`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `CORPUS_DB_KEY`, `USDA_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`.
+
+Reminders (check-in, meals, streak) run on a 10-minute timer inside the Node process. Vercel functions
+don't stay running, so on Vercel schedule a job that calls `POST /api/push/cron` every 10 minutes with
+header `x-corpus-key: <CORPUS_DB_KEY>` (Vercel Cron or any external scheduler).
+
+## Notifications
+
+Web Push via the `web-push` package. The service worker (`client/public/sw.js`) shows notifications and
+opens deep links like `/?go=train&sub=program`. Devices register in the `push_subscriptions` table;
+event pushes fire from `server/routes.ts` via `notify()` and reminders live in `server/push.ts`.
+The VAPID key pair in `.env` must be the same on every deployment that shares the database, or
+existing subscriptions stop working. Generate once: `npx web-push generate-vapid-keys`.
 
 ## Secrets
 

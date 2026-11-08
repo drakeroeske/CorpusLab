@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import AuthScreen from "@/pages/Auth";
 import { Toast, useToast } from "@/components/ui";
 import { GrainOverlay, applyInk } from "@/components/riso";
+import { NotifPlanSync, useDeepLinks } from "@/components/Notifications";
 applyInk();
 import Onboarding from "@/pages/Onboarding";
 import Today from "@/pages/Today";
@@ -20,7 +21,7 @@ import { CoachChat } from "@/pages/Coach";
 
 export type Tab = "today" | "train" | "body" | "spotters" | "profile";
 export type SheetName = "checkin" | "nutrition" | "coach" | null;
-interface UI {
+export interface UI {
   tab: Tab; setTab: (t: Tab) => void;
   trainSub: string; setTrainSub: (s: string) => void;
   sheet: SheetName; open: (s: SheetName) => void;
@@ -50,6 +51,7 @@ function Shell() {
   const t = useToast();
   const setTab = (x: Tab) => { setTabState(x); window.scrollTo({ top: 0 }); };
   const ui: UI = { tab, setTab, trainSub, setTrainSub, sheet, open, toast: t.show };
+  useDeepLinks(ui, !!state.profile?.onboarded && !viewing);
 
   if (viewing && !state.profile?.onboarded) return (
     <div className="app viewing"><ViewBanner />
@@ -71,6 +73,7 @@ function Shell() {
     <UICtx.Provider value={ui}>
       <div className={`app ${surface} ${viewing ? "viewing" : ""}`}>
         <ViewBanner />
+        {!viewing && <NotifPlanSync />}
         {tab === "today" && <Today />}
         {tab === "train" && <Train />}
         {tab === "body" && <Body />}

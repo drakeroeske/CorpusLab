@@ -307,6 +307,12 @@ export interface AppState {
   programInbox?: ProgramInboxItem[];
   /** Inbox ids you dismissed (so the server doesn't re-add them). */
   programInboxDismissed?: string[];
+  /** Notification preferences (mirrors what the server has for this account). */
+  notifPrefs?: { spotters: boolean; coach: boolean; checkin: boolean; checkinHour: number; meals: boolean; streak: boolean; streakHour: number };
+  /** What the reminder scheduler needs from the client: timezone, upcoming planned training dates, protein target. */
+  notifPlan?: { tz: string; plannedDates: string[]; proteinTarget: number; streak: number; updatedAt: string };
+  /** Dismissed the "turn on notifications" nudge on Today. */
+  notifNudgeDismissed?: boolean;
   restDefaults: { compound: number; isolation: number };
   demo: boolean;
 }

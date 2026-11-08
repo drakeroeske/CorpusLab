@@ -2,6 +2,7 @@ import type { Express, NextFunction, Request, Response } from "express";
 import type { Server } from "node:http";
 import { createClient } from "@supabase/supabase-js";
 import { barcodeLookup, foodPortions, foodsEnabled, searchFoods } from "./foods.js";
+import { DEFAULT_PREFS, initPush, notify, pushEnabled, runReminders, sanitizePrefs, startReminderTimer, vapidPublicKey } from "./push.js";
 import { hashPassword, newInviteCode, newRecoveryCode, newToken, recoveryHash, sameHash, sha256, USERNAME_RE, verifyPassword } from "./auth.js";
 
 /* ------------------------------------------------------------------ setup */
@@ -13,6 +14,8 @@ const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
   global: { headers: { "x-corpus-key": CORPUS_DB_KEY } },
 });
+initPush(sb);
+startReminderTimer();
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const COOKIE = "__Host-corpus_sess";
@@ -377,9 +380,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (existing.some((r) => r.status === "accepted")) return res.json({ status: "accepted", user: pub(target) });
     if (reverse) {
       must(await sb.from("friendships").update({ status: "accepted" }).eq("requester", target.id).eq("addressee", me.id));
+      void notify(target.id, "spotters", { title: "You're spotters", body: `${me.display_name} accepted your request. You'll see each other's finished workouts now.`, url: "/?go=spotters", tag: "spotter" });
       return res.json({ status: "accepted", user: pub(target) });
     }
-    if (!existing.length) must(await sb.from("friendships").insert({ requester: me.id, addressee: target.id }));
+    if (!existing.length) {
+      must(await sb.from("friendships").insert({ requester: me.id, addressee: target.id }));
+      void notify(target.id, "spotters", { title: "New spotter request", body: `${me.display_name} (@${me.username}) wants you as a spotter.`, url: "/?go=spotters&sub=friends", tag: "spotter" });
+    }
     res.json({ status: "pending", user: pub(target) });
   }));
 
@@ -411,6 +418,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } else {
       must(await sb.from("friendships").insert({ requester: target.id, addressee: me.id, status: "accepted" }));
     }
+    void notify(target.id, "spotters", { title: "You're spotters", body: `${me.display_name} joined RXS from your invite link.`, url: "/?go=spotters", tag: "spotter" });
     res.json({ status: "accepted", user: pub(target) });
   }));
   // New code = old links and codes stop working (friends you already have stay).
@@ -435,6 +443,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/friends/:id/accept", authed(async (req, res, me) => {
     must(await sb.from("friendships").update({ status: "accepted" }).eq("requester", String(req.params.id)).eq("addressee", me.id));
+    void notify(String(req.params.id), "spotters", { title: "You're spotters", body: `${me.display_name} accepted your request.`, url: "/?go=spotters", tag: "spotter" });
     res.json({ ok: true });
   }));
 
@@ -505,7 +514,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const p = await visiblePost(me, String(req.params.id));
     const has = must(await sb.from("post_likes").select("post_id").eq("post_id", p.id).eq("user_id", me.id).maybeSingle());
     if (has) must(await sb.from("post_likes").delete().eq("post_id", p.id).eq("user_id", me.id));
-    else must(await sb.from("post_likes").insert({ post_id: p.id, user_id: me.id }));
+    else {
+      must(await sb.from("post_likes").insert({ post_id: p.id, user_id: me.id }));
+      if (p.user_id !== me.id) void notify(p.user_id, "spotters", { title: "Respect", body: `${me.display_name} gave respect on your workout.`, url: "/?go=spotters", tag: "respect" });
+    }
     res.json({ liked: !has });
   }));
 
@@ -516,6 +528,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!text) throw bad("Comment is empty");
     const p = await visiblePost(me, String(req.params.id));
     must(await sb.from("post_comments").insert({ post_id: p.id, user_id: me.id, text }));
+    if (p.user_id !== me.id) void notify(p.user_id, "spotters", { title: `${me.display_name} commented`, body: text, url: "/?go=spotters", tag: "comment" });
     res.json({ ok: true });
   }));
 
@@ -559,6 +572,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (coach.is_demo && !me.is_demo) throw new HttpError(403, "That's a sample coach account. Ask your coach for their own code.");
     const r = await sb.from("coach_links").upsert({ coach_id: coach.id, client_id: me.id });
     must(r);
+    void notify(coach.id, "coach", { title: "New client", body: `${me.display_name} (@${me.username}) linked you as their coach.`, url: "/?go=me", tag: "coach" });
     res.json(await meResponse(me));
   }));
 
@@ -609,6 +623,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     state.sessions = (state.sessions ?? []).map((s: Row) => (s.id === sessionId ? ((found = true), { ...s, coachNote: note }) : s));
     if (!found) throw new HttpError(404, "Session not found");
     await saveState(clientId, state);
+    if (note) void notify(clientId, "coach", { title: `Note from ${me.display_name}`, body: note.length > 120 ? note.slice(0, 117) + "..." : note, url: "/?go=train", tag: "coach-note" });
     res.json({ ok: true });
   }));
 
@@ -621,6 +636,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!state) throw new HttpError(404, "Client has no data yet");
     state.program = { ...program, coachEditedAt: Date.now(), coachEditedBy: me.display_name };
     await saveState(clientId, state);
+    void notify(clientId, "coach", { title: "Your program changed", body: `${me.display_name} updated ${program.name || "your program"}. Open Train to see what's new.`, url: "/?go=train&sub=program", tag: "coach-program" });
     res.json({ ok: true });
   }));
 
@@ -679,7 +695,65 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     inbox.unshift({ id: `inbox_${Date.now()}`, from: me.display_name, fromId: me.id, ts: Date.now(), program: { ...program, deloadUntil: null } });
     state.programInbox = inbox.slice(0, 10);
     await saveState(clientId, state);
+    void notify(clientId, "coach", { title: "New program from your coach", body: `${me.display_name} sent you "${program.name || "a program"}". Switch to it or save it for later.`, url: "/?go=train&sub=program", tag: "coach-program" });
     res.json({ ok: true });
+  }));
+
+  /* ------------------------------------------------------------ push notifications */
+  app.get("/api/push/config", (_req, res) => res.json({ enabled: pushEnabled, publicKey: vapidPublicKey, defaults: DEFAULT_PREFS }));
+
+  app.get("/api/push/subscriptions", authed(async (_req, res, me) => {
+    const rows = must(await sb.from("push_subscriptions").select("id, endpoint, ua, created_at, prefs").eq("user_id", me.id)) as Row[];
+    res.json({ devices: rows.map((r) => ({ id: r.id, endpoint: r.endpoint, ua: r.ua, createdAt: r.created_at })), prefs: rows[0] ? sanitizePrefs(rows[0].prefs) : null });
+  }));
+
+  // One row per device. Re-subscribing from the same device updates it in place.
+  app.post("/api/push/subscribe", authed(async (req, res, me) => {
+    noDemo(me);
+    if (!pushEnabled) throw new HttpError(503, "Notifications aren't configured on this server.");
+    limit(req, "push-sub", 60, 3600_000);
+    const sub = req.body?.subscription;
+    const endpoint = str(sub?.endpoint, 1000);
+    const p256dh = str(sub?.keys?.p256dh, 300);
+    const auth = str(sub?.keys?.auth, 100);
+    if (!/^https:\/\//.test(endpoint) || !p256dh || !auth) throw bad("Invalid subscription");
+    const count = must(await sb.from("push_subscriptions").select("id").eq("user_id", me.id)) as Row[];
+    if (count.length >= 10) {
+      const exists = must(await sb.from("push_subscriptions").select("id").eq("endpoint", endpoint).maybeSingle());
+      if (!exists) throw bad("Too many devices. Turn notifications off on one you no longer use.");
+    }
+    const prefs = sanitizePrefs(req.body?.prefs ?? (count.length ? undefined : DEFAULT_PREFS));
+    const ua = str(req.headers["user-agent"], 200);
+    must(await sb.from("push_subscriptions").upsert({ user_id: me.id, endpoint, p256dh, auth, ua, prefs, last_seen_at: new Date().toISOString() }, { onConflict: "endpoint" }));
+    if (req.body?.prefs) must(await sb.from("push_subscriptions").update({ prefs }).eq("user_id", me.id));
+    res.json({ ok: true, prefs });
+  }));
+
+  app.put("/api/push/prefs", authed(async (req, res, me) => {
+    noDemo(me);
+    const prefs = sanitizePrefs(req.body?.prefs);
+    must(await sb.from("push_subscriptions").update({ prefs }).eq("user_id", me.id));
+    res.json({ ok: true, prefs });
+  }));
+
+  app.delete("/api/push/subscribe", authed(async (req, res, me) => {
+    const endpoint = str(req.body?.endpoint, 1000);
+    const q = sb.from("push_subscriptions").delete().eq("user_id", me.id);
+    must(await (endpoint ? q.eq("endpoint", endpoint) : q));
+    res.json({ ok: true });
+  }));
+
+  app.post("/api/push/test", authed(async (req, res, me) => {
+    noDemo(me);
+    limit(req, "push-test", 10, 3600_000);
+    const sent = await notify(me.id, "test", { title: "RXS notifications are on", body: "This is what a reminder looks like. You can change what you get under Me → Notifications.", url: "/?go=me", tag: "test" });
+    res.json({ sent });
+  }));
+
+  // For serverless hosts without a long-running process: call this every 10 minutes from a scheduler.
+  app.post("/api/push/cron", wrap(async (req, res) => {
+    if (!CORPUS_DB_KEY || req.headers["x-corpus-key"] !== CORPUS_DB_KEY) throw new HttpError(401, "Nope");
+    res.json(await runReminders());
   }));
 
   return httpServer;

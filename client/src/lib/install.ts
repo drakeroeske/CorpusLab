@@ -15,8 +15,8 @@ export const isIOS = () =>
 const inFrame = () => { try { return window.self !== window.top; } catch { return true; } };
 
 export function registerSW() {
-  if (!("serviceWorker" in navigator) || location.protocol !== "https:" || inFrame()) return;
-  if (!/\.pplx\.app$/.test(location.hostname)) return;
+  const secure = location.protocol === "https:" || location.hostname === "localhost";
+  if (!("serviceWorker" in navigator) || !secure || inFrame()) return;
   window.addEventListener("load", () => { navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(() => {}); });
 }
 

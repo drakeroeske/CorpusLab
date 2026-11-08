@@ -1,5 +1,5 @@
 /* Corpus service worker: keeps the app shell available offline. Never caches API calls. */
-const VERSION = "rxs-v3";
+const VERSION = "rxs-v4";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./favicon.svg", "./icon-192.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {
@@ -28,4 +28,24 @@ self.addEventListener("fetch", (e) => {
     if (r.ok || (isFont && r.type === "opaque")) { const copy = r.clone(); caches.open(VERSION).then((c) => c.put(req, copy)); }
     return r;
   })));
+});
+
+/* ---- push notifications ---- */
+self.addEventListener("push", (e) => {
+  let data = { title: "RXS", body: "", url: "/", tag: "rxs" };
+  try { data = { ...data, ...e.data.json() }; } catch { if (e.data) data.body = e.data.text(); }
+  e.waitUntil(self.registration.showNotification(data.title, {
+    body: data.body, tag: data.tag, renotify: false, data: { url: data.url },
+    icon: "./icon-192.png", badge: "./badge-96.png",
+  }));
+});
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const target = new URL(e.notification.data?.url || "/", self.location.origin).href;
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+    for (const c of list) {
+      if (new URL(c.url).origin === self.location.origin && "focus" in c) { c.postMessage({ type: "rxs:open", url: target }); return c.focus(); }
+    }
+    return self.clients.openWindow(target);
+  }));
 });

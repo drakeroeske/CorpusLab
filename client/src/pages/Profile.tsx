@@ -12,6 +12,7 @@ import { ProgramEditor } from "@/components/ProgramEditor";
 import { SharedCodes } from "@/components/ProgramLibrary";
 import { RecoveryCodeView } from "@/components/Recovery";
 import { InstallCard } from "@/components/Install";
+import { NotificationsCard } from "@/components/Notifications";
 import { buildDemo } from "@/lib/demo";
 import { convertUnits, downloadText } from "@/lib/actions";
 import { dateKey, fmtDate, mean } from "@/lib/engine";
@@ -52,6 +53,7 @@ export default function Profile() {
 
         <div className="section-title"><h2>App</h2></div>
         <InstallCard />
+        {live && <NotificationsCard />}
         <GrainCard />
         <a href="#/privacy" className="btn btn-block mt-2" data-testid="link-profile-privacy">Privacy · what's stored and who sees it</a>
 
