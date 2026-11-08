@@ -60,6 +60,17 @@ export interface ProgressionState {
   last?: { weight: number; reps: number };
 }
 
+export const DEFAULT_INC_PCT = 2.5;
+/** Weight jump for an exercise at a given working weight: pct of weight, rounded to the plate step, at least one step. */
+export function jumpFor(pe: ProgramExercise, weight: number): number {
+  const step = pe.increment || 1;
+  const pct = pe.incrementPct ?? DEFAULT_INC_PCT;
+  if (!(weight > 0)) return step;
+  return Math.max(step, roundTo((weight * pct) / 100, step));
+}
+/** Low set quality (≤ 2) on the top set means the weight was a grind: earn the reps again before adding load. */
+export const grindy = (s: { quality?: number | null }) => s.quality != null && s.quality <= 2;
+
 /**
  * Progression on the FIRST working set:
  * reps ≥ top → +increment · reps within range → same weight, +1 rep ·
@@ -73,8 +84,10 @@ export function progressionState(pe: ProgramExercise, logs: ExerciseLog[]): Prog
     const w = roundTo(s.weight * log.equivFactor, pe.increment || 1) || s.weight * log.equivFactor;
     const reps = s.reps;
     st = { ...st, baseWeight: w, last: { weight: w, reps } };
-    if (reps >= pe.repMax) {
-      st.weight = w + pe.increment; st.repGoal = pe.style === "straight" ? pe.repMax : pe.repMin; st.missStreak = 0; st.decision = "increase";
+    if (reps >= pe.repMax && grindy(s)) {
+      st.weight = w; st.repGoal = pe.repMax; st.missStreak = 0; st.decision = "add_rep";
+    } else if (reps >= pe.repMax) {
+      st.weight = w + jumpFor(pe, w); st.repGoal = pe.style === "straight" ? pe.repMax : pe.repMin; st.missStreak = 0; st.decision = "increase";
     } else if (reps >= pe.repMin) {
       st.weight = w; st.repGoal = pe.style === "straight" ? pe.repMax : Math.min(pe.repMax, reps + 1); st.missStreak = 0; st.decision = "add_rep";
     } else {
@@ -114,14 +127,14 @@ export function prescribe(pe: ProgramExercise, logs: ExerciseLog[], readiness: n
   const last = st.last ? `${fmtW(st.last.weight)}×${st.last.reps}` : "";
   switch (st.decision) {
     case "start": why = `First session — start conservative at ${fmtW(weight)} ${u}`; break;
-    case "increase": why = `Hit ${last} (top of range) → +${fmtW(pe.increment)} ${u}`; break;
-    case "add_rep": why = `Last ${last} within range → same weight, aim ${st.repGoal} reps`; break;
+    case "increase": why = `Hit ${last} (top of range) → +${fmtW(jumpFor(pe, st.baseWeight))} ${u} (${pe.incrementPct ?? DEFAULT_INC_PCT}%)`; break;
+    case "add_rep": why = st.last && st.last.reps >= pe.repMax ? `Hit ${last} but it was a grind → same weight, make it clean first` : `Last ${last} within range → same weight, aim ${st.repGoal} reps`; break;
     case "hold": why = `Last ${last} below range → hold; one more miss triggers −10%`; break;
     case "reduce": why = `Below range 2 sessions running → reset −10% to ${fmtW(weight)} ${u}`; break;
   }
   if (effect === "hold" && st.decision === "increase") {
     weight = st.baseWeight;
-    why = `Earned +${fmtW(pe.increment)} ${u}, but readiness ${Math.round(readiness!)} → holding ${fmtW(weight)}`;
+    why = `Earned +${fmtW(jumpFor(pe, st.baseWeight))} ${u}, but readiness ${Math.round(readiness!)} → holding ${fmtW(weight)}`;
   } else if (effect === "hold") {
     why += ` · readiness ${Math.round(readiness!)}: hold`;
   } else if (effect === "reduce") {

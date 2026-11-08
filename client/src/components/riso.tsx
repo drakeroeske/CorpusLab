@@ -30,6 +30,28 @@ export function useGrain(): GrainSetting {
   useEffect(() => { const f = () => setG(getGrain()); window.addEventListener("rxs:grain", f); return () => window.removeEventListener("rxs:grain", f); }, []);
   return g;
 }
+// ---------- ink (contrast) ----------
+export type InkSetting = "cobalt" | "black";
+const INK_KEY = "rxs.ink";
+export function getInk(): InkSetting {
+  try { const v = localStorage.getItem(INK_KEY); if (v === "cobalt" || v === "black") return v; } catch { /* ignore */ }
+  return typeof matchMedia === "function" && matchMedia("(prefers-contrast: more)").matches ? "black" : "cobalt";
+}
+export function setInk(v: InkSetting) {
+  try { localStorage.setItem(INK_KEY, v); } catch { /* ignore */ }
+  applyInk(v);
+  window.dispatchEvent(new Event("rxs:ink"));
+}
+export function applyInk(v: InkSetting = getInk()) {
+  if (typeof document === "undefined") return;
+  document.documentElement.classList.toggle("ink-black", v === "black");
+}
+export function useInk(): InkSetting {
+  const [v, setV] = useState<InkSetting>(getInk);
+  useEffect(() => { applyInk(); const f = () => setV(getInk()); window.addEventListener("rxs:ink", f); return () => window.removeEventListener("rxs:ink", f); }, []);
+  return v;
+}
+
 /** Photocopy grain over the whole app. Never heavy: readability first. */
 export function GrainOverlay() {
   const id = useId().replace(/:/g, "");

@@ -1,4 +1,4 @@
-import { EngineHeader, setGrain, useGrain } from "@/components/riso";
+import { EngineHeader, setGrain, setInk, useGrain, useInk } from "@/components/riso";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, KeyRound, Lock, Copy, Database, Download, Eye, LogOut, MessageSquare, RefreshCw, Upload, UserCog, X } from "lucide-react";
 import { useAuth, type PubUser } from "@/lib/auth";
@@ -8,6 +8,7 @@ import { useStore, emptyState, storageAvailable, remoteAvailable } from "@/lib/s
 import { useUI } from "@/App";
 import { NumInput, Seg, Sheet, Spark, Stepper, initials } from "@/components/ui";
 import { ProgramEditor } from "@/components/ProgramEditor";
+import { SharedCodes } from "@/components/ProgramLibrary";
 import { RecoveryCodeView } from "@/components/Recovery";
 import { InstallCard } from "@/components/Install";
 import { buildDemo } from "@/lib/demo";
@@ -111,7 +112,8 @@ export default function Profile() {
         )}
 
         <div className="section-title"><h2>Data</h2></div>
-        <div className="card stack">
+        <SharedCodes />
+        <div className="card stack mt-3">
           <button className="btn btn-block" onClick={() => setExportOpen(true)} data-testid="button-export"><Download size={16} /> Export JSON</button>
           <button className="btn btn-block" onClick={() => setImportOpen(true)} data-testid="button-import"><Upload size={16} /> Import JSON</button>
           {mode !== "readonly" && <><button className="btn btn-outline btn-block" onClick={() => { replace(buildDemo()); ui.setTab("today"); ui.toast("Demo data loaded: 8 weeks of history"); }} data-testid="button-load-demo"><Database size={16} /> Load demo data</button>
@@ -240,15 +242,19 @@ function CoachDashboard() {
 interface ClientActions {
   saveSessionNote: (sessionId: string, note: string) => Promise<void>;
   saveProgram: (p: Program) => Promise<void>;
+  /** Drop a program into the client's inbox; they choose when to switch. */
+  sendProgram?: (p: Program) => Promise<void>;
   addNote: (text: string) => Promise<void>;
   openAccount?: () => void;
 }
 
 function ClientSheet({ client, onClose, actions }: { client: Client; onClose: () => void; actions?: ClientActions }) {
-  const { set, profile } = useStore();
+  const { set, profile, state } = useStore();
   const ui = useUI();
   const [tab, setTab] = useState<"sessions" | "program" | "notes">("sessions");
   const [prog, setProg] = useState<Program>(client.program);
+  const [sendOpen, setSendOpen] = useState(false);
+  const sendable = [...(state.program ? [{ id: "current", name: `${state.program.name} (what I'm running)`, program: state.program }] : []), ...(state.savedPrograms ?? []).map((sp) => ({ id: sp.id, name: sp.name, program: sp.program }))];
   const [note, setNote] = useState("");
   const [sessNotes, setSessNotes] = useState<Record<string, string>>(Object.fromEntries(client.recent.map((r) => [r.id, r.note])));
   const updClient = (f: (c: Client) => Client) => set((s) => ({ ...s, clients: s.clients.map((c) => (c.id === client.id ? f(c) : c)) }));
@@ -291,6 +297,20 @@ function ClientSheet({ client, onClose, actions }: { client: Client; onClose: ()
           <>
             <ProgramEditor program={prog} units={profile.units} onChange={setProg} />
             <button className="btn btn-primary btn-lg btn-block mt-3" disabled={JSON.stringify(prog) === JSON.stringify(client.program)} onClick={() => run(() => act.saveProgram(prog), `Program updated for ${client.name.split(" ")[0]}`)} data-testid="button-save-client-program">Save program for {client.name.split(" ")[0]}</button>
+            {act.sendProgram && sendable.length > 0 && (
+              <button className="btn btn-block mt-2" onClick={() => setSendOpen(true)} data-testid="button-send-program-open">Send one of my programs</button>
+            )}
+            {sendOpen && (
+              <Sheet title="Send a program" onClose={() => setSendOpen(false)} testId="sheet-send-program">
+                <p className="text-sm">{client.name.split(" ")[0]} gets it on their Program tab and chooses to switch to it or save it — nothing changes until they do.</p>
+                {sendable.map((sp) => (
+                  <button key={sp.id} className="card w-full text-left mt-2" onClick={() => { setSendOpen(false); run(() => act.sendProgram!({ ...sp.program, name: sp.program.name, deloadUntil: null }), `Sent to ${client.name.split(" ")[0]}`); }} data-testid={`button-send-program-${sp.id}`}>
+                    <div className="font-semibold">{sp.name}</div>
+                    <div className="mono text-[11px] mt-1">{sp.program.days.length} days · {sp.program.days.map((d) => d.name).join(" · ")}</div>
+                  </button>
+                ))}
+              </Sheet>
+            )}
           </>
         )}
         {tab === "notes" && (
@@ -535,6 +555,7 @@ function LiveCoachDashboard() {
         <ClientSheet key={client.id + (raw.updatedAt ?? "")} client={client} onClose={() => setOpen(null)} actions={{
           saveSessionNote: async (sessionId, note) => { await api("POST", `/api/coach/clients/${client.id}/session-note`, { sessionId, note }); await load(); },
           saveProgram: async (program) => { await api("PUT", `/api/coach/clients/${client.id}/program`, { program }); await load(); },
+          sendProgram: async (program) => { await api("POST", `/api/coach/clients/${client.id}/program-send`, { program }); },
           addNote: async (text) => { await api("POST", `/api/coach/clients/${client.id}/notes`, { text, date: dateKey() }); await load(); },
           openAccount: () => { setOpen(null); auth.viewAs({ id: client.id, name: client.name, state: { ...emptyState(), ...raw.state! } }); },
         }} />
@@ -546,8 +567,12 @@ function LiveCoachDashboard() {
 
 function GrainCard() {
   const g = useGrain();
+  const ink = useInk();
   return (
     <div className="card mt-3" data-testid="card-grain">
+      <div className="label mb-2">Ink</div>
+      <Seg value={ink} onChange={(v) => setInk(v)} options={[{ v: "cobalt", l: "Cobalt" }, { v: "black", l: "Black · high contrast" }]} testId="seg-ink" />
+      <p className="text-xs mt-2 mb-3">Black ink is easier to read in bright gyms. Pink accents stay either way.</p>
       <div className="label mb-2">Paper grain</div>
       <Seg value={g} onChange={(v) => setGrain(v)} options={[{ v: "off", l: "Off" }, { v: "subtle", l: "Subtle" }, { v: "full", l: "Full" }]} testId="seg-grain" />
       <p className="text-xs mt-2">Photocopy texture over the app. Turn it off if you prefer a clean screen.</p>

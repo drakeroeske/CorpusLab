@@ -33,7 +33,10 @@ export interface ProgramExercise {
   repMin: number;
   repMax: number;
   startWeight: number;
+  /** Smallest plate step you can load (lb: 5 barbell / 2.5 micro, kg: 2.5 / 1.25). Jumps are rounded to this. */
   increment: number;
+  /** Jump size as % of working weight (default 2.5). The engine rounds weight × pct to the plate step, never below one step. */
+  incrementPct?: number;
   style: ProgressionStyle;
   technique: Technique;
   restSec?: number;
@@ -75,6 +78,8 @@ export interface SetLog {
   weight: number;
   reps: number;
   rir?: number | null;
+  /** Set quality 1–5: 1 grind / form broke down … 5 crisp, bar speed held. Optional. */
+  quality?: number | null;
   ts: number;
 }
 
@@ -259,6 +264,24 @@ export interface ChatMsg {
   ts: number;
 }
 
+export interface SavedProgram {
+  id: string;
+  name: string;
+  savedAt: number;
+  /** Where it came from: "mine" (saved copy), "code" (imported by share code), "coach", "import" (screenshot / text). */
+  source: "mine" | "code" | "coach" | "import";
+  from?: string;
+  program: Program;
+}
+
+export interface ProgramInboxItem {
+  id: string;
+  from: string;
+  fromId: string;
+  ts: number;
+  program: Program;
+}
+
 export interface AppState {
   version: number;
   profile: Profile | null;
@@ -278,6 +301,12 @@ export interface AppState {
   clients: Client[];
   chat: ChatMsg[];
   activeSession: Session | null;
+  /** Programs saved for later (copies, templates you wrote, ones you imported). */
+  savedPrograms?: SavedProgram[];
+  /** Programs a coach sent you, waiting for a decision. */
+  programInbox?: ProgramInboxItem[];
+  /** Inbox ids you dismissed (so the server doesn't re-add them). */
+  programInboxDismissed?: string[];
   restDefaults: { compound: number; isolation: number };
   demo: boolean;
 }

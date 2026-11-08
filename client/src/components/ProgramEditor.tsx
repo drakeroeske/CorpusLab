@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Plus, Search, Trash2 } f
 import type { Pattern, Program, ProgramDay, ProgramExercise, Units } from "@/lib/types";
 import { EX, EXERCISES, MUSCLE_LABEL, PATTERN_LABEL, isCompound, newId } from "@/lib/exercises";
 import { NumInput, Seg, Sheet } from "./ui";
+import { DEFAULT_INC_PCT, fmtW, jumpFor } from "@/lib/engine";
 
 const WD = ["S", "M", "T", "W", "T", "F", "S"];
 const WD_LONG = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -59,7 +60,7 @@ function ExerciseRow({ pe, units, onChange, onRemove, onMove, idx, total }: { pe
         {open ? <ChevronDown size={16} className="muted shrink-0" /> : <ChevronRight size={16} className="muted shrink-0" />}
         <div className="min0 flex-1">
           <div className="font-semibold truncate">{ex.name}</div>
-          <div className="mono text-xs muted">{pe.sets} × {pe.repMin}–{pe.repMax} · {pe.startWeight} {units} · +{pe.increment}{pe.technique ? ` · ${pe.technique}` : ""}</div>
+          <div className="mono text-xs muted">{pe.sets} × {pe.repMin}–{pe.repMax} · {pe.startWeight} {units} · +{pe.incrementPct ?? DEFAULT_INC_PCT}% (≈{fmtW(jumpFor(pe, pe.startWeight))} {units}){pe.technique ? ` · ${pe.technique}` : ""}</div>
         </div>
       </button>
       {open && (
@@ -71,7 +72,8 @@ function ExerciseRow({ pe, units, onChange, onRemove, onMove, idx, total }: { pe
           </div>
           <div className="grid grid-cols-2 gap-2">
             <NumField label={`Start weight (${units})`} value={pe.startWeight} step={0.5} onChange={(v) => onChange({ ...pe, startWeight: v })} testId={`input-start-${pe.id}`} />
-            <NumField label={`Increment (${units})`} value={pe.increment} step={0.25} onChange={(v) => onChange({ ...pe, increment: v })} testId={`input-inc-${pe.id}`} />
+            <NumField label="Jump · % of weight" value={pe.incrementPct ?? DEFAULT_INC_PCT} step={0.5} onChange={(v) => onChange({ ...pe, incrementPct: v })} testId={`input-incpct-${pe.id}`} />
+            <NumField label={`Plate step (${units})`} value={pe.increment} step={0.25} onChange={(v) => onChange({ ...pe, increment: v })} testId={`input-inc-${pe.id}`} />
           </div>
           <div className="field"><span className="label">Progression</span>
             <Seg value={pe.style} onChange={(v) => onChange({ ...pe, style: v })} options={[{ v: "double", l: "Double progression" }, { v: "straight", l: "Straight sets" }]} testId={`seg-style-${pe.id}`} />

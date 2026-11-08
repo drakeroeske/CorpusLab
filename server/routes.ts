@@ -337,6 +337,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       const ex = existing.program?.coachEditedAt ?? 0;
       if (ex > (incoming.program?.coachEditedAt ?? 0)) { incoming.program = existing.program; merged = true; }
+      // Programs a coach sent that the athlete's copy hasn't seen yet are kept (the athlete dismisses them explicitly).
+      const seen = new Set((Array.isArray(incoming.programInbox) ? incoming.programInbox : []).map((x: Row) => x?.id));
+      const dismissed = new Set(Array.isArray(incoming.programInboxDismissed) ? incoming.programInboxDismissed : []);
+      const unseen = (Array.isArray(existing.programInbox) ? existing.programInbox : []).filter((x: Row) => x?.id && !seen.has(x.id) && !dismissed.has(x.id));
+      if (unseen.length) { incoming.programInbox = [...unseen, ...(Array.isArray(incoming.programInbox) ? incoming.programInbox : [])].slice(0, 10); merged = true; }
     }
     await saveState(me.id, incoming);
     const stats = req.body?.stats;
@@ -615,6 +620,64 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const { state } = await loadState(clientId);
     if (!state) throw new HttpError(404, "Client has no data yet");
     state.program = { ...program, coachEditedAt: Date.now(), coachEditedBy: me.display_name };
+    await saveState(clientId, state);
+    res.json({ ok: true });
+  }));
+
+  /* ------------------------------------------------------------ programs: save & share */
+  const validProgram = (p: unknown) => !!p && typeof p === "object" && Array.isArray((p as Row).days) && (p as Row).days.length > 0 && (p as Row).days.length <= 14 && JSON.stringify(p).length <= 200_000;
+  const PROGRAM_CODE_RE = /^[A-Z0-9]{6}$/;
+  // Share the program you're on (or a saved one): returns a 6-character code anyone can import with.
+  app.post("/api/programs/share", authed(async (req, res, me) => {
+    noDemo(me);
+    limit(req, "program-share", 30, 3600_000);
+    const program = req.body?.program;
+    if (!validProgram(program)) throw bad("Invalid program");
+    const name = str(req.body?.name, 60) || str(program.name, 60) || "Program";
+    const clean = { ...program, name, deloadUntil: null, coachEditedAt: undefined, coachEditedBy: undefined };
+    // Keep each user to 20 shared programs (oldest drop off).
+    const mine = must(await sb.from("shared_programs").select("code, created_at").eq("owner_id", me.id).order("created_at", { ascending: false })) as Row[];
+    for (const old of mine.slice(19)) must(await sb.from("shared_programs").delete().eq("code", old.code));
+    for (let i = 0; i < 5; i++) {
+      const code = newInviteCode();
+      const r = await sb.from("shared_programs").insert({ code, owner_id: me.id, name, program: clean }).select("code").single();
+      if (r.error && /duplicate|unique/i.test(r.error.message)) continue;
+      must(r);
+      return res.json({ code, name });
+    }
+    throw new HttpError(500, "Could not make a share code. Try again.");
+  }));
+  // Look a shared program up by code (preview + import).
+  app.get("/api/programs/:code", authed(async (req, res) => {
+    limit(req, "program-peek", 60, 60_000);
+    const code = String(req.params.code || "").toUpperCase();
+    if (!PROGRAM_CODE_RE.test(code)) throw new HttpError(404, "That program code isn't valid.");
+    const row = must(await sb.from("shared_programs").select("code, name, program, created_at, owner_id, uses, users!shared_programs_owner_id_fkey(id, username, display_name)").eq("code", code).maybeSingle()) as Row | null;
+    if (!row) throw new HttpError(404, "No program with that code. Codes are 6 letters/numbers.");
+    sb.from("shared_programs").update({ uses: (row.uses ?? 0) + 1 }).eq("code", code).then(() => {}, () => {});
+    res.json({ code: row.code, name: row.name, program: row.program, owner: row.users ? pub(row.users as DbUser) : null, createdAt: row.created_at });
+  }));
+  // Your shared codes, so you can re-send or revoke them.
+  app.get("/api/programs", authed(async (_req, res, me) => {
+    const rows = must(await sb.from("shared_programs").select("code, name, created_at, uses").eq("owner_id", me.id).order("created_at", { ascending: false })) as Row[];
+    res.json({ shared: rows.map((r) => ({ code: r.code, name: r.name, createdAt: r.created_at, uses: r.uses ?? 0 })) });
+  }));
+  app.delete("/api/programs/:code", authed(async (req, res, me) => {
+    const code = String(req.params.code || "").toUpperCase();
+    must(await sb.from("shared_programs").delete().eq("code", code).eq("owner_id", me.id));
+    res.json({ ok: true });
+  }));
+  // Coach → client: drops a program into the client's inbox; the client chooses to switch to it.
+  app.post("/api/coach/clients/:id/program-send", authed(async (req, res, me) => {
+    const clientId = String(req.params.id);
+    await assertCoachOf(me, clientId);
+    const program = req.body?.program;
+    if (!validProgram(program)) throw bad("Invalid program");
+    const { state } = await loadState(clientId);
+    if (!state) throw new HttpError(404, "Client has no data yet");
+    const inbox: Row[] = Array.isArray(state.programInbox) ? state.programInbox : [];
+    inbox.unshift({ id: `inbox_${Date.now()}`, from: me.display_name, fromId: me.id, ts: Date.now(), program: { ...program, deloadUntil: null } });
+    state.programInbox = inbox.slice(0, 10);
     await saveState(clientId, state);
     res.json({ ok: true });
   }));

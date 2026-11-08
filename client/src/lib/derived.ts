@@ -40,6 +40,32 @@ export function newSession(state: AppState, day: ProgramDay, readiness: number |
   };
 }
 
+/** True when the program day has changed since this session was built (exercises added, removed, or swapped). */
+export function sessionStale(session: Session, day: ProgramDay | undefined): boolean {
+  if (!day) return true;
+  const want = day.exercises.map((pe) => pe.id);
+  const inDay = new Set(want);
+  // Exercises removed from the program but already logged stay in the session on purpose; empty leftovers mean "stale".
+  if (session.exercises.some((l) => !inDay.has(l.peId) && l.sets.length === 0)) return true;
+  const have = session.exercises.filter((l) => inDay.has(l.peId)).map((l) => l.peId);
+  if (want.length !== have.length) return true;
+  return want.some((id, i) => id !== have[i]) || day.exercises.some((pe) => { const l = session.exercises.find((x) => x.peId === pe.id); return l && l.sets.length === 0 && l.originalExId !== pe.exId; });
+}
+
+/** Rebuild an in-progress session from the current program day. Logged sets are kept; removed exercises with sets stay at the end. */
+export function syncSession(state: AppState, session: Session, day: ProgramDay, readiness: number | null, units: Units): Session {
+  const rxs = prescriptionsFor(state, day, readiness, !!session.deload, units);
+  const kept = new Set<string>();
+  const exercises = rxs.map(({ pe, rx }) => {
+    const old = session.exercises.find((l) => l.peId === pe.id);
+    kept.add(pe.id);
+    if (old && (old.sets.length > 0 || old.originalExId === pe.exId)) return old.sets.length > 0 ? old : { ...old, targetWeight: rx.weight };
+    return { peId: pe.id, exId: pe.exId, originalExId: pe.exId, equivFactor: 1, targetWeight: rx.weight, sets: [] };
+  });
+  const orphans = session.exercises.filter((l) => !kept.has(l.peId) && l.sets.length > 0);
+  return { ...session, dayName: day.name, exercises: [...exercises, ...orphans] };
+}
+
 /** a data-driven "why" line for PR cards */
 export function prWhyStat(state: AppState, date: string, proteinTarget: number): string {
   const sleep7 = avgSleep(state, date, 7);

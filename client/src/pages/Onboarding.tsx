@@ -93,7 +93,7 @@ export default function Onboarding() {
             <div className="field"><span className="label">Goal</span>
               <div className="grid grid-cols-2 gap-2">
                 {([["muscle", "Build muscle", "+250 kcal · 1.8 g/kg"], ["strength", "Get stronger", "+200 kcal · 1.6 g/kg"], ["fatloss", "Lose fat", "−500 kcal · 2.2 g/kg"], ["recomp", "Recomp", "−150 kcal · 2.0 g/kg"]] as [Goal, string, string][]).map(([g, l, s]) => (
-                  <button key={g} className="card-flat text-left" style={{ borderColor: p.goal === g ? "var(--lime)" : undefined, background: p.goal === g ? "var(--lime-dim)" : undefined, minHeight: 72 }} onClick={() => upd({ goal: g })} aria-pressed={p.goal === g ? "true" : "false"} data-testid={`goal-${g}`}>
+                  <button key={g} className={`card-flat text-left pick ${p.goal === g ? "picked" : ""}`} style={{ minHeight: 72 }} onClick={() => upd({ goal: g })} aria-pressed={p.goal === g ? "true" : "false"} data-testid={`goal-${g}`}>
                     <div className="font-semibold">{l}</div><div className="mono text-[11px] muted mt-1">{s}</div>
                   </button>
                 ))}
@@ -109,7 +109,7 @@ export default function Onboarding() {
                 <div className="label mb-2">Start from a template</div>
                 <div className="stack">
                   {TEMPLATES.map((t) => (
-                    <button key={t.id} className="card text-left w-full" style={{ borderColor: tpl === t.id ? "var(--lime)" : undefined }} onClick={() => setTpl(t.id)} aria-pressed={tpl === t.id ? "true" : "false"} data-testid={`template-${t.id}`}>
+                    <button key={t.id} className={`card text-left w-full pick ${tpl === t.id ? "picked" : ""}`} onClick={() => setTpl(t.id)} aria-pressed={tpl === t.id ? "true" : "false"} data-testid={`template-${t.id}`}>
                       <div className="flex items-center justify-between"><span className="font-semibold">{t.name}</span><span className="chip">{t.desc}</span></div>
                       <div className="text-xs muted mt-2">{t.days.map((d) => d.name).join(" · ")}</div>
                     </button>

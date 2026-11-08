@@ -4,10 +4,11 @@ import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
 import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
-import { newSession, prescriptionsFor, prWhyStat, sessionSummary, useToday } from "@/lib/derived";
-import { e1rm, fmtDate, fmtW, logsForPe, platesPerSide, prescribe, restDefault, substitutes, warmupSets, type Prescription } from "@/lib/engine";
+import { newSession, prescriptionsFor, prWhyStat, sessionStale, sessionSummary, syncSession, useToday } from "@/lib/derived";
+import { Tag } from "@/components/riso";
+import { e1rm, fmtDate, fmtW, jumpFor, logsForPe, platesPerSide, prescribe, restDefault, substitutes, warmupSets, type Prescription } from "@/lib/engine";
 import { EX, MUSCLE_LABEL, isCompound, newId } from "@/lib/exercises";
-import type { ExerciseLog, FeedPost, ProgramExercise, Session } from "@/lib/types";
+import type { ExerciseLog, FeedPost, ProgramExercise, Session, Units } from "@/lib/types";
 import { Seg, Sheet, Stepper } from "@/components/ui";
 import { PRCardSheet, type PRData } from "@/components/PRCard";
 
@@ -37,6 +38,20 @@ export function PlateViz({ total, bar, units }: { total: number; bar: number; un
   );
 }
 
+/** Prescription stand-in for an exercise that was removed from the program mid-workout but already has sets. */
+function orphanRx(log: ExerciseLog, readiness: number | null, deload: boolean, units: Units): { pe: ProgramExercise; rx: Prescription } {
+  const pe: ProgramExercise = { id: log.peId, exId: log.originalExId, sets: Math.max(1, log.sets.length), repMin: 6, repMax: 12, startWeight: log.targetWeight, increment: units === "lb" ? 5 : 2.5, style: "double", technique: null };
+  return { pe, rx: { ...prescribe(pe, [], readiness, deload, units), why: "Removed from program — logged sets still count" } };
+}
+
+const QUALITY_HINT: Record<number, string> = {
+  1: "Grind — form broke down. A top set at 1–2 won't add weight next time.",
+  2: "Hard — bar slowed a lot, form held. Same weight until it's cleaner.",
+  3: "Solid — normal working set.",
+  4: "Smooth — bar speed held through the set.",
+  5: "Crisp — every rep looked the same. Ready for a jump.",
+};
+
 function ExerciseCard({ log, idx, rx, pe, active, onActivate, session, fatigue, isFirstCompound }: {
   log: ExerciseLog; idx: number; rx: Prescription; pe: ProgramExercise; active: boolean; onActivate: () => void; session: Session; fatigue: Record<string, number>; isFirstCompound: boolean;
 }) {
@@ -50,6 +65,7 @@ function ExerciseCard({ log, idx, rx, pe, active, onActivate, session, fatigue, 
   const [w, setW] = useState<number>(last?.weight ?? target);
   const [reps, setReps] = useState<number>(last?.reps ?? rx.repGoal);
   const [rir, setRir] = useState<number | null>(null);
+  const [quality, setQuality] = useState<number | null>(null);
   const [sheet, setSheet] = useState<"warm" | "plates" | "sub" | null>(null);
   useEffect(() => { setW(last?.weight ?? target); }, [target]); // eslint-disable-line
   const hot = ex.primary.filter((m) => (fatigue[m] ?? 0) > 60);
@@ -64,13 +80,13 @@ function ExerciseCard({ log, idx, rx, pe, active, onActivate, session, fatigue, 
       ...s,
       activeSession: {
         ...s.activeSession, restEnd: Date.now() + rest * 1000, restTotal: rest,
-        exercises: s.activeSession.exercises.map((l, i) => (i === idx ? { ...l, sets: [...l.sets, { weight: w, reps, rir, ts: Date.now() }] } : l)),
+        exercises: s.activeSession.exercises.map((l, i) => (i === idx ? { ...l, sets: [...l.sets, { weight: w, reps, rir, quality, ts: Date.now() }] } : l)),
       },
     } : s);
     if (navigator.vibrate) try { navigator.vibrate(15); } catch { /* noop */ }
-    setRir(null);
+    setRir(null); setQuality(null);
     const isTop = log.sets.length === 0;
-    if (isTop) ui.toast(reps >= pe.repMax ? `Top of range — next time +${pe.increment} ${u}` : reps >= pe.repMin ? "In range — aim +1 rep next time" : "Below range — holding weight");
+    if (isTop) ui.toast(reps >= pe.repMax ? (quality != null && quality <= 2 ? "Top of range but a grind — same weight next time, make it clean" : `Top of range — next time +${fmtW(jumpFor(pe, w))} ${u}`) : reps >= pe.repMin ? "In range — aim +1 rep next time" : "Below range — holding weight");
   };
 
   return (
@@ -107,7 +123,7 @@ function ExerciseCard({ log, idx, rx, pe, active, onActivate, session, fatigue, 
               {log.sets.map((st, i) => (
                 <div key={i} className="flex items-center gap-3 mono text-sm" style={{ minHeight: 36, borderTop: i ? "1px solid var(--border)" : undefined }} data-testid={`row-set-${idx}-${i}`}>
                   <span className="faint w-6">S{i + 1}</span>
-                  <span className="flex-1">{fmtW(st.weight)} × {st.reps}{st.rir != null && <span className="muted"> @ {st.rir} RIR</span>}</span>
+                  <span className="flex-1">{fmtW(st.weight)} × {st.reps}{st.rir != null && <span className="muted"> @ {st.rir} RIR</span>}{st.quality != null && <span className="muted"> · Q{st.quality}</span>}</span>
                   <span className="faint text-xs">e1RM {Math.round(e1rm(st.weight, st.reps))}</span>
                   <button aria-label="Delete set" className="faint" style={{ padding: 8 }} onClick={() => updLog((l) => ({ ...l, sets: l.sets.filter((_, j) => j !== i) }))} data-testid={`button-delete-set-${idx}-${i}`}><Trash2 size={13} /></button>
                 </div>
@@ -121,6 +137,10 @@ function ExerciseCard({ log, idx, rx, pe, active, onActivate, session, fatigue, 
           </div>
           <div className="field mt-2"><span className="label">Reps in reserve (optional)</span>
             <Seg className="seg-num" value={rir ?? -1} onChange={(v) => setRir(v === -1 ? null : v)} options={[{ v: -1, l: "–" }, { v: 0, l: "0" }, { v: 1, l: "1" }, { v: 2, l: "2" }, { v: 3, l: "3" }, { v: 4, l: "4" }]} testId={`seg-rir-${idx}`} />
+          </div>
+          <div className="field mt-2"><span className="label">Set quality (optional) · 1 grind → 5 crisp</span>
+            <Seg className="seg-num seg-lime" value={quality ?? -1} onChange={(v) => setQuality(v === -1 ? null : v)} options={[{ v: -1, l: "–" }, { v: 1, l: "1" }, { v: 2, l: "2" }, { v: 3, l: "3" }, { v: 4, l: "4" }, { v: 5, l: "5" }]} testId={`seg-quality-${idx}`} />
+            {quality != null && <p className="text-xs mt-1">{QUALITY_HINT[quality]}</p>}
           </div>
           <button className={`btn btn-lg btn-block mt-3 ${done ? "btn-outline" : "btn-primary"}`} onClick={logSet} data-testid={`button-log-set-${idx}`}>
             <Check size={18} /> {done ? "Log extra set" : `Log set ${log.sets.length + 1}`} · <span className="mono">{fmtW(w)}×{reps}</span>
@@ -216,6 +236,16 @@ export default function Logger() {
   const u = profile.units;
 
   const day = s ? state.program?.days.find((d) => d.id === s.dayId) : null;
+  const stale = !!(s && sessionStale(s, day ?? undefined));
+  const totalLogged = s ? s.exercises.reduce((a, l) => a + l.sets.length, 0) : 0;
+  const resync = () => set((st) => {
+    if (!st.activeSession) return st;
+    const d = st.program?.days.find((x) => x.id === st.activeSession!.dayId);
+    if (!d) return st;
+    return { ...st, activeSession: syncSession(st, st.activeSession, d, t.readiness.score, u) };
+  });
+  // Program edited before the first set? Just follow the program — nothing to lose.
+  useEffect(() => { if (stale && day && totalLogged === 0) resync(); }, [stale, day, totalLogged]); // eslint-disable-line
   const rxMap = useMemo(() => {
     const m: Record<string, { pe: ProgramExercise; rx: Prescription }> = {};
     if (!day) return m;
@@ -318,13 +348,25 @@ export default function Logger() {
         <button className="btn btn-ghost btn-sm" onClick={() => set((st) => ({ ...st, activeSession: null }))} data-testid="button-discard-workout">Discard</button>
         <button className="btn btn-primary" disabled={totalSets === 0} onClick={finish} data-testid="button-finish-workout">Finish</button>
       </div>
+      {!day && (
+        <div className="warn hatch mb-3" data-testid="card-day-missing"><div className="inner">
+          <Tag signal>Program changed</Tag>
+          <p className="text-[13px] mt-1">This day was removed from your program. You can keep logging what's here and finish, or discard the workout.</p>
+        </div></div>
+      )}
+      {day && stale && (
+        <div className="warn hatch mb-3" data-testid="card-session-stale"><div className="inner">
+          <Tag signal>Program changed</Tag>
+          <p className="text-[13px] mt-1">{day.name} was edited after this workout started. Sets you've logged are kept.</p>
+          <button className="btn btn-sm mt-2" onClick={resync} data-testid="button-sync-session">Update workout</button>
+        </div></div>
+      )}
       {t.readiness.effect !== "normal" && t.readiness.score != null && (
         <div className="card-flat text-xs mb-3 flex gap-2" style={{ borderColor: "rgba(92,58,33,.35)" }}><AlertTriangle size={14} className="blue shrink-0 mt-0.5" /><span className="muted">{t.readiness.reason}</span></div>
       )}
       <div className="stack">
         {s.exercises.map((log, i) => {
-          const m = rxMap[log.peId];
-          if (!m) return null;
+          const m = rxMap[log.peId] ?? orphanRx(log, t.readiness.score, !!s.deload, u);
           return <ExerciseCard key={log.peId + log.exId} log={log} idx={i} rx={m.rx} pe={m.pe} active={active === i} onActivate={() => setActive(active === i ? -1 : i)} session={s} fatigue={t.fatigue} isFirstCompound={i === firstCompound} />;
         })}
       </div>

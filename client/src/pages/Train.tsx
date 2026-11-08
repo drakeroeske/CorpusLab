@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, FlaskConical, Lightbulb, Target } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
 import Logger from "./Logger";
 import { ProgramEditor } from "@/components/ProgramEditor";
+import { ImportProgramSheet, ProgramInbox, ProgramLibrary } from "@/components/ProgramLibrary";
 import { Bar, Empty, Seg, Sheet } from "@/components/ui";
 import { EngineHeader } from "@/components/riso";
 import {
@@ -37,39 +38,50 @@ export default function Train() {
 function ProgramTab() {
   const { state, set, profile } = useStore();
   const ui = useUI();
-  const [draft, setDraft] = useState<Program | null>(state.program);
   const [tplOpen, setTplOpen] = useState(false);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(state.program);
-  if (!draft) return <Empty>No program. <button className="btn btn-sm mt-3" onClick={() => setTplOpen(true)}>Choose a template</button></Empty>;
+  const [importOpen, setImportOpen] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const program = state.program;
+  // Edits save straight into your program (no separate Save step), so the next workout always follows what you see here.
+  const update = (p: Program) => { set((s) => ({ ...s, program: p })); setSavedAt(Date.now()); };
+  useEffect(() => { if (savedAt == null) return; const id = setTimeout(() => setSavedAt(null), 1800); return () => clearTimeout(id); }, [savedAt]);
   const today = dateKey();
-  const inDeload = state.program?.deloadUntil && today <= state.program.deloadUntil;
+  const inDeload = program?.deloadUntil && today <= program.deloadUntil;
+  const live = state.activeSession && program?.days.some((d) => d.id === state.activeSession!.dayId);
   return (
     <div>
-      <div className="flex gap-2 mb-3">
-        <button className="btn btn-outline btn-sm flex-1" onClick={() => setTplOpen(true)} data-testid="button-load-template">Load template</button>
-        {inDeload
-          ? <button className="btn btn-warn btn-sm flex-1" onClick={() => { set((s) => ({ ...s, program: s.program ? { ...s.program, deloadUntil: null } : null })); setDraft((d) => d && { ...d, deloadUntil: null }); }} data-testid="button-end-deload">End deload</button>
-          : <button className="btn btn-outline btn-sm flex-1" onClick={() => { const until = addDays(today, 6); set((s) => ({ ...s, program: s.program ? { ...s.program, deloadUntil: until } : null })); setDraft((d) => d && { ...d, deloadUntil: until }); ui.toast("Deload week: 60% volume, same weights"); }} data-testid="button-deload-now">Start deload week</button>}
-      </div>
-      <ProgramEditor program={draft} units={profile.units} onChange={setDraft} />
-      <div style={{ height: 70 }} />
-      {dirty && (
-        <div className="rest-bar" style={{ justifyContent: "flex-end" }}>
-          <button className="btn btn-ghost" onClick={() => setDraft(state.program)} data-testid="button-revert-program">Revert</button>
-          <button className="btn btn-primary" onClick={() => { set((s) => ({ ...s, program: draft })); ui.toast("Program saved"); }} data-testid="button-save-program">Save program</button>
-        </div>
+      <ProgramInbox />
+      {!program ? (
+        <Empty>No program yet. <div className="flex gap-2 justify-center mt-3"><button className="btn btn-sm" onClick={() => setTplOpen(true)}>Choose a template</button><button className="btn btn-sm" onClick={() => setImportOpen(true)}>Import</button></div></Empty>
+      ) : (
+        <>
+          <div className="flex gap-2 mb-3">
+            <button className="btn btn-outline btn-sm flex-1" onClick={() => setTplOpen(true)} data-testid="button-load-template">Load template</button>
+            {inDeload
+              ? <button className="btn btn-warn btn-sm flex-1" onClick={() => update({ ...program, deloadUntil: null })} data-testid="button-end-deload">End deload</button>
+              : <button className="btn btn-outline btn-sm flex-1" onClick={() => { update({ ...program, deloadUntil: addDays(today, 6) }); ui.toast("Deload week: 60% volume, same weights"); }} data-testid="button-deload-now">Start deload week</button>}
+          </div>
+          {live && <p className="note mb-2" data-testid="text-live-edit-hint"><b>[NOTE]</b> A workout is in progress. Changes here show up in it — tap "Update workout" on the Workout tab, or they apply automatically if you haven't logged a set yet.</p>}
+          <div className="flex items-center justify-between mb-1" style={{ minHeight: 20 }}>
+            <span className="label">Program</span>
+            <span className="mono text-[11px]" aria-live="polite" data-testid="text-autosave">{savedAt ? "Saved" : "Edits save automatically"}</span>
+          </div>
+          <ProgramEditor program={program} units={profile.units} onChange={update} />
+        </>
       )}
+      <ProgramLibrary onImport={() => setImportOpen(true)} />
       {tplOpen && (
         <Sheet title="Starter templates" onClose={() => setTplOpen(false)}>
-          <p className="text-sm muted mb-3">Replaces your current program. Logged history is kept.</p>
+          <p className="text-sm muted mb-3">Replaces your current program (save a copy first in My programs if you want it back). Logged history is kept.</p>
           {TEMPLATES.map((t) => (
-            <button key={t.id} className="card w-full text-left" onClick={() => { const p = buildTemplate(t.id, profile.units, profile.experience, dateKey()); setDraft(p); setTplOpen(false); }} data-testid={`button-template-${t.id}`}>
+            <button key={t.id} className="card w-full text-left" onClick={() => { update(buildTemplate(t.id, profile.units, profile.experience, dateKey())); setTplOpen(false); }} data-testid={`button-template-${t.id}`}>
               <div className="flex justify-between"><span className="font-semibold">{t.name}</span><span className="chip">{t.desc}</span></div>
               <div className="text-xs muted mt-1">{t.days.map((d) => d.name).join(" · ")}</div>
             </button>
           ))}
         </Sheet>
       )}
+      {importOpen && <ImportProgramSheet onClose={() => setImportOpen(false)} />}
     </div>
   );
 }
