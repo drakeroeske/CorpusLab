@@ -133,7 +133,7 @@ function FocusExercise({ log, idx, rx, pe, fatigue, isFirstCompound, nextName, o
         <div className="field"><span className="label">Reps · aim for {rx.repGoal}</span><Stepper value={reps} step={1} min={0} max={100} unit="reps" decimals={0} onChange={setReps} testId={`stepper-reps-${idx}`} /></div>
       </div>
 
-      <button className="btn btn-sm btn-ghost mt-2" style={{ paddingLeft: 0 }} onClick={() => setMore(!more)} aria-expanded={more} data-testid={`button-more-${idx}`}>
+      <button className="btn btn-sm btn-ghost mt-2" style={{ paddingLeft: 0, whiteSpace: "normal", textAlign: "left" }} onClick={() => setMore(!more)} aria-expanded={more} data-testid={`button-more-${idx}`}>
         {more ? <ChevronDown size={16} /> : <ChevronRight size={16} />} More: effort, set quality, why this target
       </button>
       {more && (
@@ -469,7 +469,7 @@ export default function Logger() {
           <div className="flex gap-1 mb-3" aria-hidden data-testid="strip-exercises">
             {s.exercises.map((l, i) => {
               const done = l.sets.length >= rxFor(l).rx.sets;
-              return <button key={l.peId + l.exId} tabIndex={-1} onClick={() => go(i)} style={{ flex: 1, height: 6, background: i === cur ? "var(--signal)" : done ? "var(--ink)" : "var(--tint)", boxShadow: i === cur && !listOpen ? "0 0 0 2px var(--page), 0 0 0 3px var(--ink)" : undefined }} />;
+              return <button key={l.peId + l.exId} tabIndex={-1} onClick={() => go(i)} style={{ flex: 1, height: 6, background: i === cur ? "var(--ink-deep)" : done ? "var(--ink)" : "var(--tint)", boxShadow: i === cur && !listOpen ? "0 0 0 2px var(--page), 0 0 0 3px var(--ink)" : undefined }} />;
             })}
           </div>
 

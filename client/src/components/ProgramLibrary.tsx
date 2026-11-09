@@ -79,7 +79,7 @@ export function ProgramLibrary({ onImport }: { onImport: () => void }) {
         <Sheet title="Share program" onClose={() => setShare(null)} testId="sheet-share-program">
           <p className="text-sm">Anyone with Corpus can load <b>{share.name}</b> with this code — Spotters, clients, your coach. It copies the exercises, sets, reps and starting weights; their history stays theirs.</p>
           <div className="card mt-3 flex items-center justify-between gap-3">
-            <span className="display text-[40px]" data-testid="text-share-code">{share.code}</span>
+            <span className="num-big text-[40px]" data-testid="text-share-code">{share.code}</span>
             <button className="btn btn-sm" onClick={async () => ui.toast((await copyText(share.code)) ? "Code copied" : "Couldn't copy")} data-testid="button-copy-share-code"><Copy size={14} /> Copy</button>
           </div>
           <button className="btn btn-block btn-primary mt-3" onClick={async () => {
@@ -245,7 +245,7 @@ export function ImportProgramSheet({ onClose }: { onClose: () => void }) {
       {mode === "text" && (
         <div className="mt-3">
           <p className="text-sm">Paste your plan, one exercise per line. Day names on their own line start a new day.</p>
-          <textarea className="input mt-2" style={{ minHeight: 160, fontFamily: "var(--font-mono)", fontSize: 13 }} placeholder={"Push\nBench press 4x6-8\nIncline DB press 3x10\nLateral raise 3x15\n\nPull\nDeadlift 3x5\nLat pulldown 3x10-12"} value={text} onChange={(e) => setText(e.target.value)} data-testid="textarea-import-text" />
+          <textarea className="input mt-2" style={{ minHeight: 160, fontFamily: "var(--font-sans)", fontSize: 13 }} placeholder={"Push\nBench press 4x6-8\nIncline DB press 3x10\nLateral raise 3x15\n\nPull\nDeadlift 3x5\nLat pulldown 3x10-12"} value={text} onChange={(e) => setText(e.target.value)} data-testid="textarea-import-text" />
           <button className="btn btn-primary btn-lg btn-block mt-3" disabled={!text.trim()} onClick={() => runText(text)} data-testid="button-parse-text"><ClipboardPaste size={18} /> Read it</button>
         </div>
       )}

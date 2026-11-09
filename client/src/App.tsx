@@ -17,6 +17,7 @@ import { CheckInSheet } from "@/pages/CheckIn";
 import { NutritionSheet } from "@/pages/Nutrition";
 import { InviteHandler } from "@/components/InviteHandler";
 import PrivacyPage from "@/pages/Privacy";
+import DevReadiness from "@/pages/DevReadiness";
 import { CoachChat } from "@/pages/Coach";
 import { Tour } from "@/components/Tour";
 import ClientsPage from "@/pages/Clients";
@@ -114,7 +115,7 @@ function Shell() {
 }
 
 function useRoute() {
-  const get = () => (location.hash.startsWith("#/privacy") ? "privacy" : "app");
+  const get = () => (location.hash.startsWith("#/privacy") ? "privacy" : location.hash.startsWith("#/dev/readiness") ? "dev-readiness" : "app");
   const [r, setR] = useState(get);
   useEffect(() => { const f = () => { setR(get()); window.scrollTo({ top: 0 }); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
   return r;
@@ -125,6 +126,7 @@ function Root() {
   const route = useRoute();
   if (auth.status === "loading") return <div style={{ minHeight: "100dvh", display: "grid", placeItems: "center", color: "var(--muted)" }} className="mono text-xs" data-testid="status-loading">Loading</div>;
   if (route === "privacy") return <PrivacyPage onBack={() => { location.hash = "#/"; }} />;
+  if (route === "dev-readiness") return <DevReadiness onBack={() => { location.hash = "#/"; }} />;
   if (auth.status === "anon") return <AuthScreen />;
   if (auth.viewing) return <StoreProvider key={`view-${auth.viewing.id}`} mode="readonly" initial={auth.viewing.state}><Shell /></StoreProvider>;
   if (auth.status === "authed" && auth.me) return <StoreProvider key={`u-${auth.me.id}`} mode="remote" onAuthLost={auth.logout}><Shell /></StoreProvider>;

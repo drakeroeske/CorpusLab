@@ -6,10 +6,11 @@ import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
 import { newSession, prescriptionsFor, sessionSummary, useToday } from "@/lib/derived";
 import { StartWorkoutSheet } from "@/components/StartWorkout";
-import { addDays, experimentPhase, fmtDate, fmtW, proteinByDate, caloriesByDate } from "@/lib/engine";
+import { addDays, fmtDate, fmtW, proteinByDate, caloriesByDate } from "@/lib/engine";
 import { EX, MUSCLE_LABEL, newId } from "@/lib/exercises";
 import { Bar } from "@/components/ui";
-import { EngineHeader, Rings, Tag } from "@/components/riso";
+import { EngineHeader, Tag } from "@/components/riso";
+import { ReadinessRing } from "@/components/ReadinessRing";
 import { Info, Term } from "@/components/Term";
 import { InboxButton } from "@/components/Inbox";
 import type { Meal } from "@/lib/types";
@@ -45,8 +46,6 @@ export default function Today() {
   const calTarget = isTraining ? targets.trainingCal : targets.restCal;
   const cal = caloriesByDate(state.meals)[t.today] ?? 0;
   const prot = proteinByDate(state.meals)[t.today] ?? 0;
-  const exp = state.experiments.find((e) => e.status === "active");
-  const expPh = exp ? experimentPhase(exp, t.today) : null;
   const doneSum = t.doneToday ? sessionSummary(state, t.doneToday) : null;
 
   const start = () => {
@@ -67,52 +66,50 @@ export default function Today() {
         sub={<span className="muted" data-testid="text-phase">{dateLine}{state.program ? ` · Week ${t.phase.week}` : ""}</span>} />
       <div className="screen">
 
-        {/* 1. Check-in first; once done it becomes the readiness result. */}
-        {!t.checkin ? (
-          <section className="card" style={{ background: "var(--ink)", color: "var(--page)" }} data-testid="card-checkin-cta">
-            <div className="text-[20px] font-bold leading-tight">How are you today?</div>
-            <p className="text-sm mt-1" style={{ opacity: 0.85 }}>Sleep, energy and soreness. Takes 20 seconds and sets today's weights.</p>
-            <button className="btn btn-lg btn-block mt-4" style={{ background: "var(--page)", color: "var(--ink)", borderColor: "var(--page)" }} onClick={() => ui.open("checkin")} data-testid="button-open-checkin">Start check-in</button>
-          </section>
-        ) : (
-          <section className="card" data-testid="card-readiness">
-            <div className="flex items-center gap-4">
-              <span className="display text-[52px] leading-none" data-testid="text-readiness-score">{r.score ?? "—"}</span>
-              <div className="min0 flex-1">
-                <div className="label flex items-center"><Term k="readiness" /></div>
-                <div className="font-bold text-[16px] leading-snug mt-0.5" data-testid="text-effect">{r.score == null ? "Not enough check-in data" : EFFECT_HEADLINE[r.effect]}</div>
+        {/* 1. Readiness: the ring is empty until today's check-in, then shows the score. Tap it for the breakdown. */}
+        <section className="card" data-testid="card-readiness">
+          <div className="flex items-center gap-4">
+            <ReadinessRing value={t.checkin ? r.score : null} size={112}
+              lowConfidence={r.score != null && r.confidence === "low"}
+              onClick={t.checkin && r.score != null ? () => setWhy(!why) : undefined} expanded={why} />
+            <div className="min0 flex-1">
+              <div className="label flex items-center"><Term k="readiness" /></div>
+              <div className="font-bold text-[16px] leading-snug mt-0.5" data-testid="text-effect">
+                {!t.checkin ? "How are you today?" : r.score == null ? "Not enough check-in data" : EFFECT_HEADLINE[r.effect]}
               </div>
+              {!t.checkin && <p className="text-sm muted mt-1">Sleep, energy and soreness. Takes 20 seconds and sets today's weights.</p>}
             </div>
+          </div>
+          {!t.checkin ? (
+            <button className="btn btn-primary btn-block mt-4" onClick={() => ui.open("checkin")} data-testid="button-open-checkin">Check in</button>
+          ) : (
             <div className="flex gap-2 mt-3">
-              <button className="btn btn-sm btn-ghost" style={{ paddingLeft: 0 }} onClick={() => setWhy(!why)} aria-expanded={why} data-testid="button-toggle-breakdown">
-                {why ? <ChevronDown size={16} /> : <ChevronRight size={16} />} Why?
-              </button>
+              {r.score != null && (
+                <button className="btn btn-sm btn-ghost" style={{ paddingLeft: 0 }} onClick={() => setWhy(!why)} aria-expanded={why} data-testid="button-toggle-breakdown">
+                  {why ? <ChevronDown size={16} /> : <ChevronRight size={16} />} Why?
+                </button>
+              )}
               <div className="flex-1" />
               <button className="btn btn-sm btn-ghost" onClick={() => ui.open("checkin")} data-testid="button-open-checkin">Edit check-in</button>
             </div>
-            {why && (
-              <div className="mt-2 pt-3" style={{ borderTop: "1px solid var(--line)" }} data-testid="panel-readiness-why">
-                <div className="flex items-center gap-4">
-                  <Rings value={r.score} size={96} label={r.score == null ? "No readiness score yet" : `Readiness ${r.score} of 100`} />
-                  <div className="min0 flex-1">
-                    <p className="text-sm leading-snug" data-testid="text-readiness-reason">{r.reason}</p>
-                    <div className="flex items-center gap-1 mt-2"><Tag testId="text-confidence">Confidence: {r.confidence}</Tag><Info k="confidence" /></div>
+          )}
+          {why && t.checkin && r.score != null && (
+            <div className="mt-2 pt-3" style={{ borderTop: "1px solid var(--line)" }} data-testid="panel-readiness-why">
+              <p className="text-sm leading-snug" data-testid="text-readiness-reason">{r.reason}</p>
+              <div className="flex items-center gap-1 mt-2"><Tag testId="text-confidence">Confidence: {r.confidence}</Tag><Info k="confidence" /></div>
+              <div className="mt-3 stack" style={{ gap: 8 }}>
+                {r.parts.map((p) => (
+                  <div key={p.key} className="grid items-center gap-3" style={{ gridTemplateColumns: "1fr 90px 54px" }}>
+                    <span className={`text-[13px] ${p.present ? "" : "faint"}`}>{p.label}</span>
+                    <Bar pct={p.max ? (p.pts / p.max) * 100 : 0} />
+                    <span className="mono text-xs text-right muted">{p.present ? `${Math.round(p.pts)}/${Math.round(p.max)}` : "n/a"}</span>
                   </div>
-                </div>
-                <div className="mt-3 stack" style={{ gap: 8 }}>
-                  {r.parts.map((p) => (
-                    <div key={p.key} className="grid items-center gap-3" style={{ gridTemplateColumns: "1fr 90px 54px" }}>
-                      <span className={`text-[13px] ${p.present ? "" : "faint"}`}>{p.label}</span>
-                      <Bar pct={p.max ? (p.pts / p.max) * 100 : 0} />
-                      <span className="mono text-xs text-right muted">{p.present ? `${Math.round(p.pts)}/${Math.round(p.max)}` : "n/a"}</span>
-                    </div>
-                  ))}
-                  <p className="text-xs faint">Based on {r.inputs} of 6 inputs.{r.parts.some((p) => !p.present) ? " Missing ones are left out and the rest weighted up." : ""}</p>
-                </div>
+                ))}
+                <p className="text-xs faint">Based on {r.parts.filter((p) => p.present).length} of {r.parts.length} inputs.{r.parts.some((p) => !p.present) ? " Missing ones are left out and the rest weighted up." : ""}</p>
               </div>
-            )}
-          </section>
-        )}
+            </div>
+          )}
+        </section>
 
         {/* 2. Alerts, only when they apply. */}
         {(t.deload.recommend && !t.inDeload) && (
@@ -131,21 +128,6 @@ export default function Today() {
               {t.flags.map((f) => (
                 <p key={f.exId} className="text-sm mt-1" data-testid={`card-plateau-${f.exId}`}><b>{EX[f.exId].name}.</b> {f.fix}</p>
               ))}
-            </div>
-          </section>
-        )}
-
-        {/* Experiment yes/no for today */}
-        {exp && expPh && expPh.phase === "experiment" && (
-          <section className="card" data-testid="card-experiment-today">
-            <div className="label">{exp.name} · day {expPh.day} of {expPh.of}</div>
-            <div className="flex items-center gap-3 mt-1">
-              <div className="min0 flex-1 text-[15px] font-semibold">{exp.question}</div>
-              <div className="seg" style={{ width: 120 }}>
-                {[true, false].map((v) => (
-                  <button key={String(v)} aria-pressed={exp.log[t.today] === v ? "true" : "false"} onClick={() => set((s) => ({ ...s, experiments: s.experiments.map((e) => (e.id === exp.id ? { ...e, log: { ...e.log, [t.today]: v } } : e)) }))} data-testid={`button-exp-${v ? "yes" : "no"}`}>{v ? "Yes" : "No"}</button>
-                ))}
-              </div>
             </div>
           </section>
         )}

@@ -9,7 +9,7 @@ export const PRIVACY_CONTACT = "colischdaniel@gmail.com";
 function S({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="mt-6">
-      <h2 className="text-[17px] font-semibold" style={{ letterSpacing: "-0.01em" }}>{title}</h2>
+      <h2 className="display text-[18px]">{title}</h2>
       <div className="stack mt-2 text-sm muted leading-relaxed" style={{ gap: 8 }}>{children}</div>
     </section>
   );
@@ -25,7 +25,7 @@ export default function PrivacyPage({ onBack }: { onBack: () => void }) {
       </div>
       <div className="screen" style={{ paddingBottom: 60 }}>
         <p className="label mt-4">Privacy · updated {PRIVACY_UPDATED}</p>
-        <h1 className="text-[26px] font-semibold leading-tight mt-2" style={{ letterSpacing: "-0.02em" }}>Your data, in plain language</h1>
+        <h1 className="display text-[30px] mt-2">Your data, in plain language</h1>
         <p className="text-sm muted mt-3 leading-relaxed">Corpus holds personal things: your body weight, sleep, meals and photos. This page explains what's stored, who can see it, and how to get it back or delete it.</p>
 
         <div className="card mt-5 stack" style={{ gap: 6 }}>

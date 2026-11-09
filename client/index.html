@@ -15,10 +15,12 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@500;600;700&display=swap" rel="stylesheet" />
+    <style>html,body{margin:0;background:#ECE8DF}#boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#ECE8DF}#boot svg{width:min(200px,55vw);height:auto}</style>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Loading screen: shown until the app renders into #root, which replaces it. -->
+    <div id="root"><div id="boot" role="img" aria-label="Corpus, loading"><svg viewBox="0 0 942.923 272.717" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="#E94191" d="M184.629 214.931 L184.629 71.644 L327.916 71.644 L327.916 214.931 Z"/><g fill="#1A1A1A"><path d="M0 214.931 L0 0 L174.164 0 L174.164 44.562 L47.724 44.562 L47.724 170.369 L174.164 170.369 L174.164 214.931 Z"/><path d="M338.381 79.232 L338.381 71.644 L481.668 71.644 L481.668 116.205 L382.942 116.205 L382.942 214.931 L338.381 214.931 L338.381 116.205 Z"/><path d="M799.636 72.104 L799.636 71.644 L942.923 71.644 L942.923 116.205 L844.198 116.205 L844.198 121.466 L898.362 121.466 L933.462 121.466 L942.923 121.466 L942.923 215.391 L934.157 215.391 L898.362 215.391 L799.636 215.391 L799.636 170.829 L898.362 170.829 L898.362 166.028 L844.198 166.028 L804.364 166.028 L799.636 166.028 L799.636 116.205 Z"/><path d="M492.132 79.232 L492.132 72.104 L635.42 72.104 L635.42 79.232 L635.42 116.665 L635.42 215.391 L630.441 215.391 L590.858 215.391 L536.694 215.391 L536.694 272.717 L492.132 272.717 L492.132 116.665 Z M536.694 116.665 L536.694 170.829 L590.858 170.829 L590.858 116.665 Z"/><path d="M645.884 215.391 L645.884 72.104 L690.446 72.104 L690.446 170.829 L744.61 170.829 L744.61 72.104 L789.171 72.104 L789.171 215.391 L782.766 215.391 L744.61 215.391 L690.446 215.391 L652.366 215.391 Z"/></g></svg></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

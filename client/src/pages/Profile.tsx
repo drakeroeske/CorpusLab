@@ -426,7 +426,7 @@ function GrainCard() {
   return (
     <div className="card mt-3" data-testid="card-grain">
       <div className="label mb-2">Ink</div>
-      <Seg value={ink} onChange={(v) => setInk(v)} options={[{ v: "cobalt", l: "Cobalt" }, { v: "black", l: "Black · high contrast" }]} testId="seg-ink" />
+      <Seg value={ink} onChange={(v) => setInk(v)} options={[{ v: "cobalt", l: "Pink" }, { v: "black", l: "Black · high contrast" }]} testId="seg-ink" />
       <p className="text-xs mt-2 mb-3">Black ink is easier to read in bright gyms. Pink accents stay either way.</p>
       <div className="label mb-2">Paper grain</div>
       <Seg value={g} onChange={(v) => setGrain(v)} options={[{ v: "off", l: "Off" }, { v: "subtle", l: "Subtle" }, { v: "full", l: "Full" }]} testId="seg-grain" />

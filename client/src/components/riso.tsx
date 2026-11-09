@@ -2,10 +2,12 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { useUI } from "@/App";
 import { useStore } from "@/lib/store";
+import { BRAND_BLACK, BRAND_PINK, MARK_C, MARK_VIEWBOX, WORDMARK_SQUARE } from "@/lib/brand";
+import { Wordmark } from "./ui";
 
 export type SurfaceStyle = "lab" | "riso";
 
-/** Switches ink/page/display font for everything inside: lab = black on paper, riso = cobalt on bone. */
+/** Switches ink/page/display font for everything inside: lab = black on paper, riso = pink on bone. */
 export function Surface({ style, children, className = "" }: { style: SurfaceStyle; children: ReactNode; className?: string }) {
   return <div className={`surface-${style} ${className}`}>{children}</div>;
 }
@@ -82,17 +84,30 @@ function MeButton() {
   );
 }
 
-/** Screen header: title, optional one-line subtitle, optional right-hand action, and the profile avatar. */
+/** Screen header. Tab screens: logo and actions on top, the title below. Screens with a back button keep the title beside the actions. */
 export function PageHeader({ title, sub, right, back, me = true, testId }: {
   title: string; sub?: ReactNode; right?: ReactNode; back?: () => void; me?: boolean; testId?: string;
 }) {
   const t = title.replace(/[.!?]$/, "");
+  const actions = <div className="shrink-0 flex items-center gap-2">{right}{me && <MeButton />}</div>;
+  if (!back) {
+    return (
+      <div className="pagehead" data-testid={testId}>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <Wordmark />
+          {actions}
+        </div>
+        <h1 className={`display min0 ${t.length > 12 ? "xlong" : t.length > 7 ? "long" : ""}`}>{t}</h1>
+        {sub && <div className="mt-2 text-sm">{sub}</div>}
+      </div>
+    );
+  }
   return (
     <div className="pagehead" data-testid={testId}>
-      {back && <button className="btn btn-sm btn-outline mb-3" onClick={back} data-testid="button-back">← Back</button>}
+      <button className="btn btn-sm btn-outline mb-3" onClick={back} data-testid="button-back">← Back</button>
       <div className="flex items-center justify-between gap-3">
         <h1 className={`display min0 ${t.length > (right ? 10 : 12) ? "xlong" : t.length > (right ? 5 : 7) ? "long" : ""}`}>{t}</h1>
-        <div className="shrink-0 flex items-center gap-2">{right}{me && <MeButton />}</div>
+        {actions}
       </div>
       {sub && <div className="mt-2 text-sm">{sub}</div>}
     </div>
@@ -206,13 +221,12 @@ export function logoGeometry() {
   return { nodes, hub, links };
 }
 
-/** Connected-node logo mark. Ink follows the surface. */
+/** Logo mark: the "C" and the pink square from the Corpus wordmark. */
 export function Logo({ size = 40 }: { size?: number }) {
-  const g = logoGeometry();
   return (
-    <svg viewBox="0 0 100 100" width={size} height={size} aria-hidden>
-      <g stroke="currentColor" strokeWidth="5" strokeLinecap="square">{g.links.map(([a, b], i) => <line key={i} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} />)}</g>
-      <g fill="currentColor">{g.nodes.map(([x, y], i) => <rect key={i} x={x - 6} y={y - 6} width="12" height="12" />)}<rect x={g.hub[0] - 9} y={g.hub[1] - 9} width="18" height="18" /></g>
+    <svg viewBox={`0 0 ${MARK_VIEWBOX.w} ${MARK_VIEWBOX.h}`} height={size} width={(size * MARK_VIEWBOX.w) / MARK_VIEWBOX.h} aria-hidden>
+      <path d={MARK_C} fill={BRAND_BLACK} />
+      <path d={WORDMARK_SQUARE} fill={BRAND_PINK} />
     </svg>
   );
 }

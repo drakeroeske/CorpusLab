@@ -7,6 +7,7 @@ import type {
   ProgramExercise, Session, Sex, Spotter, Units, Experiment,
 } from "./types";
 import { EX, EXERCISES, MUSCLES, MUSCLE_LABEL, MAIN_LIFTS, allExercises, isCompound } from "./exercises";
+import { loadScore, readinessBand, trainingLoadInputs } from "./readiness";
 
 /* =========================== dates =========================== */
 export const pad = (n: number) => String(n).padStart(2, "0");
@@ -100,8 +101,11 @@ export function progressionState(pe: ProgramExercise, logs: ExerciseLog[]): Prog
 }
 
 export type ReadinessEffect = "normal" | "hold" | "reduce";
-export const readinessEffect = (score: number | null): ReadinessEffect =>
-  score == null || score >= 75 ? "normal" : score >= 50 ? "hold" : "reduce";
+/** Uses the same bands as the readiness ring (lib/readiness.ts): high → progress, moderate → hold, low → ease off. */
+export const readinessEffect = (score: number | null): ReadinessEffect => {
+  const b = readinessBand(score);
+  return b == null || b === "high" ? "normal" : b === "moderate" ? "hold" : "reduce";
+};
 
 export interface Prescription {
   weight: number;
@@ -160,7 +164,14 @@ export interface ReadinessResult {
   hrvDelta: number | null; // fraction vs baseline
 }
 
-const BASE_WEIGHTS = { sleepH: 30, sleepQ: 10, hrv: 20, energy: 15, soreness: 15, stress: 10 } as const;
+/** Points out of 100. Training load takes 15; the six check-in inputs keep their old proportions in the other 85. */
+const BASE_WEIGHTS = { sleepH: 25.5, sleepQ: 8.5, hrv: 17, energy: 12.75, soreness: 12.75, stress: 8.5, load: 15 } as const;
+
+/** Training-load sub-score (0–1) for `date`, from logged workouts; null with under 2 weeks of history. */
+export function trainingLoad(sessions: Session[], date: string): number | null {
+  const { recent, usual } = trainingLoadInputs(sessions, date);
+  return loadScore(recent, usual);
+}
 
 export function hrvBaseline(checkins: CheckIn[], date: string): number | null {
   const vals = checkins
@@ -169,7 +180,7 @@ export function hrvBaseline(checkins: CheckIn[], date: string): number | null {
   return vals.length >= 3 ? mean(vals) : null;
 }
 
-export function computeReadiness(ci: CheckIn | undefined, baseline: number | null, targetMuscles: Muscle[]): ReadinessResult {
+export function computeReadiness(ci: CheckIn | undefined, baseline: number | null, targetMuscles: Muscle[], load: number | null = null): ReadinessResult {
   const empty: ReadinessResult = { score: null, confidence: "low", inputs: 0, parts: [], reason: "No check-in yet today — log sleep and energy to get a readiness score.", effect: "normal", hrvDelta: null };
   if (!ci) return empty;
   const raw: Record<keyof typeof BASE_WEIGHTS, number | null> = {
@@ -179,6 +190,7 @@ export function computeReadiness(ci: CheckIn | undefined, baseline: number | nul
     energy: ci.energy != null ? clamp((ci.energy - 1) / 4, 0, 1) : null,
     soreness: null,
     stress: ci.stress != null ? clamp((5 - ci.stress) / 4, 0, 1) : null,
+    load: load != null ? clamp(load, 0, 1) : null,
   };
   let hrvDelta: number | null = null;
   if (ci.hrv != null && baseline) {
@@ -194,7 +206,7 @@ export function computeReadiness(ci: CheckIn | undefined, baseline: number | nul
   if (presentWeight === 0) return empty;
   // redistribute missing weight proportionally across present inputs
   const scale = 100 / presentWeight;
-  const labels: Record<string, string> = { sleepH: "Sleep duration", sleepQ: "Sleep quality", hrv: "HRV vs baseline", energy: "Energy", soreness: "Target-muscle soreness", stress: "Stress" };
+  const labels: Record<string, string> = { sleepH: "Sleep duration", sleepQ: "Sleep quality", hrv: "HRV vs baseline", energy: "Energy", soreness: "Target-muscle soreness", stress: "Stress", load: "Recent training load" };
   const parts = (Object.keys(BASE_WEIGHTS) as (keyof typeof BASE_WEIGHTS)[]).map((k) => {
     const max = raw[k] != null ? BASE_WEIGHTS[k] * scale : 0;
     return { key: k, label: labels[k], pts: raw[k] != null ? raw[k]! * max : 0, max, present: raw[k] != null };
@@ -211,6 +223,7 @@ export function computeReadiness(ci: CheckIn | undefined, baseline: number | nul
   if (sore.length) bits.push(`sore ${sore.slice(0, 2).map((m) => MUSCLE_LABEL[m].toLowerCase()).join(" & ")}`);
   if (ci.energy != null && ci.energy <= 2) bits.push("low energy");
   if (ci.stress != null && ci.stress >= 4) bits.push("high stress");
+  if (load != null && load < 0.5) bits.push("heavy last 2 days");
   if (ci.sleepQ != null && ci.sleepQ <= 2 && !(ci.sleepH != null && ci.sleepH < 7)) bits.push("poor sleep quality");
   const good: string[] = [];
   if (ci.sleepH != null && ci.sleepH >= 7.5) good.push(`${r1(ci.sleepH)}h sleep`);
@@ -514,7 +527,7 @@ export function readinessSeries(state: AppState, today: string, days = 56): { da
   for (let i = days - 1; i >= 0; i--) {
     const d = addDays(today, -i);
     const ci = state.checkins.find((c) => c.date === d);
-    const r = computeReadiness(ci, hrvBaseline(state.checkins, d), dayMuscles(dayForDate(state.program, d)));
+    const r = computeReadiness(ci, hrvBaseline(state.checkins, d), dayMuscles(dayForDate(state.program, d)), trainingLoad(state.sessions, d));
     out.push({ date: d, score: r.score });
   }
   return out;

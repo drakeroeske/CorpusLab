@@ -65,7 +65,7 @@ export default function Onboarding() {
 
         {step === 1 && (
           <div className="stack">
-            <h2 className="text-[20px] font-bold">About you</h2>
+            <h2 className="display text-[24px]">About you</h2>
             <label className="field"><span className="label">Name</span><input className="input" value={p.name} onChange={(e) => upd({ name: e.target.value })} placeholder="Your name" data-testid="input-name" /></label>
             <div className="field"><span className="label">Units</span>
               <Seg value={p.units} onChange={(u: Units) => upd({ units: u, bodyWeight: u === "kg" ? Math.round(p.bodyWeight / 2.20462) : Math.round(p.bodyWeight * 2.20462) })} options={[{ v: "lb", l: "lb / ft" }, { v: "kg", l: "kg / cm" }]} testId="seg-units" />
@@ -90,7 +90,7 @@ export default function Onboarding() {
 
         {step === 2 && (
           <div className="stack">
-            <h2 className="text-[20px] font-bold">Your goal</h2>
+            <h2 className="display text-[24px]">Your goal</h2>
             <div className="field"><span className="label">What do you want most?</span>
               <div className="grid grid-cols-2 gap-2">
                 {([["muscle", "Build muscle"], ["strength", "Get stronger"], ["fatloss", "Lose fat"], ["recomp", "Lose fat & build muscle"]] as [Goal, string][]).map(([g, l]) => (
@@ -109,7 +109,7 @@ export default function Onboarding() {
 
         {step === 3 && (
           <div>
-            <h2 className="text-[20px] font-bold">Pick a program</h2>
+            <h2 className="display text-[24px]">Pick a program</h2>
             <p className="text-sm muted mt-1 mb-3">Start from a ready-made program or build your own. You can change it anytime in Train → Program.</p>
             <div className="stack">
               {TEMPLATES.map((t) => (
@@ -135,7 +135,7 @@ export default function Onboarding() {
                       );
                     })}
                   </div>
-                  {ownDays.length === 0 && <p className="text-xs mt-2" style={{ color: "var(--signal)" }} role="alert">Pick at least one day.</p>}
+                  {ownDays.length === 0 && <p className="text-xs mt-2" style={{ color: "var(--ink-deep)" }} role="alert">Pick at least one day.</p>}
                 </div>
               )}
             </div>

@@ -178,7 +178,7 @@ export function NutritionSheet({ onClose }: { onClose: () => void }) {
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
             {state.favorites.map((f) => (
-              <button key={f.id} className={`btn btn-sm shrink-0 ${editFav ? "btn-outline" : ""}`} style={{ minHeight: 44, background: editFav ? undefined : "var(--signal)" }}
+              <button key={f.id} className={`btn btn-sm shrink-0 ${editFav ? "btn-outline" : ""}`} style={{ minHeight: 44, background: editFav ? undefined : "var(--bone-dark)" }}
                 onClick={() => { if (editFav) { set((s) => ({ ...s, favorites: s.favorites.filter((x) => x.id !== f.id) })); return; } set((s) => ({ ...s, meals: [...s.meals, logFavorite(f, today)] })); ui.toast(`Logged ${f.name}`); }}
                 aria-label={editFav ? `Remove ${f.name} from favorites` : `Log ${f.name}`} data-testid={`button-fav-${f.id}`}>
                 {editFav ? <X size={14} /> : <Star size={14} />} <span className="truncate" style={{ maxWidth: 150 }}>{f.name}</span> <span className="muted">· {f.cal} kcal</span>

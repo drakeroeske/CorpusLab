@@ -52,13 +52,13 @@ export function BodyMap({ values, view, onTap, selected, testId, height = 280 }:
       {parts.map(({ m, polys }) =>
         polys.flatMap((p, i) => [p, mir(p)].map((pp, j) => (
           <polygon key={`${m}-${i}-${j}`} points={pts(pp)} className="muscle"
-            fill={heatColor(values[m] ?? 0)} stroke={selected === m ? "#FFFFFF" : "currentColor"} strokeWidth={selected === m ? 2 : 0.6} style={selected === m ? { paintOrder: "stroke", filter: "drop-shadow(0 0 0.6px var(--ink))" } : undefined}
+            fill={heatColor(values[m] ?? 0)} stroke={selected === m ? "#ECE8DF" : "currentColor"} strokeWidth={selected === m ? 2 : 0.6} style={selected === m ? { paintOrder: "stroke", filter: "drop-shadow(0 0 0.6px var(--ink))" } : undefined}
             onClick={() => onTap?.(m)} data-testid={`muscle-${view}-${m}${j ? "-r" : ""}`}>
             <title>{MUSCLE_LABEL[m]}: {Math.round(values[m] ?? 0)}%</title>
           </polygon>
         ))),
       )}
-      <text x="60" y="242" textAnchor="middle" fontSize="6" fontWeight="700" fill="currentColor" fontFamily="Space Mono" letterSpacing="1">{view.toUpperCase()}</text>
+      <text x="60" y="242" textAnchor="middle" fontSize="6" fontWeight="700" fill="currentColor" fontFamily="Space Grotesk" letterSpacing="1">{view.toUpperCase()}</text>
     </svg>
   );
 }
