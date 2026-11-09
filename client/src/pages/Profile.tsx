@@ -1,7 +1,8 @@
 import { Info } from "@/components/Term";
 import { EngineHeader, setGrain, setInk, useGrain, useInk } from "@/components/riso";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, KeyRound, Lock, Copy, Database, Download, Eye, LogOut, MessageSquare, Upload, X } from "lucide-react";
+import { AlertTriangle, KeyRound, Lock, Copy, Database, Download, Eye, LogOut, MapPin, MessageSquare, Upload, X } from "lucide-react";
+import { GymPicker } from "@/components/GymPicker";
 import { useAuth, type PubUser } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { useStore, emptyState, storageAvailable, remoteAvailable } from "@/lib/store";
@@ -29,6 +30,7 @@ export default function Profile() {
   const [exportOpen, setExportOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
+  const [gymPick, setGymPick] = useState(false);
   const upd = (p: Partial<P>) => set((s) => ({ ...s, profile: { ...(s.profile ?? profile), ...p } }));
   const u = profile.units;
 
@@ -83,7 +85,24 @@ export default function Profile() {
               {GOALS.map((g) => <button key={g.v} className={`btn btn-sm ${profile.goal === g.v ? "btn-primary" : ""}`} onClick={() => upd({ goal: g.v })} data-testid={`button-goal-${g.v}`}>{g.l}</button>)}
             </div>
           </div>
-          <label className="field"><span className="label">Home gym</span><input className="input" value={profile.gym} onChange={(e) => upd({ gym: e.target.value })} data-testid="input-profile-gym" /></label>
+          {live ? (
+            <div className="field"><span className="label">Home gym</span>
+              <div className="flex items-center gap-2">
+                <input className="input flex-1" value={profile.gym} readOnly placeholder="Not set" data-testid="input-profile-gym" onClick={() => setGymPick(true)} />
+                <button className="btn btn-outline shrink-0" onClick={() => setGymPick(true)} data-testid="button-profile-gym-pick"><MapPin size={16} /> {profile.gym ? "Change" : "Find"}</button>
+              </div>
+              <span className="text-xs muted">Picked from the map so you can see who else from Corpus trains there.</span>
+            </div>
+          ) : (
+            <label className="field"><span className="label">Home gym</span><input className="input" value={profile.gym} onChange={(e) => upd({ gym: e.target.value })} data-testid="input-profile-gym" /></label>
+          )}
+          {gymPick && <GymPicker title="Set your home gym" cta="Set" onClose={() => setGymPick(false)} onPick={async (place) => {
+            try {
+              const r = await api<{ gym: { name: string } | null } & Record<string, unknown>>("PUT", "/api/me/home-gym", { place });
+              const { gym: g, ...me } = r; auth.setMe(me as never);
+              upd({ gym: g?.name ?? place.name }); ui.toast(`Home gym set to ${g?.name ?? place.name}`); setGymPick(false);
+            } catch (e) { ui.toast((e as Error).message); }
+          }} />}
         </div>
 
         <div className="section-title"><h2>Nutrition targets</h2><span className="label">auto</span></div>
@@ -310,6 +329,10 @@ function AccountCard() {
         <label className="flex items-center justify-between gap-3" style={{ minHeight: 44 }}>
           <span><span className="text-sm font-semibold block">Share lifts on leaderboards</span><span className="text-xs muted">Best e1RMs, body weight and streak</span></span>
           <input type="checkbox" className="toggle" checked={me.shareLifts} onChange={(e) => patch({ shareLifts: e.target.checked })} data-testid="toggle-share-lifts" />
+        </label>
+        <label className="flex items-center justify-between gap-3" style={{ minHeight: 44 }}>
+          <span><span className="text-sm font-semibold block">Let people at my gym find me</span><span className="text-xs muted">Name, split and streak shown to Corpus members at the same gym</span></span>
+          <input type="checkbox" className="toggle" checked={me.gymVisible ?? true} onChange={(e) => patch({ gymVisible: e.target.checked })} data-testid="toggle-gym-visible" />
         </label>
         {!me.isDemo && <SecurityRows />}
         <button className="btn btn-block" onClick={() => auth.logout()} data-testid="button-sign-out"><LogOut size={16} /> Sign out</button>

@@ -9,6 +9,8 @@ export interface Me extends PubUser {
   shareFeed: boolean;
   shareLifts: boolean;
   shareVaultWithCoach: boolean;
+  gymVisible?: boolean;
+  homeGymId?: string | null;
   isDemo: boolean;
   hasRecovery?: boolean;
   recoverySetAt?: string | null;

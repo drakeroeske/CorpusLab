@@ -2,6 +2,7 @@ import type { Express, NextFunction, Request, Response } from "express";
 import type { Server } from "node:http";
 import { createClient } from "@supabase/supabase-js";
 import { barcodeLookup, foodPortions, foodsEnabled, searchFoods } from "./foods.js";
+import { googleDetails, placesProvider, searchGyms } from "./places.js";
 import { DEFAULT_PREFS, initPush, notify, pushEnabled, runReminders, sanitizePrefs, startReminderTimer, vapidPublicKey } from "./push.js";
 import { hashPassword, newInviteCode, newRecoveryCode, newToken, recoveryHash, sameHash, sha256, USERNAME_RE, verifyPassword } from "./auth.js";
 
@@ -27,7 +28,8 @@ type Row = Record<string, any>;
 interface DbUser {
   id: string; username: string; display_name: string; pass_hash: string; role: "athlete" | "coach";
   invite_code: string; share_feed: boolean; share_lifts: boolean; share_vault_with_coach: boolean;
-  stats: Row; gym_checkin: { gym: string; ts: number } | null; is_demo: boolean;
+  stats: Row; gym_checkin: { gym: string; gymId?: string | null; ts: number } | null; is_demo: boolean;
+  home_gym_id: string | null; gym_visible: boolean;
   recovery_hash: string | null; recovery_set_at: string | null;
 }
 const pub = (u: Pick<DbUser, "id" | "username" | "display_name">) => ({ id: u.id, username: u.username, displayName: u.display_name });
@@ -118,6 +120,7 @@ async function meResponse(me: DbUser) {
   return {
     id: me.id, username: me.username, displayName: me.display_name, role: me.role, inviteCode: me.invite_code,
     shareFeed: me.share_feed, shareLifts: me.share_lifts, shareVaultWithCoach: me.share_vault_with_coach,
+    gymVisible: me.gym_visible !== false, homeGymId: me.home_gym_id ?? null,
     isDemo: me.is_demo, hasRecovery: !!me.recovery_hash, recoverySetAt: me.recovery_set_at,
     coaches: links.map((l) => pub(l.users)), clientCount: clients.length,
   };
@@ -302,6 +305,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (typeof b.shareFeed === "boolean") upd.share_feed = b.shareFeed;
     if (typeof b.shareLifts === "boolean") upd.share_lifts = b.shareLifts;
     if (typeof b.shareVaultWithCoach === "boolean") upd.share_vault_with_coach = b.shareVaultWithCoach;
+    if (typeof b.gymVisible === "boolean") upd.gym_visible = b.gymVisible;
     const u = must(await sb.from("users").update(upd).eq("id", me.id).select("*").single()) as DbUser;
     res.json(await meResponse(u));
   }));
@@ -532,28 +536,115 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ ok: true });
   }));
 
-  /* ---------- gym check-in ---------- */
+  /* ---------- gyms: search, check-in, home gym ---------- */
+  type GymRow = { id: string; provider: string; place_id: string; name: string; address: string; lat: number | null; lng: number | null };
+  const gymOut = (g: GymRow | null | undefined) => g ? { id: g.id, name: g.name, address: g.address, lat: g.lat, lng: g.lng, provider: g.provider } : null;
+  const num = (v: unknown) => { const n = typeof v === "string" ? parseFloat(v) : typeof v === "number" ? v : NaN; return Number.isFinite(n) ? n : undefined; };
+  const fresh = (c: Row | null | undefined) => !!c && Date.now() - Number(c.ts) < GYM_WINDOW_MS;
+
+  app.get("/api/gyms/search", authed(async (req, res, me) => {
+    limit(req, "gym-search", 90, 60_000);
+    const q = str(req.query.q, 80);
+    const lat = num(req.query.lat), lng = num(req.query.lng);
+    const near = lat !== undefined && lng !== undefined && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+    if (!q && !near) return res.json({ provider: placesProvider(), results: [] });
+    const out = await searchGyms(q, near ? lat : undefined, near ? lng : undefined);
+    // Everyone sees how many Corpus members call each result home (names stay private until you pick it).
+    const ids = out.results.map((r) => r.placeId);
+    const known = ids.length ? (must(await sb.from("gyms").select("id, provider, place_id").eq("provider", out.provider).in("place_id", ids)) as GymRow[]) : [];
+    const counts = new Map<string, number>();
+    if (known.length) {
+      const rows = must(await sb.from("users").select("home_gym_id").in("home_gym_id", known.map((k) => k.id)).eq("is_demo", me.is_demo).eq("gym_visible", true)) as Row[];
+      for (const r of rows) counts.set(r.home_gym_id, (counts.get(r.home_gym_id) ?? 0) + 1);
+    }
+    const byPlace = new Map(known.map((k) => [k.place_id, k]));
+    res.json({ provider: out.provider, results: out.results.map((r) => ({ ...r, members: counts.get(byPlace.get(r.placeId)?.id ?? "") ?? 0 })) });
+  }));
+
+  /** Finds or creates the gym row for a picked place. Fills coordinates for Google autocomplete picks. */
+  async function resolveGym(place: Row | undefined): Promise<GymRow | null> {
+    if (!place || typeof place !== "object") return null;
+    if (typeof place.id === "string" && place.id) {
+      return (must(await sb.from("gyms").select("*").eq("id", place.id).maybeSingle()) as GymRow | null);
+    }
+    const provider = place.provider === "google" ? "google" : place.provider === "osm" ? "osm" : "";
+    const placeId = str(place.placeId, 200), name = str(place.name, 80);
+    if (!provider || !placeId || !name) throw bad("Pick a gym from the list.");
+    const existing = must(await sb.from("gyms").select("*").eq("provider", provider).eq("place_id", placeId).maybeSingle()) as GymRow | null;
+    if (existing) return existing;
+    let lat = num(place.lat) ?? null, lng = num(place.lng) ?? null, address = str(place.address, 200);
+    if (provider === "google" && (lat === null || lng === null)) {
+      const d = await googleDetails(placeId);
+      lat = d.lat; lng = d.lng; if (d.address) address = d.address;
+    }
+    return must(await sb.from("gyms").upsert({ provider, place_id: placeId, name, address, lat, lng }, { onConflict: "provider,place_id" }).select("*").single()) as GymRow;
+  }
+
+  async function gymPeople(me: DbUser, gymId: string) {
+    const fids = new Set(await friendIds(me.id));
+    const pend = must(await sb.from("friendships").select("requester, addressee").eq("status", "pending").or(`requester.eq.${me.id},addressee.eq.${me.id}`)) as Row[];
+    const pendingOut = new Set(pend.filter((r) => r.requester === me.id).map((r) => r.addressee));
+    const pendingIn = new Set(pend.filter((r) => r.addressee === me.id).map((r) => r.requester));
+    const cols = "id, username, display_name, stats, gym_checkin, home_gym_id, share_lifts";
+    const [hereRows, memberRows] = await Promise.all([
+      sb.from("users").select(cols).eq("gym_checkin->>gymId", gymId).eq("is_demo", me.is_demo).eq("gym_visible", true).neq("id", me.id).limit(100),
+      sb.from("users").select(cols).eq("home_gym_id", gymId).eq("is_demo", me.is_demo).eq("gym_visible", true).neq("id", me.id).limit(200),
+    ]);
+    const view = (u: Row) => ({
+      ...pub(u as DbUser), split: u.share_lifts ? (u.stats?.split ?? "") : "", streak: u.share_lifts ? (u.stats?.streak ?? 0) : 0,
+      friend: fids.has(u.id), pending: pendingOut.has(u.id) ? "out" : pendingIn.has(u.id) ? "in" : null,
+      checkedInTs: fresh(u.gym_checkin) ? Number(u.gym_checkin.ts) : null, homeHere: u.home_gym_id === gymId,
+    });
+    const here = (must(hereRows) as Row[]).filter((u) => fresh(u.gym_checkin)).map(view).sort((a, b) => (b.checkedInTs ?? 0) - (a.checkedInTs ?? 0));
+    const hereIds = new Set(here.map((h) => h.id));
+    const members = (must(memberRows) as Row[]).filter((u) => !hereIds.has(u.id)).map(view)
+      .sort((a, b) => Number(b.friend) - Number(a.friend) || b.streak - a.streak || a.displayName.localeCompare(b.displayName));
+    return { here, members };
+  }
+
   app.get("/api/gym", authed(async (_req, res, me) => {
+    const myCi = fresh(me.gym_checkin) ? me.gym_checkin : null;
+    const gymId: string | null = myCi?.gymId ?? me.home_gym_id ?? null;
+    const [gymRow, homeRow] = await Promise.all([
+      gymId ? sb.from("gyms").select("*").eq("id", gymId).maybeSingle() : Promise.resolve({ data: null, error: null }),
+      me.home_gym_id && me.home_gym_id !== gymId ? sb.from("gyms").select("*").eq("id", me.home_gym_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
+    ]);
+    const gym = gymOut(must(gymRow) as GymRow | null);
+    const home = me.home_gym_id === gymId ? gym : gymOut(must(homeRow) as GymRow | null);
+    const people = gymId ? await gymPeople(me, gymId) : { here: [], members: [] };
+    // Spotters checked in anywhere (as before).
     const fids = await friendIds(me.id);
     const users = fids.length ? (must(await sb.from("users").select("id, username, display_name, gym_checkin, stats").in("id", fids)) as Row[]) : [];
-    const fresh = (c: Row | null) => c && Date.now() - Number(c.ts) < GYM_WINDOW_MS;
+    const friends = users.filter((u) => fresh(u.gym_checkin)).map((u) => ({ ...pub(u as DbUser), gym: u.gym_checkin.gym, gymId: u.gym_checkin.gymId ?? null, ts: u.gym_checkin.ts, split: u.stats?.split ?? "", streak: u.stats?.streak ?? 0 }));
     res.json({
-      me: fresh(me.gym_checkin) ? me.gym_checkin : null,
-      friends: users.filter((u) => fresh(u.gym_checkin)).map((u) => ({ ...pub(u as DbUser), gym: u.gym_checkin.gym, ts: u.gym_checkin.ts, split: u.stats?.split ?? "", streak: u.stats?.streak ?? 0 })),
+      me: myCi ? { gym: myCi.gym, gymId: myCi.gymId ?? null, ts: myCi.ts } : null,
+      gym, home, visible: me.gym_visible !== false, provider: placesProvider(),
+      here: people.here, members: people.members, friends,
     });
   }));
 
   app.post("/api/gym/checkin", authed(async (req, res, me) => {
     limit(req, "gym", 30, 3600_000);
-    const gym = str(req.body?.gym, 60);
+    const g = await resolveGym(req.body?.place);
+    const gym = g ? g.name : str(req.body?.gym, 60);
     if (!gym) throw bad("Gym name required");
-    must(await sb.from("users").update({ gym_checkin: { gym, ts: Date.now() } }).eq("id", me.id));
-    res.json({ ok: true });
+    const upd: Row = { gym_checkin: { gym, gymId: g?.id ?? null, ts: Date.now() } };
+    if (g && (req.body?.setHome === true || !me.home_gym_id)) upd.home_gym_id = g.id;
+    must(await sb.from("users").update(upd).eq("id", me.id));
+    res.json({ ok: true, gym: gymOut(g) });
   }));
 
   app.delete("/api/gym/checkin", authed(async (_req, res, me) => {
     must(await sb.from("users").update({ gym_checkin: null }).eq("id", me.id));
     res.json({ ok: true });
+  }));
+
+  app.put("/api/me/home-gym", authed(async (req, res, me) => {
+    limit(req, "home-gym", 30, 3600_000);
+    const g = req.body?.place === null ? null : await resolveGym(req.body?.place);
+    if (req.body?.place !== null && !g) throw bad("Pick a gym from the list.");
+    const u = must(await sb.from("users").update({ home_gym_id: g?.id ?? null }).eq("id", me.id).select("*").single()) as DbUser;
+    res.json({ ...(await meResponse(u)), gym: gymOut(g) });
   }));
 
   /* ---------- leaderboard ---------- */

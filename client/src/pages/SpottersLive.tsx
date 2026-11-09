@@ -2,7 +2,8 @@ import { Term } from "@/components/Term";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PullToRefresh } from "@/components/PullToRefresh";
 import { StreakCells, Tag } from "@/components/riso";
-import { Award, Check, Copy, Heart, MapPin, MessageCircle, RefreshCw, Send, Share, Trash2, UserMinus, UserPlus, X } from "lucide-react";
+import { Award, Check, Copy, Heart, MapPin, MessageCircle, RefreshCw, Search, Send, Share, Trash2, UserMinus, UserPlus, X } from "lucide-react";
+import { GymPicker, type GymPlace, type GymRef } from "@/components/GymPicker";
 import { inviteLink } from "@/lib/invite";
 import { PostCard } from "@/components/PostCard";
 import { EngineHeader } from "@/components/riso";
@@ -372,21 +373,73 @@ function Friends({ onChange }: { onChange: (n: number) => void }) {
 }
 
 /* ------------------------------------------------------------------- gym */
+interface GymPerson extends PubUser { split: string; streak: number; friend: boolean; pending: "in" | "out" | null; checkedInTs: number | null; homeHere: boolean }
+interface GymData {
+  me: { gym: string; gymId: string | null; ts: number } | null;
+  gym: GymRef | null; home: GymRef | null; visible: boolean; provider: "google" | "osm";
+  here: GymPerson[]; members: GymPerson[];
+  friends: (PubUser & { gym: string; gymId: string | null; ts: number; split: string; streak: number })[];
+}
+
 function Gym() {
-  const { profile } = useStore();
+  const { profile, set } = useStore();
   const ui = useUI();
-  const { data, reload } = useLoad<{ me: { gym: string; ts: number } | null; friends: (PubUser & { gym: string; ts: number; split: string; streak: number })[] }>("/api/gym", 30000);
-  const [gym, setGym] = useState(profile.gym || "");
+  const auth = useAuth();
+  const { data, reload } = useLoad<GymData>("/api/gym", 30000);
+  const [picker, setPicker] = useState<null | "checkin" | "home">(null);
+  const [busy, setBusy] = useState(false);
+  const [requested, setRequested] = useState<Record<string, true>>({});
   const ci = data?.me ?? null;
-  const here = ci ? (data?.friends ?? []).filter((f) => f.gym.trim().toLowerCase() === ci.gym.trim().toLowerCase()) : [];
-  const elsewhere = (data?.friends ?? []).filter((f) => !here.includes(f));
-  const checkIn = async () => {
+  const gym = data?.gym ?? null;
+  const home = data?.home ?? null;
+
+  const checkInAt = async (place: GymPlace | GymRef) => {
+    setBusy(true);
     try {
-      await api("POST", "/api/gym/checkin", { gym: gym.trim() });
-      ui.toast(`Checked in at ${gym.trim()}`); reload();
+      const r = await api<{ ok: true; gym: GymRef | null }>("POST", "/api/gym/checkin", { place });
+      ui.toast(`Checked in at ${r.gym?.name ?? place.name}`);
+      if (r.gym && !profile.gym) set((s) => ({ ...s, profile: s.profile ? { ...s.profile, gym: r.gym!.name } : s.profile }));
+      setPicker(null); reload();
+    } catch (e) { ui.toast((e as Error).message); } finally { setBusy(false); }
+  };
+  const setHome = async (place: GymPlace) => {
+    try {
+      const r = await api<{ gym: GymRef | null } & Record<string, unknown>>("PUT", "/api/me/home-gym", { place });
+      const { gym: g, ...me } = r; auth.setMe(me as never);
+      if (g) set((s) => ({ ...s, profile: s.profile ? { ...s.profile, gym: g.name } : s.profile }));
+      ui.toast(`Home gym set to ${g?.name ?? place.name}`); setPicker(null); reload();
     } catch (e) { ui.toast((e as Error).message); }
   };
   const out = async () => { try { await api("DELETE", "/api/gym/checkin"); reload(); } catch (e) { ui.toast((e as Error).message); } };
+  const addSpotter = async (p: GymPerson) => {
+    try {
+      const r = await api<{ status: string; user: PubUser }>("POST", "/api/friends/request", { code: p.username });
+      setRequested((m) => ({ ...m, [p.id]: true }));
+      ui.toast(r.status === "accepted" ? `You and ${p.displayName} are now Spotters` : `Request sent to ${p.displayName}`);
+      reload();
+    } catch (e) { ui.toast((e as Error).message); }
+  };
+  const setVisible = async (v: boolean) => {
+    try { auth.setMe(await api("PATCH", "/api/me", { gymVisible: v })); reload(); } catch (e) { ui.toast((e as Error).message); }
+  };
+
+  const Person = ({ p, sub }: { p: GymPerson; sub: string }) => (
+    <div className="card flex items-center gap-3" data-testid={`row-gym-person-${p.username}`}>
+      <Avatar name={p.displayName} />
+      <div className="flex-1 min0">
+        <div className="text-sm font-semibold truncate">{p.displayName}</div>
+        <div className="mono text-[11px] muted truncate">{sub}</div>
+      </div>
+      {p.friend ? <span className="chip chip-lime"><Check size={12} /> Spotter</span>
+        : p.pending === "out" || requested[p.id] ? <span className="chip">Requested</span>
+        : p.pending === "in" ? <span className="chip">Wants to spot you</span>
+        : <button className="btn btn-sm btn-outline" onClick={() => addSpotter(p)} data-testid={`button-add-spotter-${p.username}`}><UserPlus size={14} /> Add</button>}
+    </div>
+  );
+  const who = (p: GymPerson) => [p.split || null, p.streak ? `streak ${p.streak}` : null, p.homeHere ? "trains here" : null].filter(Boolean).join(" · ") || "Corpus member";
+
+  const elsewhere = (data?.friends ?? []).filter((f) => !ci || (f.gymId ? f.gymId !== ci.gymId : f.gym.trim().toLowerCase() !== ci.gym.trim().toLowerCase()));
+
   return (
     <div className="stack" data-testid="view-gym">
       <div className="card">
@@ -394,37 +447,61 @@ function Gym() {
         {ci ? (
           <>
             <div className="flex items-center gap-2"><MapPin size={18} className="lime" /><span className="font-semibold" data-testid="text-checked-in">I'm at {ci.gym}</span></div>
-            <p className="mono text-xs muted mt-1">checked in {ago(ci.ts)} ago · visible to Spotters for 3h</p>
+            {gym?.address && <p className="text-xs muted mt-1">{gym.address}</p>}
+            <p className="mono text-xs muted mt-1">checked in {ago(ci.ts)} ago · visible for 3h</p>
             <button className="btn btn-outline btn-block mt-3" onClick={out} data-testid="button-checkout">Check out</button>
+          </>
+        ) : home ? (
+          <>
+            <button className="btn btn-primary btn-lg btn-block" disabled={busy} onClick={() => checkInAt(home)} data-testid="button-gym-checkin"><MapPin size={16} /> I'm at {home.name}</button>
+            <button className="btn btn-ghost btn-block mt-2" onClick={() => setPicker("checkin")} data-testid="button-gym-elsewhere">Somewhere else</button>
           </>
         ) : (
           <>
-            <input className="input" placeholder="Gym name" value={gym} onChange={(e) => setGym(e.target.value)} maxLength={60} data-testid="input-gym" />
-            <button className="btn btn-primary btn-lg btn-block mt-3" disabled={!gym.trim()} onClick={checkIn} data-testid="button-gym-checkin"><MapPin size={16} /> I'm at {gym.trim() || "the gym"}</button>
+            <p className="text-sm muted mb-3">Find your gym on the map, check in, and see who else from Corpus trains there.</p>
+            <button className="btn btn-primary btn-lg btn-block" onClick={() => setPicker("checkin")} data-testid="button-gym-find"><Search size={16} /> Find your gym</button>
           </>
         )}
       </div>
-      {ci && (
+
+      {gym && (
         <>
-          <div className="section-title"><h2>Training here now</h2><span className="label">{here.length}</span></div>
-          {here.length === 0 ? <Empty>No Spotters checked in here right now.</Empty> : here.map((s) => (
-            <div key={s.id} className="card flex items-center gap-3" data-testid={`row-here-${s.username}`}>
-              <Avatar name={s.displayName} />
-              <div className="flex-1 min0"><div className="text-sm font-semibold">{s.displayName}</div><div className="mono text-[11px] muted">{s.split || "—"} · streak {s.streak}</div></div>
-              <span className="chip chip-lime">{ago(s.ts)}</span>
-            </div>
-          ))}
+          <div className="section-title"><h2>Here now</h2><span className="label">{data!.here.length}</span></div>
+          {data!.here.length === 0 ? <Empty>{ci ? "Nobody else from Corpus is checked in here right now." : `Nobody is checked in at ${gym.name} right now.`}</Empty>
+            : data!.here.map((p) => <Person key={p.id} p={p} sub={`${ago(p.checkedInTs!)} ago · ${who(p)}`} />)}
+
+          <div className="section-title"><h2>Trains at {gym.name}</h2><span className="label">{data!.members.length}</span></div>
+          {data!.members.length === 0 ? <Empty>No one else has made this their home gym yet. Invite a training partner.</Empty>
+            : data!.members.map((p) => <Person key={p.id} p={p} sub={who(p)} />)}
         </>
       )}
+
       {elsewhere.length > 0 && (
         <>
-          <div className="section-title"><h2>{ci ? "Training elsewhere" : "Spotters training now"}</h2></div>
-          {elsewhere.map((s) => (
-            <div key={s.id} className="rowline" data-testid={`row-elsewhere-${s.username}`}><span className="text-sm">{s.displayName}</span><span className="mono text-xs muted">{s.gym} · {ago(s.ts)}</span></div>
-          ))}
+          <div className="section-title"><h2>{ci ? "Spotters elsewhere" : "Spotters training now"}</h2></div>
+          <div className="card" style={{ paddingTop: 0, paddingBottom: 0 }}>
+            {elsewhere.map((s) => (
+              <div key={s.id} className="rowline" data-testid={`row-elsewhere-${s.username}`}><span className="text-sm">{s.displayName}</span><span className="mono text-xs muted">{s.gym} · {ago(s.ts)}</span></div>
+            ))}
+          </div>
         </>
       )}
-      {!ci && elsewhere.length === 0 && data && <p className="text-xs faint">None of your Spotters are checked in right now.</p>}
+
+      <div className="card stack" data-testid="card-home-gym">
+        <div className="flex items-center justify-between gap-3" style={{ minHeight: 44 }}>
+          <div className="min0">
+            <div className="text-sm font-semibold">Home gym</div>
+            <div className="text-xs muted truncate" data-testid="text-home-gym">{home ? [home.name, home.address].filter(Boolean).join(" · ") : "Not set"}</div>
+          </div>
+          <button className="btn btn-sm btn-outline shrink-0" onClick={() => setPicker("home")} data-testid="button-set-home-gym">{home ? "Change" : "Set"}</button>
+        </div>
+        <label className="flex items-center justify-between gap-3" style={{ minHeight: 44 }}>
+          <span><span className="text-sm font-semibold block">Let people at my gym find me</span><span className="text-xs muted">Shows your name, split and streak to other Corpus members at the same gym</span></span>
+          <input type="checkbox" className="toggle" checked={data?.visible ?? auth.me?.gymVisible ?? true} onChange={(e) => setVisible(e.target.checked)} data-testid="toggle-gym-visible" />
+        </label>
+      </div>
+
+      {picker && <GymPicker title={picker === "home" ? "Set your home gym" : "Where are you training?"} cta={picker === "home" ? "Set" : "Check in"} onClose={() => setPicker(null)} onPick={picker === "home" ? setHome : checkInAt} />}
     </div>
   );
 }

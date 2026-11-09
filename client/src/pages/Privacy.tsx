@@ -48,7 +48,8 @@ export default function PrivacyPage({ onBack }: { onBack: () => void }) {
             <li>Your name and username.</li>
             <li>Finished workouts posted to the feed, if <i className="not-italic text-[var(--text)]">Share workouts</i> is on.</li>
             <li>Best lifts, body weight, streak and training split on leaderboards, if <i className="not-italic text-[var(--text)]">Share lifts on leaderboards</i> is on.</li>
-            <li>Your gym check-ins (gym name and time, shown for 3 hours), with your split and streak.</li>
+            <li>Your gym check-ins (gym name and time, shown for 3 hours), with your split and streak. Other Corpus members checked in at, or calling home, the same gym can see your name, split and streak too, unless you turn off "Let people at my gym find me" in Profile.</li>
+            <li>Gym search sends what you type (and, if you tap Near me, your approximate location) to Google Places or OpenStreetMap through our server. Your location is never stored on our server.</li>
             <li>Comments and likes you leave on their posts.</li>
           </L>
           <p><b className="text-[var(--text)]">Coaches</b> can see your data only after you link with their coach code. A linked coach gets a read-only view of your program, workouts, check-ins and meals. Progress photos and measurements are included only if <i className="not-italic text-[var(--text)]">Share private vault</i> is on. Coaches never see your Spotters or feed, and can't change your data. Remove a coach anytime in Profile.</p>
