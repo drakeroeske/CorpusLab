@@ -359,9 +359,9 @@ export default function Logger() {
       <div className="stack">
         <div className="card">
           <div className="label">No active workout</div>
-          <p className="text-sm muted mt-1">{t.day ? `${t.day.name} is planned today.` : days.length ? "Rest day. You can still train if you want to." : "No program yet. You can still log a workout."}</p>
-          {t.day && <button className="btn btn-primary btn-lg btn-block mt-3" onClick={() => set((st) => ({ ...st, activeSession: newSession(st, t.day!, t.readiness.score, t.inDeload, u) }))} data-testid="button-start-planned">Start {t.day.name}</button>}
-          <button className={`btn btn-block mt-3 ${t.day ? "btn-ghost" : "btn-primary btn-lg"}`} onClick={() => setStartOpen(true)} data-testid="button-start-different">{t.day ? "Start a different workout" : days.length ? "Start a workout" : "Start an empty workout"}</button>
+          <p className="text-sm muted mt-1">{t.doneToday && t.day ? `${t.doneToday.dayName} is done for today. You can still start another workout.` : t.day ? `${t.day.name} is planned today.` : days.length ? "Rest day. You can still train if you want to." : "No program yet. You can still log a workout."}</p>
+          {t.day && !t.doneToday && <button className="btn btn-primary btn-lg btn-block mt-3" onClick={() => set((st) => ({ ...st, activeSession: newSession(st, t.day!, t.readiness.score, t.inDeload, u) }))} data-testid="button-start-planned">Start {t.day.name}</button>}
+          <button className={`btn btn-block mt-3 ${t.day && !t.doneToday ? "btn-ghost" : "btn-primary btn-lg"}`} onClick={() => setStartOpen(true)} data-testid="button-start-different">{t.day && !t.doneToday ? "Start a different workout" : t.doneToday ? "Start another workout" : days.length ? "Start a workout" : "Start an empty workout"}</button>
         </div>
         {startOpen && <StartWorkoutSheet onClose={() => setStartOpen(false)} />}
         {t.readiness.score == null && <p className="text-xs faint">Tip: do your check-in first — targets adjust to readiness.</p>}

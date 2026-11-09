@@ -40,7 +40,7 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
           <div ref={end} />
         </div>
         <div className="flex flex-wrap gap-2 mt-4">
-          {SUGGEST.map((s) => <button key={s} className="chip" style={{ minHeight: 36, cursor: "pointer" }} onClick={() => ask(s)} data-testid={`chip-suggest-${SUGGEST.indexOf(s)}`}>{s}</button>)}
+          {SUGGEST.map((s) => <button key={s} className="chip" style={{ minHeight: 44, cursor: "pointer" }} onClick={() => ask(s)} data-testid={`chip-suggest-${SUGGEST.indexOf(s)}`}>{s}</button>)}
         </div>
         <div className="flex gap-2 mt-3" style={{ position: "sticky", bottom: 0, background: "var(--surface)", paddingTop: 8, paddingBottom: 4 }}>
           <input className="input" placeholder="Ask about your training…" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ask(q)} data-testid="input-coach" />

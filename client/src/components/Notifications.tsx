@@ -152,6 +152,8 @@ export function useNotifNudgeVisible() {
   const auth = useAuth();
   const st = usePushStatus();
   if (mode !== "remote" || auth.me?.isDemo || state.notifNudgeDismissed || st.subscribed !== false || st.perm === "denied") return false;
+  // Wait until the lifter has finished a workout, so it isn't the first thing a new account sees.
+  if (!state.sessions.some((x) => x.end)) return false;
   return st.support === "ok" || st.support === "ios-not-installed";
 }
 

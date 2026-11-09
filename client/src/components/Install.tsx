@@ -32,10 +32,17 @@ export function InstallCard() {
 }
 
 const KEY = "corpus.installHint.dismissed";
+const isDismissed = () => { try { return localStorage.getItem(KEY) === "1"; } catch { return true; } };
+/** True while the home-screen banner is on the Today screen, so other nudges can wait their turn. */
+export function useInstallBannerShown() {
+  const ins = useInstall();
+  const mobile = ins.ios || ins.canPrompt || /Android/i.test(navigator.userAgent);
+  return !isDismissed() && !ins.standalone && !ins.framed && mobile;
+}
 /** One-time dismissible banner for the Today screen on phones. */
 export function InstallBanner() {
   const ins = useInstall();
-  const [gone, setGone] = useState(() => { try { return localStorage.getItem(KEY) === "1"; } catch { return true; } });
+  const [gone, setGone] = useState(isDismissed);
   const [open, setOpen] = useState(false);
   const mobile = ins.ios || ins.canPrompt || /Android/i.test(navigator.userAgent);
   if (gone || ins.standalone || ins.framed || !mobile) return null;
@@ -48,7 +55,7 @@ export function InstallBanner() {
           <div className="text-sm font-semibold">Put Corpus on your home screen</div>
           <div className="text-xs muted">Full screen, one tap from your phone's home screen.</div>
         </div>
-        <button className="faint shrink-0" aria-label="Dismiss" onClick={dismiss} style={{ padding: 10, margin: -10 }} data-testid="button-dismiss-install"><X size={16} /></button>
+        <button className="faint shrink-0" aria-label="Dismiss" onClick={dismiss} style={{ padding: 14, margin: -14 }} data-testid="button-dismiss-install"><X size={16} /></button>
       </div>
       {ins.canPrompt
         ? <button className="btn btn-primary btn-block mt-3" onClick={async () => { if (await ins.prompt()) dismiss(); }} data-testid="button-banner-install"><Download size={16} /> Install app</button>

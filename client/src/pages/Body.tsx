@@ -217,7 +217,7 @@ export function Vault() {
     <div>
       <div className="card-flat flex gap-3 items-start" data-testid="text-vault-privacy">
         <Lock size={16} className="lime" style={{ flexShrink: 0, marginTop: 2 }} />
-        <p className="text-xs muted">Photos and measurements stay on this device. They are never posted to Spotters or shared with a coach unless you export them yourself.</p>
+        <p className="text-xs muted">Photos and measurements are private to your account and sync with your log. They are never posted to Spotters, and a coach only sees them if you turn on sharing in Me.</p>
       </div>
 
       <div className="section-title"><h2>Progress photos</h2><span className="label">{state.photos.length}</span></div>
