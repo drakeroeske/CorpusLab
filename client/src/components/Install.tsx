@@ -7,7 +7,7 @@ function IOSSteps() {
     <ol className="stack mt-3" style={{ gap: 10 }} data-testid="list-ios-install-steps">
       <li className="flex items-start gap-3"><span className="mono lime w-5 shrink-0">1</span><span className="text-sm">Tap the <Share size={14} className="inline -mt-1" /> <b>Share</b> button in Safari's toolbar.</span></li>
       <li className="flex items-start gap-3"><span className="mono lime w-5 shrink-0">2</span><span className="text-sm">Scroll down and tap <SquarePlus size={14} className="inline -mt-1" /> <b>Add to Home Screen</b>, then <b>Add</b>.</span></li>
-      <li className="flex items-start gap-3"><span className="mono lime w-5 shrink-0">3</span><span className="text-sm">Open RXS from your home screen and sign in once. iPhone keeps home screen apps separate from Safari.</span></li>
+      <li className="flex items-start gap-3"><span className="mono lime w-5 shrink-0">3</span><span className="text-sm">Open Corpus from your home screen and sign in once. iPhone keeps home screen apps separate from Safari.</span></li>
     </ol>
   );
 }
@@ -20,7 +20,7 @@ export function InstallCard() {
   );
   return (
     <div className="card" data-testid="card-install">
-      <div className="flex items-center gap-2"><Smartphone size={18} className="lime" /><span className="text-sm font-semibold">Add RXS to your home screen</span></div>
+      <div className="flex items-center gap-2"><Smartphone size={18} className="lime" /><span className="text-sm font-semibold">Add Corpus to your home screen</span></div>
       <p className="text-xs muted mt-1">Opens full screen like a regular app, with its own icon, and loads even with a weak gym signal.</p>
       {ins.canPrompt ? (
         <button className="btn btn-primary btn-block mt-3" onClick={() => ins.prompt()} data-testid="button-install-app"><Download size={16} /> Install app</button>
@@ -52,7 +52,7 @@ export function InstallBanner() {
       <div className="flex items-start gap-3">
         <Smartphone size={18} className="lime shrink-0 mt-0.5" />
         <div className="min0 flex-1">
-          <div className="text-sm font-semibold">Put RXS on your home screen</div>
+          <div className="text-sm font-semibold">Put Corpus on your home screen</div>
           <div className="text-xs muted">Full screen, one tap from your phone's home screen.</div>
         </div>
         <button className="faint shrink-0" aria-label="Dismiss" onClick={dismiss} style={{ padding: 14, margin: -14 }} data-testid="button-dismiss-install"><X size={16} /></button>

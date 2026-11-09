@@ -1,36 +1,31 @@
+import { Info } from "@/components/Term";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, FlaskConical, Lightbulb, Target } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
 import Logger from "./Logger";
 import { ProgramEditor } from "@/components/ProgramEditor";
+import { SaveAsWorkoutSheet, SavedWorkoutsCard } from "@/components/SavedWorkouts";
 import { ImportProgramSheet, ProgramInbox, ProgramLibrary } from "@/components/ProgramLibrary";
 import { Bar, Empty, Seg, Sheet } from "@/components/ui";
 import { EngineHeader } from "@/components/riso";
+import { Sectioned } from "@/components/Sections";
 import {
   addDays, dateKey, EXPERIMENT_TEMPLATES, experimentPhase, experimentReport, fmtDate, fmtW, r1, weekStart, weeklyReport, VOLUME_RANGE,
   sessionVolume, sessionPRs,
 } from "@/lib/engine";
 import { EX, MUSCLE_LABEL, MUSCLES, TEMPLATES, buildTemplate, newId } from "@/lib/exercises";
 import { convertProgram } from "@/lib/actions";
-import type { Experiment, Program } from "@/lib/types";
+import type { Experiment, Program, ProgramDay } from "@/lib/types";
 
 export default function Train() {
   const ui = useUI();
-  const subs = [["session", "Workout"], ["program", "Program"], ["lab", "Lab report"], ["experiments", "Experiments"], ["history", "History"]] as const;
   return (
     <div>
-      <EngineHeader title="Train" section="LOG" />
-      <nav className="subtabs" aria-label="Train sections">
-        {subs.map(([id, l]) => <button key={id} aria-pressed={ui.trainSub === id ? "true" : "false"} onClick={() => ui.setTrainSub(id)} data-testid={`subtab-${id}`}>{l}</button>)}
-      </nav>
-      <div className="screen">
-        {ui.trainSub === "session" && <Logger />}
-        {ui.trainSub === "program" && <ProgramTab />}
-        {ui.trainSub === "lab" && <LabReport />}
-        {ui.trainSub === "experiments" && <Experiments />}
-        {ui.trainSub === "history" && <History />}
-      </div>
+      <EngineHeader title="Train" />
+      <Sectioned name="Train" value={ui.sub.train ?? "session"} onChange={(s) => ui.setSub("train", s)}
+        sections={[{ id: "session", label: "Workout" }, { id: "program", label: "Program" }]}
+        render={(id) => (id === "program" ? <ProgramTab /> : <Logger />)} />
     </div>
   );
 }
@@ -43,6 +38,7 @@ function ProgramTab() {
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const program = state.program;
   // Edits save straight into your program (no separate Save step), so the next workout always follows what you see here.
+  const [saveDay, setSaveDay] = useState<ProgramDay | null>(null);
   const update = (p: Program) => { set((s) => ({ ...s, program: p })); setSavedAt(Date.now()); };
   useEffect(() => { if (savedAt == null) return; const id = setTimeout(() => setSavedAt(null), 1800); return () => clearTimeout(id); }, [savedAt]);
   const today = dateKey();
@@ -52,26 +48,27 @@ function ProgramTab() {
     <div>
       <ProgramInbox />
       {!program ? (
-        <Empty>No program yet. <div className="flex gap-2 justify-center mt-3"><button className="btn btn-sm" onClick={() => setTplOpen(true)}>Choose a template</button><button className="btn btn-sm" onClick={() => setImportOpen(true)}>Import</button></div></Empty>
+        <Empty>No program yet. <div className="flex gap-2 justify-center mt-3"><button className="btn btn-sm" onClick={() => setTplOpen(true)}>Choose or build one</button><button className="btn btn-sm" onClick={() => setImportOpen(true)}>Import</button></div></Empty>
       ) : (
         <>
           <div className="flex gap-2 mb-3">
-            <button className="btn btn-outline btn-sm flex-1" onClick={() => setTplOpen(true)} data-testid="button-load-template">Load template</button>
+            <button className="btn btn-outline btn-sm flex-1" onClick={() => setTplOpen(true)} data-testid="button-load-template">Change program</button>
             {inDeload
               ? <button className="btn btn-warn btn-sm flex-1" onClick={() => update({ ...program, deloadUntil: null })} data-testid="button-end-deload">End deload</button>
               : <button className="btn btn-outline btn-sm flex-1" onClick={() => { update({ ...program, deloadUntil: addDays(today, 6) }); ui.toast("Deload week: 60% volume, same weights"); }} data-testid="button-deload-now">Start deload week</button>}
           </div>
-          {live && <p className="note mb-2" data-testid="text-live-edit-hint"><b>[NOTE]</b> A workout is in progress. Changes here show up in it — tap "Update workout" on the Workout tab, or they apply automatically if you haven't logged a set yet.</p>}
+          {live && <p className="note mb-2" data-testid="text-live-edit-hint">A workout is in progress. Changes here show up in it — tap "Update workout" on the Workout tab, or they apply automatically if you haven't logged a set yet.</p>}
           <div className="flex items-center justify-between mb-1" style={{ minHeight: 20 }}>
             <span className="label">Program</span>
             <span className="mono text-[11px]" aria-live="polite" data-testid="text-autosave">{savedAt ? "Saved" : "Edits save automatically"}</span>
           </div>
-          <ProgramEditor program={program} units={profile.units} onChange={update} />
+          <ProgramEditor program={program} units={profile.units} onChange={update} onSaveDay={setSaveDay} />
         </>
       )}
+      <div className="mt-6 mb-6"><SavedWorkoutsCard /></div>
       <ProgramLibrary onImport={() => setImportOpen(true)} />
       {tplOpen && (
-        <Sheet title="Starter templates" onClose={() => setTplOpen(false)}>
+        <Sheet title="Choose a program" onClose={() => setTplOpen(false)}>
           <p className="text-sm muted mb-3">Replaces your current program (save a copy first in My programs if you want it back). Logged history is kept.</p>
           {TEMPLATES.map((t) => (
             <button key={t.id} className="card w-full text-left" onClick={() => { update(buildTemplate(t.id, profile.units, profile.experience, dateKey())); setTplOpen(false); }} data-testid={`button-template-${t.id}`}>
@@ -79,15 +76,17 @@ function ProgramTab() {
               <div className="text-xs muted mt-1">{t.days.map((d) => d.name).join(" · ")}</div>
             </button>
           ))}
+          <button className="btn btn-outline btn-block mt-3" onClick={() => { update({ name: "My Program", startDate: dateKey(), days: [{ id: newId("day"), name: "Day 1", weekdays: [1], exercises: [] }] }); setTplOpen(false); }} data-testid="button-build-scratch">Build my own</button>
         </Sheet>
       )}
       {importOpen && <ImportProgramSheet onClose={() => setImportOpen(false)} />}
+      {saveDay && <SaveAsWorkoutSheet defaultName={saveDay.name} make={(name) => ({ id: newId("sw"), name, exercises: saveDay.exercises.map((e) => ({ ...e, id: newId("pe") })) })} onClose={() => setSaveDay(null)} />}
     </div>
   );
 }
 void convertProgram;
 
-function LabReport() {
+export function LabReport() {
   const { state, targets, profile } = useStore();
   const [offset, setOffset] = useState(0);
   const from = addDays(weekStart(dateKey()), -7 * offset);
@@ -128,7 +127,7 @@ function LabReport() {
         <p className="mt-2 text-[15px]">{rep.focus}</p>
       </div>
 
-      <div className="section-title"><h2>Main lifts · e1RM</h2></div>
+      <div className="section-title"><h2 className="flex items-center gap-1">Main lifts · e1RM <Info k="e1rm" /></h2></div>
       <div className="card" style={{ padding: "4px 14px" }}>
         {rep.liftChanges.length === 0 ? <p className="text-sm muted py-3">No main lifts trained this week.</p> : rep.liftChanges.map((l) => {
           const d = l.to - l.from;
@@ -162,7 +161,7 @@ function LabReport() {
   );
 }
 
-function Experiments() {
+export function Experiments() {
   const { state, set } = useStore();
   const ui = useUI();
   const today = dateKey();
@@ -183,7 +182,7 @@ function Experiments() {
 
   return (
     <div data-testid="view-experiments">
-      <p className="text-sm muted mb-3">Test one variable at a time: 2-week baseline, then 4 weeks tracking it daily. RXS compares readiness, strength rate, and body weight between the two windows.</p>
+      <p className="text-sm muted mb-3">Test one variable at a time: 2-week baseline, then 4 weeks tracking it daily. Corpus compares readiness, strength rate, and body weight between the two windows.</p>
       {active.map((e) => <ExperimentCard key={e.id} exp={e} onReport={() => setReport(e)} />)}
       {active.length === 0 && <Empty>No experiment running.</Empty>}
       <button className="btn btn-primary btn-block mt-3" onClick={() => setNewOpen(true)} data-testid="button-new-experiment"><FlaskConical size={16} /> Start new experiment</button>
@@ -281,7 +280,7 @@ function ExperimentReportSheet({ exp, onClose }: { exp: Experiment; onClose: () 
   );
 }
 
-function History() {
+export function History() {
   const { state, profile } = useStore();
   const [open, setOpen] = useState<string | null>(null);
   const list = [...state.sessions].filter((s) => s.end).sort((a, b) => b.start - a.start);

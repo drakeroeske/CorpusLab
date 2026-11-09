@@ -61,12 +61,12 @@ export async function drawPRCard(canvas: HTMLCanvasElement, d: PRData) {
   g.fillRect(60, 690, W - 120, 4);
   g.font = `700 30px ${MONO}`;
   g.fillText(`e1RM ${Math.round(d.e1rm)} ${U}`, 60, 755);
-  g.fillText("VERIFIED BY RXS", 60, 805);
+  g.fillText("VERIFIED BY CORPUS", 60, 805);
   g.font = `400 30px ${MONO}`; wrap(g, `WHY: ${d.why.toUpperCase()}`, 60, 880, W - 120, 42);
   // footer
   g.fillRect(60, 1150, W - 120, 4);
   drawLogo(g, 60, 1190, 90, COBALT);
-  g.font = `64px ${DISPLAY}`; g.fillText("RXS", 175, 1262);
+  g.font = `64px ${DISPLAY}`; g.fillText("CORPUS", 175, 1262);
   g.font = `700 24px ${MONO}`; g.textAlign = "right"; g.fillText(d.name.toUpperCase(), W - 60, 1258); g.textAlign = "left";
   bakeGrain(g, W, H, 0.12);
   return canvas.toDataURL("image/png");
@@ -85,7 +85,7 @@ export function PRCardSheet({ data, onClose }: { data: PRData; onClose: () => vo
   const ref = useRef<HTMLCanvasElement>(null);
   const [url, setUrl] = useState<string>("");
   useEffect(() => { if (ref.current) drawPRCard(ref.current, data).then(setUrl); }, [data]);
-  const fname = `rxs-pr-${data.lift.toLowerCase().replace(/\W+/g, "-")}-${data.weight}x${data.reps}.png`;
+  const fname = `corpus-pr-${data.lift.toLowerCase().replace(/\W+/g, "-")}-${data.weight}x${data.reps}.png`;
   return (
     <Sheet title="PR card" onClose={onClose} testId="sheet-pr-card">
       <canvas ref={ref} style={{ display: "none" }} />

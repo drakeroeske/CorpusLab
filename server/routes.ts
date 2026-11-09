@@ -380,12 +380,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (existing.some((r) => r.status === "accepted")) return res.json({ status: "accepted", user: pub(target) });
     if (reverse) {
       must(await sb.from("friendships").update({ status: "accepted" }).eq("requester", target.id).eq("addressee", me.id));
-      void notify(target.id, "spotters", { title: "You're spotters", body: `${me.display_name} accepted your request. You'll see each other's finished workouts now.`, url: "/?go=spotters", tag: "spotter" });
+      void notify(target.id, "spotters", { title: "You're spotters", body: `${me.display_name} accepted your request. You'll see each other's finished workouts now.`, url: "/?go=social", tag: "spotter" });
       return res.json({ status: "accepted", user: pub(target) });
     }
     if (!existing.length) {
       must(await sb.from("friendships").insert({ requester: me.id, addressee: target.id }));
-      void notify(target.id, "spotters", { title: "New spotter request", body: `${me.display_name} (@${me.username}) wants you as a spotter.`, url: "/?go=spotters&sub=friends", tag: "spotter" });
+      void notify(target.id, "spotters", { title: "New spotter request", body: `${me.display_name} (@${me.username}) wants you as a spotter.`, url: "/?go=social&sub=friends", tag: "spotter" });
     }
     res.json({ status: "pending", user: pub(target) });
   }));
@@ -418,7 +418,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } else {
       must(await sb.from("friendships").insert({ requester: target.id, addressee: me.id, status: "accepted" }));
     }
-    void notify(target.id, "spotters", { title: "You're spotters", body: `${me.display_name} joined RXS from your invite link.`, url: "/?go=spotters", tag: "spotter" });
+    void notify(target.id, "spotters", { title: "You're spotters", body: `${me.display_name} joined Corpus from your invite link.`, url: "/?go=social", tag: "spotter" });
     res.json({ status: "accepted", user: pub(target) });
   }));
   // New code = old links and codes stop working (friends you already have stay).
@@ -443,7 +443,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/friends/:id/accept", authed(async (req, res, me) => {
     must(await sb.from("friendships").update({ status: "accepted" }).eq("requester", String(req.params.id)).eq("addressee", me.id));
-    void notify(String(req.params.id), "spotters", { title: "You're spotters", body: `${me.display_name} accepted your request.`, url: "/?go=spotters", tag: "spotter" });
+    void notify(String(req.params.id), "spotters", { title: "You're spotters", body: `${me.display_name} accepted your request.`, url: "/?go=social", tag: "spotter" });
     res.json({ ok: true });
   }));
 
@@ -516,7 +516,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (has) must(await sb.from("post_likes").delete().eq("post_id", p.id).eq("user_id", me.id));
     else {
       must(await sb.from("post_likes").insert({ post_id: p.id, user_id: me.id }));
-      if (p.user_id !== me.id) void notify(p.user_id, "spotters", { title: "Respect", body: `${me.display_name} gave respect on your workout.`, url: "/?go=spotters", tag: "respect" });
+      if (p.user_id !== me.id) void notify(p.user_id, "spotters", { title: "Respect", body: `${me.display_name} gave respect on your workout.`, url: "/?go=social", tag: "respect" });
     }
     res.json({ liked: !has });
   }));
@@ -528,7 +528,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!text) throw bad("Comment is empty");
     const p = await visiblePost(me, String(req.params.id));
     must(await sb.from("post_comments").insert({ post_id: p.id, user_id: me.id, text }));
-    if (p.user_id !== me.id) void notify(p.user_id, "spotters", { title: `${me.display_name} commented`, body: text, url: "/?go=spotters", tag: "comment" });
+    if (p.user_id !== me.id) void notify(p.user_id, "spotters", { title: `${me.display_name} commented`, body: text, url: "/?go=social", tag: "comment" });
     res.json({ ok: true });
   }));
 
@@ -746,7 +746,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/push/test", authed(async (req, res, me) => {
     noDemo(me);
     limit(req, "push-test", 10, 3600_000);
-    const sent = await notify(me.id, "test", { title: "RXS notifications are on", body: "This is what a reminder looks like. You can change what you get under Me → Notifications.", url: "/?go=me", tag: "test" });
+    const sent = await notify(me.id, "test", { title: "Corpus notifications are on", body: "This is what a reminder looks like. You can change what you get under Profile → Notifications.", url: "/?go=me", tag: "test" });
     res.json({ sent });
   }));
 

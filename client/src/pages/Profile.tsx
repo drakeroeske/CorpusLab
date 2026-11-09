@@ -1,3 +1,4 @@
+import { Info } from "@/components/Term";
 import { EngineHeader, setGrain, setInk, useGrain, useInk } from "@/components/riso";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, KeyRound, Lock, Copy, Database, Download, Eye, LogOut, MessageSquare, RefreshCw, Upload, UserCog, X } from "lucide-react";
@@ -12,11 +13,12 @@ import { ProgramEditor } from "@/components/ProgramEditor";
 import { SharedCodes } from "@/components/ProgramLibrary";
 import { RecoveryCodeView } from "@/components/Recovery";
 import { InstallCard } from "@/components/Install";
+import { PLEDGE_ENABLED, PledgeSheet } from "@/components/Pledge";
 import { NotificationsCard } from "@/components/Notifications";
 import { buildDemo } from "@/lib/demo";
 import { convertUnits, downloadText } from "@/lib/actions";
 import { dateKey, fmtDate, mean } from "@/lib/engine";
-import { newId } from "@/lib/exercises";
+import { customExercisesIn, newId } from "@/lib/exercises";
 import type { AppState, Client, Experience, Goal, Profile as P, Program, Sex } from "@/lib/types";
 
 const GOALS: { v: Goal; l: string }[] = [{ v: "muscle", l: "Build muscle" }, { v: "strength", l: "Get stronger" }, { v: "fatloss", l: "Lose fat" }, { v: "recomp", l: "Recomp" }];
@@ -34,7 +36,7 @@ export default function Profile() {
 
   return (
     <div>
-      <EngineHeader title="Profile" section="ME" />
+      <EngineHeader title="Profile" me={false} back={() => ui.setTab(ui.prevTab)} />
       <div className="screen">
         {(mode !== "readonly" && ((mode === "offline" && !storageAvailable() && !remoteAvailable()) || saveError)) && (
           <div className="card-flat flex gap-3 mb-3" style={{ borderColor: "var(--orange)" }} data-testid="text-storage-warning">
@@ -55,6 +57,10 @@ export default function Profile() {
         <InstallCard />
         {live && <NotificationsCard />}
         <GrainCard />
+        {PLEDGE_ENABLED && mode !== "readonly" && <PledgeCard />}
+        {mode !== "readonly" && (
+          <button className="btn btn-outline btn-block mt-3" onClick={() => { set((s) => ({ ...s, profile: s.profile ? { ...s.profile, tourDone: false } : s.profile })); ui.setTab("today"); }} data-testid="button-replay-tour">Replay the app tour</button>
+        )}
         <a href="#/privacy" className="btn btn-block mt-2" data-testid="link-profile-privacy">Privacy · what's stored and who sees it</a>
 
         <div className="section-title"><h2>Body & goal</h2></div>
@@ -89,7 +95,7 @@ export default function Profile() {
             <div className="stat"><div className="label">Rest day</div><div className="v">{targets.restCal}</div><div className="s">kcal</div></div>
             <div className="stat"><div className="label">Protein</div><div className="v">{targets.protein}g</div><div className="s">{targets.proteinPerKg} g/kg</div></div>
           </div>
-          <p className="mono text-[11px] muted mt-3">Mifflin–St Jeor BMR {targets.bmr} × activity {targets.activity} = TDEE {targets.tdee} {targets.goalAdj >= 0 ? "+" : ""}{targets.goalAdj} goal</p>
+          <p className="mono text-[11px] muted mt-3">Mifflin–St Jeor BMR {targets.bmr} × activity {targets.activity} = TDEE {targets.tdee} {targets.goalAdj >= 0 ? "+" : ""}{targets.goalAdj} goal <Info k="tdee" size={13} /></p>
         </div>
 
         <div className="section-title"><h2>Rest timer defaults</h2></div>
@@ -122,7 +128,7 @@ export default function Profile() {
           {mode !== "readonly" && <><button className="btn btn-outline btn-block" onClick={() => { replace(buildDemo()); ui.setTab("today"); ui.toast("Demo data loaded: 8 weeks of history"); }} data-testid="button-load-demo"><Database size={16} /> Load demo data</button>
           <button className="btn btn-ghost btn-block orange" onClick={() => setResetOpen(true)} data-testid="button-reset">Reset all data</button></>}
         </div>
-        <p className="text-[11px] faint text-center mt-4">{mode === "remote" ? `RXS · synced to @${auth.me?.username}` : mode === "readonly" ? "RXS · read-only coach view" : "RXS · all data stays on this device"}</p>
+        <p className="text-[11px] faint text-center mt-4">{mode === "remote" ? `Corpus · synced to @${auth.me?.username}` : mode === "readonly" ? "Corpus · read-only coach view" : "Corpus · all data stays on this device"}</p>
       </div>
 
       {exportOpen && <ExportSheet state={state} onClose={() => setExportOpen(false)} />}
@@ -147,7 +153,7 @@ function ExportSheet({ state, onClose }: { state: AppState; onClose: () => void 
   return (
     <Sheet title="Export data" onClose={onClose} testId="sheet-export">
       <p className="mono text-xs muted">{(text.length / 1024).toFixed(0)} KB · {state.sessions.length} sessions · {state.checkins.length} check-ins · {state.meals.length} meals</p>
-      <button className="btn btn-primary btn-lg btn-block mt-3" onClick={() => downloadText(`rxs-${dateKey()}.json`, text)} data-testid="button-download-json"><Download size={16} /> Download .json</button>
+      <button className="btn btn-primary btn-lg btn-block mt-3" onClick={() => downloadText(`corpus-${dateKey()}.json`, text)} data-testid="button-download-json"><Download size={16} /> Download .json</button>
       <button className="btn btn-block mt-2" onClick={async () => {
         try { await navigator.clipboard.writeText(text); setCopied(true); } catch { ref.current?.select(); document.execCommand?.("copy"); setCopied(true); }
       }} data-testid="button-copy-json">{copied ? "Copied" : "Copy to clipboard"}</button>
@@ -164,7 +170,7 @@ function ImportSheet({ onClose, onImport }: { onClose: () => void; onImport: (s:
   const parse = (raw: string) => {
     try {
       const s = JSON.parse(raw);
-      if (!s || typeof s !== "object" || !Array.isArray(s.sessions)) throw new Error("Not an RXS export");
+      if (!s || typeof s !== "object" || !Array.isArray(s.sessions)) throw new Error("Not a Corpus export");
       onImport(s as AppState);
     } catch (e) { setErr(e instanceof Error ? e.message : "Invalid JSON"); }
   };
@@ -558,7 +564,11 @@ function LiveCoachDashboard() {
         <ClientSheet key={client.id + (raw.updatedAt ?? "")} client={client} onClose={() => setOpen(null)} actions={{
           saveSessionNote: async (sessionId, note) => { await api("POST", `/api/coach/clients/${client.id}/session-note`, { sessionId, note }); await load(); },
           saveProgram: async (program) => { await api("PUT", `/api/coach/clients/${client.id}/program`, { program }); await load(); },
-          sendProgram: async (program) => { await api("POST", `/api/coach/clients/${client.id}/program-send`, { program }); },
+          sendProgram: async (program) => {
+            // The coach's own exercises travel with the program so the client sees real names.
+            const custom = customExercisesIn(program).map(({ archived: _a, ...e }) => e);
+            await api("POST", `/api/coach/clients/${client.id}/program-send`, { program: custom.length ? { ...program, customExercises: custom } : program });
+          },
           addNote: async (text) => { await api("POST", `/api/coach/clients/${client.id}/notes`, { text, date: dateKey() }); await load(); },
           openAccount: () => { setOpen(null); auth.viewAs({ id: client.id, name: client.name, state: upgradeState(raw.state!) }); },
         }} />
@@ -579,6 +589,23 @@ function GrainCard() {
       <div className="label mb-2">Paper grain</div>
       <Seg value={g} onChange={(v) => setGrain(v)} options={[{ v: "off", l: "Off" }, { v: "subtle", l: "Subtle" }, { v: "full", l: "Full" }]} testId="seg-grain" />
       <p className="text-xs mt-2">Photocopy texture over the app. Turn it off if you prefer a clean screen.</p>
+    </div>
+  );
+}
+
+/** The optional pledge: sign it any time, or see when you did. */
+function PledgeCard() {
+  const { profile } = useStore();
+  const [open, setOpen] = useState(false);
+  const signed = profile.pledgedAt;
+  return (
+    <div className="card flex items-center gap-3" data-testid="card-pledge">
+      <div className="min0 flex-1">
+        <div className="text-sm font-semibold">The pledge</div>
+        <p className="text-xs muted">{signed ? `Signed ${fmtDate(signed, { month: "short", day: "numeric", year: "numeric" })}.` : "Four promises to yourself about training. Optional."}</p>
+      </div>
+      <button className="btn btn-sm btn-outline shrink-0" onClick={() => setOpen(true)} data-testid="button-open-pledge">{signed ? "View" : "Sign"}</button>
+      {open && <PledgeSheet onClose={() => setOpen(false)} />}
     </div>
   );
 }

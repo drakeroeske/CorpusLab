@@ -9,10 +9,10 @@ export function RecoveryCodeView({ code, username, onDone, doneLabel = "Continue
     try { await navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* clipboard blocked */ }
   };
   const download = () => {
-    const txt = `RXS recovery code\n\nUsername: @${username}\nRecovery code: ${code}\n\nUse this on the sign-in screen (Forgot password?) to set a new password.\nEach code works once. After you use it you get a new one.\n`;
+    const txt = `Corpus recovery code\n\nUsername: @${username}\nRecovery code: ${code}\n\nUse this on the sign-in screen (Forgot password?) to set a new password.\nEach code works once. After you use it you get a new one.\n`;
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([txt], { type: "text/plain" }));
-    a.download = `rxs-recovery-${username}.txt`;
+    a.download = `corpus-recovery-${username}.txt`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };

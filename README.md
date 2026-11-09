@@ -1,4 +1,4 @@
-# RXS (CorpusLab)
+# Corpus (CorpusLab)
 
 Mobile-first, science-based training engine. Riso Lab design: paper / ink / cobalt, Anton + Archivo Black + Space Mono.
 

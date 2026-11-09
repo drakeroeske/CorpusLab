@@ -1,7 +1,7 @@
 // Turn a screenshot or pasted text of a workout plan into program days.
 // OCR runs in the browser (tesseract.js, loaded on demand) — the image never leaves the phone.
 import type { Program, ProgramDay, ProgramExercise, Units } from "./types";
-import { EX, EXERCISES, isCompound, newId } from "./exercises";
+import { EX, EXERCISES, allExercises, isCompound, newId } from "./exercises";
 
 /* ------------------------------------------------------------------ matching */
 // Common names people write that differ from our catalog names. Lower-case, loose.
@@ -98,7 +98,7 @@ export function matchExercise(raw: string): Candidate | null {
     score *= weight;
     if (score > 0 && (!best || score > best.score)) best = { exId, score };
   };
-  for (const ex of EXERCISES) {
+  for (const ex of allExercises()) {
     consider(ex.id, ex.name, 1);
     for (const a of ALIASES[ex.id] ?? []) consider(ex.id, a, 0.97);
   }

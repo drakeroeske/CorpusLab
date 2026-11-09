@@ -19,6 +19,10 @@ export interface Exercise {
   secondary: Muscle[];
   equipment: Equipment;
   pattern: Pattern;
+  /** Made by the user (id starts with cx_). Never offered as an automatic swap. */
+  custom?: boolean;
+  /** Custom exercise the user deleted: hidden from pickers, kept so history still has a name. */
+  archived?: boolean;
   /** strength ratio relative to the reference lift of its pattern (used for substitution weight conversion) */
   ratio: number;
 }
@@ -57,6 +61,8 @@ export interface Program {
   /** set by the server when a coach edits this program */
   coachEditedAt?: number;
   coachEditedBy?: string;
+  /** Only on shared copies: the custom exercises this program uses, so they arrive with it. */
+  customExercises?: Exercise[];
 }
 
 export interface Profile {
@@ -72,6 +78,10 @@ export interface Profile {
   coachMode: boolean;
   onboarded: boolean;
   barWeight: number;
+  /** When the optional pledge was signed (YYYY-MM-DD). */
+  pledgedAt?: string | null;
+  /** First-run tour: false = show it on Today; missing or true = done. Only new accounts start at false. */
+  tourDone?: boolean;
 }
 
 export interface SetLog {
@@ -91,6 +101,10 @@ export interface ExerciseLog {
   equivFactor: number;
   targetWeight: number;
   sets: SetLog[];
+  /** Added during the workout (not from the program day). Kept when the session re-syncs with the program. */
+  extra?: boolean;
+  /** Planned sets/reps for exercises outside the program (freestyle, saved workouts, added mid-workout). */
+  plan?: { sets: number; repMin: number; repMax: number };
 }
 
 export interface Session {
@@ -282,6 +296,13 @@ export interface ProgramInboxItem {
   program: Program;
 }
 
+/** A workout you can start any time; it never changes the weekly schedule. */
+export interface SavedWorkout {
+  id: string;
+  name: string;
+  exercises: ProgramExercise[];
+}
+
 export interface AppState {
   version: number;
   profile: Profile | null;
@@ -301,6 +322,10 @@ export interface AppState {
   clients: Client[];
   chat: ChatMsg[];
   activeSession: Session | null;
+  /** Reusable workouts outside the weekly schedule (e.g. "Arm day"). */
+  savedWorkouts?: SavedWorkout[];
+  /** Exercises the user made themselves (merged into EX at load). */
+  customExercises?: Exercise[];
   /** Programs saved for later (copies, templates you wrote, ones you imported). */
   savedPrograms?: SavedProgram[];
   /** Programs a coach sent you, waiting for a decision. */

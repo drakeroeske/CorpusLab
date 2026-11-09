@@ -7,10 +7,10 @@ import { useUI } from "@/App";
 import { api } from "@/lib/api";
 import { Seg, Sheet } from "./ui";
 import { Tag, shortDate } from "./riso";
-import { EX, EXERCISES, newId } from "@/lib/exercises";
+import { EX, allExercises, customExercisesIn, isKnownExercise, newId, registerCustomExercises } from "@/lib/exercises";
 import { dateKey } from "@/lib/engine";
 import { daysToProgram, ocrImage, parseProgramText, toProgramDays, type ParsedDay } from "@/lib/programImport";
-import type { Program, SavedProgram } from "@/lib/types";
+import type { Exercise, Program, SavedProgram } from "@/lib/types";
 
 const copyText = async (t: string) => { try { await navigator.clipboard.writeText(t); return true; } catch { return false; } };
 
@@ -41,7 +41,10 @@ export function ProgramLibrary({ onImport }: { onImport: () => void }) {
     if (!live) { ui.toast("Sign in to share programs"); return; }
     setBusy(name);
     try {
-      const r = await api<{ code: string; name: string }>("POST", "/api/programs/share", { program: p, name });
+      // Custom exercises ride along so the friend gets them too.
+      const custom = customExercisesIn(p).map(({ archived: _a, ...e }) => e);
+      const program: Program = custom.length ? { ...p, customExercises: custom } : p;
+      const r = await api<{ code: string; name: string }>("POST", "/api/programs/share", { program, name });
       setShare({ name: r.name, code: r.code });
     } catch (e) { ui.toast((e as Error).message || "Couldn't share"); } finally { setBusy(null); }
   };
@@ -60,7 +63,7 @@ export function ProgramLibrary({ onImport }: { onImport: () => void }) {
       {saved.length > 0 && (
         <div className="mt-3">
           {saved.map((sp) => (
-            <div key={sp.id} className="flex items-center gap-2" style={{ minHeight: 48, borderTop: "1px dashed var(--ink)" }} data-testid={`row-saved-${sp.id}`}>
+            <div key={sp.id} className="flex items-center gap-2" style={{ minHeight: 48, borderTop: "1px solid var(--line)" }} data-testid={`row-saved-${sp.id}`}>
               <div className="min0 flex-1">
                 <div className="font-semibold text-sm truncate">{sp.name}</div>
                 <div className="mono text-[11px]">{sp.program.days.length} days · {sp.program.days.reduce((a, d) => a + d.exercises.length, 0)} exercises · {shortDate(new Date(sp.savedAt).toISOString().slice(0, 10))}{sp.source !== "mine" && ` · from ${sp.from ?? sp.source}`}</div>
@@ -74,17 +77,17 @@ export function ProgramLibrary({ onImport }: { onImport: () => void }) {
       )}
       {share && (
         <Sheet title="Share program" onClose={() => setShare(null)} testId="sheet-share-program">
-          <p className="text-sm">Anyone with RXS can load <b>{share.name}</b> with this code — Spotters, clients, your coach. It copies the exercises, sets, reps and starting weights; their history stays theirs.</p>
+          <p className="text-sm">Anyone with Corpus can load <b>{share.name}</b> with this code — Spotters, clients, your coach. It copies the exercises, sets, reps and starting weights; their history stays theirs.</p>
           <div className="card mt-3 flex items-center justify-between gap-3">
             <span className="display text-[40px]" data-testid="text-share-code">{share.code}</span>
             <button className="btn btn-sm" onClick={async () => ui.toast((await copyText(share.code)) ? "Code copied" : "Couldn't copy")} data-testid="button-copy-share-code"><Copy size={14} /> Copy</button>
           </div>
           <button className="btn btn-block btn-primary mt-3" onClick={async () => {
-            const text = `Load my "${share.name}" program in RXS: open Train → Program → Import and enter code ${share.code}. ${location.origin}`;
+            const text = `Load my "${share.name}" program in Corpus: open Train → Program → Import and enter code ${share.code}. ${location.origin}`;
             if (navigator.share) { try { await navigator.share({ text }); return; } catch { /* cancelled */ } }
             ui.toast((await copyText(text)) ? "Message copied — paste it to your Spotters" : "Couldn't copy");
           }} data-testid="button-share-message"><Share2 size={16} /> Send to someone</button>
-          <p className="text-xs mt-3">Codes you've shared keep working until you delete them (Me → Data).</p>
+          <p className="text-xs mt-3">Codes you've shared keep working until you delete them (Profile → Data).</p>
         </Sheet>
       )}
     </div>
@@ -106,8 +109,8 @@ export function ProgramInbox() {
           <div className="font-semibold mt-1">{it.program.name}</div>
           <div className="mono text-[11px]">{it.from} · {it.program.days.length} days · {shortDate(new Date(it.ts).toISOString().slice(0, 10))}</div>
           <div className="flex gap-2 mt-2 flex-wrap">
-            <button className="btn btn-sm btn-primary" onClick={() => { set((s) => ({ ...s, program: { ...it.program, startDate: dateKey(), deloadUntil: null, coachEditedAt: Date.now(), coachEditedBy: it.from } })); dismiss(it.id); ui.toast(`Now on ${it.program.name}`); }} data-testid={`button-inbox-use-${it.id}`}>Switch to it</button>
-            <button className="btn btn-sm" onClick={() => { set((s) => ({ ...s, savedPrograms: [{ id: newId("sp"), name: it.program.name, savedAt: Date.now(), source: "coach", from: it.from, program: it.program }, ...(s.savedPrograms ?? [])] })); dismiss(it.id); ui.toast("Saved to My programs"); }} data-testid={`button-inbox-save-${it.id}`}>Save for later</button>
+            <button className="btn btn-sm btn-primary" onClick={() => { const p = adoptCarriedExercises(it.program, state.customExercises, set); set((s) => ({ ...s, program: { ...p, startDate: dateKey(), deloadUntil: null, coachEditedAt: Date.now(), coachEditedBy: it.from } })); dismiss(it.id); ui.toast(`Now on ${it.program.name}`); }} data-testid={`button-inbox-use-${it.id}`}>Switch to it</button>
+            <button className="btn btn-sm" onClick={() => { const p = adoptCarriedExercises(it.program, state.customExercises, set); set((s) => ({ ...s, savedPrograms: [{ id: newId("sp"), name: it.program.name, savedAt: Date.now(), source: "coach", from: it.from, program: p }, ...(s.savedPrograms ?? [])] })); dismiss(it.id); ui.toast("Saved to My programs"); }} data-testid={`button-inbox-save-${it.id}`}>Save for later</button>
             <button className="btn btn-sm btn-ghost" onClick={() => dismiss(it.id)} data-testid={`button-inbox-dismiss-${it.id}`}>Dismiss</button>
           </div>
         </div></div>
@@ -158,7 +161,8 @@ export function ImportProgramSheet({ onClose }: { onClose: () => void }) {
     } catch (e) { ui.toast((e as Error).message || "Not found"); } finally { setBusy(null); }
   };
 
-  const apply = (program: Program, from?: string) => {
+  const apply = (incoming: Program, from?: string) => {
+    const program = adoptCarriedExercises(incoming, state.customExercises, set);
     const fresh: Program = { ...program, startDate: dateKey(), deloadUntil: null, days: program.days.map((d) => ({ ...d, id: newId("day"), exercises: d.exercises.map((e) => ({ ...e, id: newId("pe") })) })) };
     if (how === "save") {
       set((s) => ({ ...s, savedPrograms: [{ id: newId("sp"), name: fresh.name, savedAt: Date.now(), source: from ? "code" : "import", from, program: fresh }, ...(s.savedPrograms ?? [])] }));
@@ -187,12 +191,12 @@ export function ImportProgramSheet({ onClose }: { onClose: () => void }) {
           <div key={di} className="card mt-3">
             <input className="input font-semibold" value={d.name} onChange={(e) => setParsed((p) => p!.map((x, i) => (i === di ? { ...x, name: e.target.value } : x)))} data-testid={`input-import-day-${di}`} />
             {d.exercises.map((e, ei) => (
-              <div key={ei} className="mt-2" style={{ borderTop: "1px dashed var(--ink)", paddingTop: 8 }} data-testid={`row-import-${di}-${ei}`}>
+              <div key={ei} className="mt-2" style={{ borderTop: "1px solid var(--line)", paddingTop: 8 }} data-testid={`row-import-${di}-${ei}`}>
                 <div className="mono text-[11px] truncate">read: “{e.raw}”{e.weight != null && ` · ${e.weight} ${profile.units}`}</div>
                 <div className="flex items-center gap-2 mt-1">
                   <select className="select flex-1 min0" value={e.exId ?? ""} onChange={(ev) => setRow(di, ei, { exId: ev.target.value || null, confidence: 1 })} data-testid={`select-import-${di}-${ei}`}>
                     <option value="">— skip this row —</option>
-                    {EXERCISES.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                    {allExercises().map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
                   </select>
                   <span className="mono text-xs shrink-0">{e.sets}×{e.repMin}{e.repMax !== e.repMin ? `–${e.repMax}` : ""}</span>
                   {e.exId && e.confidence < 0.7 && <Tag signal>Check</Tag>}
@@ -217,7 +221,7 @@ export function ImportProgramSheet({ onClose }: { onClose: () => void }) {
         {preview.program.days.map((d) => (
           <div key={d.id} className="card mt-2">
             <div className="font-semibold">{d.name}</div>
-            <div className="mono text-[11px] mt-1">{d.exercises.map((e) => `${EX[e.exId]?.name ?? e.exId} ${e.sets}×${e.repMin}${e.repMax !== e.repMin ? `–${e.repMax}` : ""}`).join(" · ")}</div>
+            <div className="mono text-[11px] mt-1">{d.exercises.map((e) => `${(isKnownExercise(e.exId) ? EX[e.exId].name : preview.program.customExercises?.find((c) => c.id === e.exId)?.name) ?? EX[e.exId].name} ${e.sets}×${e.repMin}${e.repMax !== e.repMin ? `–${e.repMax}` : ""}`).join(" · ")}</div>
           </div>
         ))}
         <ApplyChoice how={how} setHow={setHow} hasProgram={!!state.program} />
@@ -266,7 +270,7 @@ function ApplyChoice({ how, setHow, hasProgram }: { how: "replace" | "add" | "sa
   );
 }
 
-/** Codes you've shared (Me → Data): see how often they were used, revoke them. */
+/** Codes you've shared (Profile → Data): see how often they were used, revoke them. */
 export function SharedCodes() {
   const auth = useAuth();
   const ui = useUI();
@@ -278,7 +282,7 @@ export function SharedCodes() {
     <div className="card mt-3" data-testid="card-shared-codes">
       <div className="label">Program codes you've shared</div>
       {rows.map((r) => (
-        <div key={r.code} className="flex items-center gap-2" style={{ minHeight: 44, borderTop: "1px dashed var(--ink)" }} data-testid={`row-shared-${r.code}`}>
+        <div key={r.code} className="flex items-center gap-2" style={{ minHeight: 44, borderTop: "1px solid var(--line)" }} data-testid={`row-shared-${r.code}`}>
           <span className="mono font-bold" style={{ letterSpacing: "0.1em" }}>{r.code}</span>
           <span className="text-sm flex-1 min0 truncate">{r.name}</span>
           <span className="mono text-[11px]">{r.uses} use{r.uses === 1 ? "" : "s"}</span>
@@ -287,4 +291,20 @@ export function SharedCodes() {
       ))}
     </div>
   );
+}
+
+/** Custom exercises that came with a shared or coach-sent program join this user's library. Ids already here are kept
+ *  as they are (brought back if they'd been deleted, since the program uses them). Returns the program without them. */
+export function adoptCarriedExercises(incoming: Program, mine: Exercise[] | undefined, set: ReturnType<typeof useStore>["set"]): Program {
+  const { customExercises: carried, ...program } = incoming;
+  const valid = (carried ?? []).filter((e) => e && typeof e.id === "string" && e.id.startsWith("cx_") && typeof e.name === "string" && Array.isArray(e.primary));
+  if (!valid.length) return program;
+  const have = new Map((mine ?? []).map((e) => [e.id, e]));
+  const list: Exercise[] = [
+    ...(mine ?? []).map((e) => (e.archived && valid.some((v) => v.id === e.id) ? { ...e, archived: false } : e)),
+    ...valid.filter((e) => !have.has(e.id)).map((e) => ({ ...e, name: e.name.slice(0, 60), secondary: Array.isArray(e.secondary) ? e.secondary : [], ratio: 1, custom: true, archived: false })),
+  ];
+  registerCustomExercises(list);
+  set((s) => ({ ...s, customExercises: list }));
+  return program;
 }

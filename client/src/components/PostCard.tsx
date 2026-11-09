@@ -26,24 +26,24 @@ export function PostCard({ id, author, mine, ts, title, durationMin, prNo, sets,
   const shown = open ? comments : comments.slice(-2);
   return (
     <article className="card" style={{ padding: 0 }} data-testid={`card-post-${id}`}>
-      <div className="flex justify-between gap-2 px-3 py-2 label" style={{ borderBottom: "2px solid var(--ink)" }}>
+      <div className="flex justify-between gap-2 px-3 py-2 label" style={{ borderBottom: "1px solid var(--line)" }}>
         <span className="truncate">{mine ? "@YOU" : handle(author)} · {pending ? "SENDING…" : ago(ts)}</span>
         <span className="shrink-0">{prNo ? `PR CARD Nº ${pad3(prNo)}` : durationMin != null ? `${durationMin} MIN` : "CHECK-IN"}</span>
       </div>
       <div className="flex items-center gap-3 px-3 pt-3">
-        <div className="shrink-0" style={{ border: "2px solid var(--ink)", padding: 4, background: prCount ? "var(--signal)" : "transparent" }}>
+        <div className="shrink-0" style={{ border: "1px solid var(--line)", padding: 4, background: prCount ? "var(--signal)" : "transparent" }}>
           <Silhouette height={88} marks />
         </div>
         <div className="min0">
-          <div className="text-xs font-bold uppercase">{title} {prCount > 0 && <Tag signal>PR</Tag>}</div>
+          <div className="text-xs font-bold">{title} {prCount > 0 && <Tag signal>PR</Tag>}</div>
           {top && <div className="display mt-1" style={{ fontSize: 44 }} data-testid={`text-headline-${id}`}>{top.weight > 0 ? `${fmtW(top.weight)} ${top.units.toUpperCase()}` : `BW × ${top.reps}`}</div>}
-          {top && <div className="text-xs uppercase">{top.name}</div>}
+          {top && <div className="text-xs">{top.name}</div>}
         </div>
       </div>
-      <div className="px-3 pt-2 text-xs uppercase">
+      <div className="px-3 pt-2 text-xs">
         {sets.map((t, i) => (
           <div key={i} className={`flex justify-between gap-2 ${t.pr ? "font-bold" : ""}`}>
-            <span className="truncate">{t.name}{t.pr ? " · VERIFIED BY RXS" : ""}</span>
+            <span className="truncate">{t.name}{t.pr ? " · VERIFIED BY CORPUS" : ""}</span>
             <span className="shrink-0">{t.weight > 0 ? `${fmtW(t.weight)} ${t.units} × ${t.reps}` : `BW × ${t.reps}`}</span>
           </div>
         ))}
@@ -60,7 +60,7 @@ export function PostCard({ id, author, mine, ts, title, durationMin, prNo, sets,
       <div className="px-3 pt-2 pb-3">
         {comments.length > 2 && !open && <button className="label underline" style={{ minHeight: 28 }} onClick={() => setOpen(true)} data-testid={`button-comments-${id}`}>All {comments.length} comments</button>}
         {shown.map((c) => (
-          <div key={c.id} className="py-1 text-[13px]" style={{ borderTop: "1px dashed var(--ink)" }}><span className="font-bold uppercase">{c.who}</span> {c.text}</div>
+          <div key={c.id} className="py-1 text-[13px]" style={{ borderTop: "1px solid var(--line)" }}><span className="font-bold">{c.who}</span> {c.text}</div>
         ))}
         <form className="mt-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (text.trim()) onComment(text.trim()); setText(""); }}>
           <input className="input" placeholder="Comment" maxLength={280} value={text} onChange={(e) => setText(e.target.value)} data-testid={`input-comment-${id}`} />

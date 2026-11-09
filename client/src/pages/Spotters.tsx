@@ -1,3 +1,4 @@
+import { Term } from "@/components/Term";
 import { useMemo, useState } from "react";
 import { Award, Heart, MapPin, MessageCircle, Plus, Send, UserMinus, UserPlus, Users } from "lucide-react";
 import { useStore } from "@/lib/store";
@@ -12,35 +13,31 @@ import { useAuth } from "@/lib/auth";
 import SpottersLive from "@/pages/SpottersLive";
 import { PostCard } from "@/components/PostCard";
 import { EngineHeader, StreakCells, Tag } from "@/components/riso";
+import { Sectioned } from "@/components/Sections";
 
-type Sub = "feed" | "crews" | "gym" | "find" | "leaders";
 
 export default function Spotters() {
   const { live, viewing } = useAuth();
   if (viewing) return (
-    <div><EngineHeader title="Spotters" section="FEED" brand="SPOTTER" />
+    <div><EngineHeader title="Social" />
       <div className="screen"><Empty>Spotters is private to {viewing.name}. Coaches see training, recovery and nutrition only.</Empty></div></div>
   );
   return live ? <SpottersLive /> : <SpottersDemo />;
 }
 
 function SpottersDemo() {
-  const [sub, setSub] = useState<Sub>("feed");
+  const ui = useUI();
   return (
     <div>
-      <EngineHeader title="Spotters" section="FEED" brand="SPOTTER" />
-      <nav className="subtabs" aria-label="Spotters sections">
-        {([["feed", "Feed"], ["crews", "Crews"], ["gym", "Gym"], ["find", "Find"], ["leaders", "Leaders"]] as const).map(([id, l]) => (
-          <button key={id} aria-pressed={sub === id ? "true" : "false"} onClick={() => setSub(id)} data-testid={`subtab-spotters-${id}`}>{l}</button>
-        ))}
-      </nav>
-      <div className="screen">
-        {sub === "feed" && <Feed />}
-        {sub === "crews" && <Crews />}
-        {sub === "gym" && <Gym />}
-        {sub === "find" && <Find />}
-        {sub === "leaders" && <Leaders />}
-      </div>
+      <EngineHeader title="Social" />
+      <Sectioned name="Social" value={ui.sub.social ?? "feed"} onChange={(s) => ui.setSub("social", s)}
+        sections={[
+          { id: "feed", label: "Feed" }, { id: "crews", label: "Crews" },
+          { id: "gym", label: "Gym", title: "Your gym", more: true, hint: "Who trains where you do" },
+          { id: "find", label: "Find", title: "Find spotters", more: true, hint: "People matched to your schedule and lifts" },
+          { id: "leaders", label: "Leaders", title: "Leaderboards", more: true, hint: "Strength rankings among friends and everyone" },
+        ]}
+        render={(id) => (id === "crews" ? <Crews /> : id === "gym" ? <Gym /> : id === "find" ? <Find /> : id === "leaders" ? <Leaders /> : <Feed />)} />
     </div>
   );
 }
@@ -319,7 +316,7 @@ function Leaders() {
         <Seg options={[{ v: "friends" as const, l: "Spotters" }, { v: "all" as const, l: "Everyone" }]} value={scope} onChange={setScope} />
       </div>
       <div className="card mt-3" style={{ padding: "4px 14px" }}>
-        <div className="grid label py-2" style={{ gridTemplateColumns: "22px 1fr 70px 52px" }}><span>#</span><span>Lifter</span><span className="text-right">e1RM</span><span className="text-right">DOTS</span></div>
+        <div className="grid label py-2" style={{ gridTemplateColumns: "22px 1fr 70px 52px" }}><span>#</span><span>Lifter</span><span className="text-right"><Term k="e1rm" /></span><span className="text-right"><Term k="dots" /></span></div>
         {rows.map((r, i) => (
           <div key={r.id} className="grid items-center" style={{ gridTemplateColumns: "22px 1fr 70px 52px", minHeight: 48, borderTop: "1px solid var(--border)", ...(r.id === "me" ? { color: "var(--lime)" } : {}) }} data-testid={`row-leader-${r.id}`}>
             <span className="mono text-xs">{i + 1}</span>

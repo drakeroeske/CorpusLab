@@ -1,3 +1,4 @@
+import { Term } from "@/components/Term";
 import { useMemo, useRef, useState } from "react";
 import { Camera, Lock, Trash2 } from "lucide-react";
 import { useStore } from "@/lib/store";
@@ -5,7 +6,7 @@ import { useUI } from "@/App";
 import { useToday } from "@/lib/derived";
 import { BodyMap, FatigueLegend } from "@/components/BodyMap";
 import { Bar, Empty, LineChart, Seg, Sheet } from "@/components/ui";
-import { EngineHeader, FigCaption } from "@/components/riso";
+import { FigCaption } from "@/components/riso";
 import {
   addDays, avgSleep, bodyComp, bodyWeightSeries, daysBetween, e1rmSeries, fmtDate, mean, projection, proteinHitRate, r1,
   strengthTrendPct, weeklySets, whatIfMultiplier, VOLUME_RANGE,
@@ -13,26 +14,7 @@ import {
 import { EX, MAIN_LIFTS, MUSCLE_LABEL, MUSCLES, newId } from "@/lib/exercises";
 import type { Measurement, Muscle } from "@/lib/types";
 
-export default function Body() {
-  const [sub, setSub] = useState<"fatigue" | "trends" | "vault">("fatigue");
-  return (
-    <div>
-      <EngineHeader title="Body" section="BODY" />
-      <nav className="subtabs" aria-label="Body sections">
-        {([["fatigue", "Fatigue & volume"], ["trends", "Trends"], ["vault", "Private vault"]] as const).map(([id, l]) => (
-          <button key={id} aria-pressed={sub === id ? "true" : "false"} onClick={() => setSub(id)} data-testid={`subtab-body-${id}`}>{l}</button>
-        ))}
-      </nav>
-      <div className="screen">
-        {sub === "fatigue" && <FatigueView />}
-        {sub === "trends" && <TrendsView />}
-        {sub === "vault" && <Vault />}
-      </div>
-    </div>
-  );
-}
-
-function FatigueView() {
+export function FatigueView() {
   const { state } = useStore();
   const t = useToday();
   const [sel, setSel] = useState<Muscle | null>(null);
@@ -41,7 +23,7 @@ function FatigueView() {
   return (
     <div>
       <div className="card">
-        <FigCaption n={1} title="Muscle fatigue · now" stat="T½ 48H" />
+        <FigCaption title="Muscle fatigue · now" stat={<Term k="halfLife" />} />
         <div className="grid grid-cols-2 gap-1">
           <BodyMap values={t.fatigue} view="front" onTap={setSel} selected={sel} testId="bodymap-front" height={260} />
           <BodyMap values={t.fatigue} view="back" onTap={setSel} selected={sel} testId="bodymap-back" height={260} />
@@ -84,7 +66,7 @@ function FatigueView() {
   );
 }
 
-function TrendsView() {
+export function TrendsView() {
   const { state, profile, targets } = useStore();
   const t = useToday();
   const u = profile.units;
@@ -209,7 +191,7 @@ function resizeImage(file: File, max = 600): Promise<string> {
   });
 }
 
-function Vault() {
+export function Vault() {
   const { state, set, profile } = useStore();
   const ui = useUI();
   const t = useToday();

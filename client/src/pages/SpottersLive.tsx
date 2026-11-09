@@ -1,8 +1,10 @@
+import { Term } from "@/components/Term";
 import { useCallback, useEffect, useState } from "react";
 import { Award, Check, Copy, Heart, MapPin, MessageCircle, RefreshCw, Send, Share, Trash2, UserMinus, UserPlus, X } from "lucide-react";
 import { inviteLink } from "@/lib/invite";
 import { PostCard } from "@/components/PostCard";
 import { EngineHeader } from "@/components/riso";
+import { Sectioned } from "@/components/Sections";
 import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
 import { api } from "@/lib/api";
@@ -14,7 +16,6 @@ import { dots, fmtW, fromKg, r1, sessionPRs } from "@/lib/engine";
 import { EX } from "@/lib/exercises";
 import type { PublicStats } from "@/lib/social";
 
-type Sub = "feed" | "friends" | "gym" | "leaders";
 
 interface LivePost {
   id: string; kind: "session" | "checkin"; ts: number; author: PubUser; mine: boolean; likes: number; liked: boolean;
@@ -35,23 +36,21 @@ function Avatar({ name, me, size = 36 }: { name: string; me?: boolean; size?: nu
 }
 
 export default function SpottersLive() {
-  const [sub, setSub] = useState<Sub>("feed");
+  const ui = useUI();
+  const sub = ui.sub.social ?? "feed";
+  const setSub = (s: string) => ui.setSub("social", s);
   const [pending, setPending] = useState(0);
   useEffect(() => { api<{ incoming: unknown[] }>("GET", "/api/friends").then((r) => setPending(r.incoming.length)).catch(() => {}); }, [sub]);
   return (
     <div>
-      <EngineHeader title="Spotters" section="FEED" brand="SPOTTER" />
-      <nav className="subtabs" aria-label="Spotters sections">
-        {([["feed", "Feed"], ["friends", pending ? `Friends · ${pending}` : "Friends"], ["gym", "Gym"], ["leaders", "Leaders"]] as const).map(([id, l]) => (
-          <button key={id} aria-pressed={sub === id ? "true" : "false"} onClick={() => setSub(id)} data-testid={`subtab-spotters-${id}`}>{l}</button>
-        ))}
-      </nav>
-      <div className="screen">
-        {sub === "feed" && <Feed goFriends={() => setSub("friends")} />}
-        {sub === "friends" && <Friends onChange={setPending} />}
-        {sub === "gym" && <Gym />}
-        {sub === "leaders" && <Leaders />}
-      </div>
+      <EngineHeader title="Social" />
+      <Sectioned name="Social" value={sub} onChange={setSub}
+        sections={[
+          { id: "feed", label: "Feed" }, { id: "friends", label: pending ? `Friends · ${pending}` : "Friends", title: "Friends" },
+          { id: "gym", label: "Gym", title: "Your gym", more: true, hint: "Who trains where you do" },
+          { id: "leaders", label: "Leaders", title: "Leaderboards", more: true, hint: "Strength rankings among your spotters" },
+        ]}
+        render={(id) => (id === "friends" ? <Friends onChange={setPending} /> : id === "gym" ? <Gym /> : id === "leaders" ? <Leaders /> : <Feed goFriends={() => setSub("friends")} />)} />
     </div>
   );
 }
@@ -159,7 +158,7 @@ function Friends({ onChange }: { onChange: (n: number) => void }) {
   };
   const share = async () => {
     if (navigator.share) {
-      try { await navigator.share({ title: "Join me on RXS", text: `Spot me on RXS. Open this link to connect with ${auth.me?.displayName ?? "me"}:`, url: link }); } catch { /* cancelled */ }
+      try { await navigator.share({ title: "Join me on Corpus", text: `Spot me on Corpus. Open this link to connect with ${auth.me?.displayName ?? "me"}:`, url: link }); } catch { /* cancelled */ }
     } else copy();
   };
   const [resetAsk, setResetAsk] = useState(false);
@@ -323,7 +322,7 @@ function Leaders() {
       {data && rows.length === 0 && <div className="mt-3"><Empty>No one has logged this lift yet.</Empty></div>}
       {rows.length > 0 && (
         <div className="card mt-3" style={{ padding: "4px 14px" }}>
-          <div className="grid label py-2" style={{ gridTemplateColumns: "22px 1fr 70px 52px" }}><span>#</span><span>Lifter</span><span className="text-right">e1RM</span><span className="text-right">DOTS</span></div>
+          <div className="grid label py-2" style={{ gridTemplateColumns: "22px 1fr 70px 52px" }}><span>#</span><span>Lifter</span><span className="text-right"><Term k="e1rm" /></span><span className="text-right"><Term k="dots" /></span></div>
           {rows.map((r, i) => (
             <div key={r.id} className="grid items-center" style={{ gridTemplateColumns: "22px 1fr 70px 52px", minHeight: 48, borderTop: "1px solid var(--border)", ...(r.me ? { color: "var(--lime)" } : {}) }} data-testid={`row-leader-${r.username}`}>
               <span className="mono text-xs">{i + 1}</span>

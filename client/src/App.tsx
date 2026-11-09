@@ -10,7 +10,7 @@ applyInk();
 import Onboarding from "@/pages/Onboarding";
 import Today from "@/pages/Today";
 import Train from "@/pages/Train";
-import Body from "@/pages/Body";
+import Progress from "@/pages/Progress";
 import Spotters from "@/pages/Spotters";
 import ProfilePage from "@/pages/Profile";
 import { CheckInSheet } from "@/pages/CheckIn";
@@ -18,12 +18,16 @@ import { NutritionSheet } from "@/pages/Nutrition";
 import { InviteHandler } from "@/components/InviteHandler";
 import PrivacyPage from "@/pages/Privacy";
 import { CoachChat } from "@/pages/Coach";
+import { Tour } from "@/components/Tour";
 
-export type Tab = "today" | "train" | "body" | "spotters" | "profile";
+export type Tab = "today" | "train" | "progress" | "social" | "profile";
 export type SheetName = "checkin" | "nutrition" | "coach" | null;
 export interface UI {
   tab: Tab; setTab: (t: Tab) => void;
-  trainSub: string; setTrainSub: (s: string) => void;
+  /** Tab to return to from Profile (opened from the header avatar). */
+  prevTab: Exclude<Tab, "profile">;
+  /** Current sub-section of each tab, e.g. sub.train = "program". */
+  sub: Partial<Record<Tab, string>>; setSub: (t: Tab, s: string) => void;
   sheet: SheetName; open: (s: SheetName) => void;
   toast: (m: string) => void;
 }
@@ -46,11 +50,16 @@ function Shell() {
   const { state } = useStore();
   const { viewing, viewAs } = useAuth();
   const [tab, setTabState] = useState<Tab>("today");
-  const [trainSub, setTrainSub] = useState("session");
+  const [prevTab, setPrevTab] = useState<UI["prevTab"]>("today");
+  const [sub, setSubs] = useState<UI["sub"]>({});
   const [sheet, open] = useState<SheetName>(null);
   const t = useToast();
-  const setTab = (x: Tab) => { setTabState(x); window.scrollTo({ top: 0 }); };
-  const ui: UI = { tab, setTab, trainSub, setTrainSub, sheet, open, toast: t.show };
+  const setTab = (x: Tab) => {
+    if (x === "profile" && tab !== "profile") setPrevTab(tab as UI["prevTab"]);
+    setTabState(x); window.scrollTo({ top: 0 });
+  };
+  const setSub = (x: Tab, s: string) => setSubs((o) => ({ ...o, [x]: s }));
+  const ui: UI = { tab, setTab, prevTab, sub, setSub, sheet, open, toast: t.show };
   useDeepLinks(ui, !!state.profile?.onboarded && !viewing);
 
   if (viewing && !state.profile?.onboarded) return (
@@ -64,9 +73,8 @@ function Shell() {
   const tabs: { id: Tab; label: string }[] = [
     { id: "today", label: "Today" },
     { id: "train", label: "Train" },
-    { id: "body", label: "Body" },
-    { id: "spotters", label: "Spotters" },
-    { id: "profile", label: "Me" },
+    { id: "progress", label: "Progress" },
+    { id: "social", label: "Social" },
   ];
   const surface = "surface-riso";
   return (
@@ -76,8 +84,8 @@ function Shell() {
         {!viewing && <NotifPlanSync />}
         {tab === "today" && <Today />}
         {tab === "train" && <Train />}
-        {tab === "body" && <Body />}
-        {tab === "spotters" && <Spotters />}
+        {tab === "progress" && <Progress />}
+        {tab === "social" && <Spotters />}
         {tab === "profile" && <ProfilePage />}
         <nav className="tabbar" aria-label="Main">
           {tabs.map((x) => (
@@ -89,6 +97,8 @@ function Shell() {
         {sheet === "checkin" && <CheckInSheet onClose={() => open(null)} />}
         {sheet === "nutrition" && <NutritionSheet onClose={() => open(null)} />}
         {sheet === "coach" && <CoachChat onClose={() => open(null)} />}
+        {/* First-run tour: only new accounts start with tourDone === false (demo data and older accounts never do). */}
+        {!viewing && state.profile?.tourDone === false && <Tour />}
         <Toast msg={t.msg} />
       </div>
     </UICtx.Provider>

@@ -6,7 +6,7 @@ import type {
   AppState, CheckIn, Exercise, ExerciseLog, Goal, Meal, Muscle, Profile, Program, ProgramDay,
   ProgramExercise, Session, Sex, Spotter, Units, Experiment,
 } from "./types";
-import { EX, EXERCISES, MUSCLES, MUSCLE_LABEL, MAIN_LIFTS, isCompound } from "./exercises";
+import { EX, EXERCISES, MUSCLES, MUSCLE_LABEL, MAIN_LIFTS, allExercises, isCompound } from "./exercises";
 
 /* =========================== dates =========================== */
 export const pad = (n: number) => String(n).padStart(2, "0");
@@ -493,7 +493,8 @@ export function platesPerSide(total: number, bar: number, units: Units) {
 /** Same movement pattern + overlapping primary muscles; weight converted by ratio */
 export function substitutes(exId: string, target: number, inc: number) {
   const ex = EX[exId];
-  if (!ex) return [];
+  // Custom exercises have no reliable strength ratio, so no automatic swaps to or from them.
+  if (!ex || ex.custom) return [];
   return EXERCISES.filter((c) => c.id !== ex.id && c.pattern === ex.pattern && c.primary.some((m) => ex.primary.includes(m)))
     .map((c) => {
       const overlap = c.primary.filter((m) => ex.primary.includes(m)).length / Math.max(ex.primary.length, c.primary.length);
@@ -785,7 +786,7 @@ export function coachAnswer(q: string, ctx: CoachCtx): string {
   const ph = proteinHitRate(state, targets.protein, today, 14);
   const sets = weeklySets(state.sessions, addDays(today, -6), today);
   const dl = deloadCheck(state, today);
-  const mentioned = EXERCISES.find((e) => ql.includes(e.name.toLowerCase()) || ql.includes(e.id.replace(/_/g, " ")))
+  const mentioned = allExercises().find((e) => ql.includes(e.name.toLowerCase()) || ql.includes(e.id.replace(/_/g, " ")))
     ?? (ql.includes("bench") ? EX.bench_press : ql.includes("squat") ? EX.back_squat : ql.includes("deadlift") ? EX.deadlift : ql.includes("press") && (ql.includes("overhead") || ql.includes("ohp") || ql.includes("shoulder")) ? EX.ohp : ql.includes("row") ? EX.barbell_row : null);
 
   if (!state.sessions.length && !state.checkins.length) return "I don't have any of your data yet. Log a check-in and a workout (or load demo data from Profile) and I'll answer from your numbers.";
@@ -830,7 +831,7 @@ export function coachAnswer(q: string, ctx: CoachCtx): string {
   }
   if (/(experiment|creatine|caffeine)/.test(ql)) {
     const exp = state.experiments.find((e) => e.status === "active");
-    if (!exp) return "No experiment running. Start one from Train → Experiments.";
+    if (!exp) return "No experiment running. Start one from Progress → More → Experiments.";
     const ph2 = experimentPhase(exp, today);
     const rep = experimentReport(state, exp, today);
     return `${exp.name}: ${ph2.phase === "baseline" ? `baseline day ${ph2.day}/${ph2.of}` : `experiment day ${ph2.day}/${ph2.of}`}. So far readiness ${rep.base.readiness != null ? Math.round(rep.base.readiness) : "—"} baseline vs ${rep.exp.readiness != null ? Math.round(rep.exp.readiness) : "—"} during. ${rep.confidence}`;

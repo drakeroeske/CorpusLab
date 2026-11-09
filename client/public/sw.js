@@ -1,5 +1,5 @@
 /* Corpus service worker: keeps the app shell available offline. Never caches API calls. */
-const VERSION = "rxs-v5";
+const VERSION = "corpus-v6";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./favicon.svg", "./icon-192.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {
@@ -32,7 +32,7 @@ self.addEventListener("fetch", (e) => {
 
 /* ---- push notifications ---- */
 self.addEventListener("push", (e) => {
-  let data = { title: "RXS", body: "", url: "/", tag: "rxs" };
+  let data = { title: "Corpus", body: "", url: "/", tag: "rxs" };
   try { data = { ...data, ...e.data.json() }; } catch { if (e.data) data.body = e.data.text(); }
   e.waitUntil(self.registration.showNotification(data.title, {
     body: data.body, tag: data.tag, renotify: false, data: { url: data.url },
