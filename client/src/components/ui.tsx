@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { Minus, Plus, X } from "lucide-react";
-import { Logo } from "@/components/riso";
+import { BRAND_BLACK, BRAND_PINK, WORDMARK_LETTERS, WORDMARK_SQUARE, WORDMARK_VIEWBOX } from "@/lib/brand";
 
 // Sheets can stack (e.g. the exercise picker opens the New exercise form). Count them so page scrolling
 // only unlocks when the last one closes, no matter which order they unmount in.
@@ -143,7 +143,7 @@ export function LineChart({ series, height = 150, xLabels, yFmt = (v: number) =>
       {ticks.map((t, i) => (
         <g key={i}>
           <line x1={L} x2={W - Rr} y1={ys(t)} y2={ys(t)} stroke="var(--ink)" strokeWidth="1" strokeDasharray="3 3" opacity="0.35" vectorEffect="non-scaling-stroke" />
-          <text x={L - 6} y={ys(t) + 3} textAnchor="end" fontSize="9" fill="var(--ink)" fontFamily="Space Mono">{yFmt(t)}</text>
+          <text x={L - 6} y={ys(t) + 3} textAnchor="end" fontSize="9" fill="var(--ink)" fontFamily="Inter" fontWeight="700">{yFmt(t)}</text>
         </g>
       ))}
       {band && <rect x={L} width={W - L - Rr} y={ys(band.y1)} height={Math.max(0, ys(band.y0) - ys(band.y1))} fill="var(--ink)" opacity="0.08" />}
@@ -161,10 +161,10 @@ export function LineChart({ series, height = 150, xLabels, yFmt = (v: number) =>
       {markers?.map((m, i) => (
         <g key={i}>
           <rect x={xs(m.x) - 4} y={ys(m.y) - 4} width="8" height="8" fill="var(--signal)" stroke="var(--ink)" strokeWidth="1.5" />
-          {m.label && <text x={xs(m.x) - 6} y={ys(m.y) - 8} textAnchor="end" fontSize="9" fill="var(--ink)" fontWeight="700" fontFamily="Space Mono">{m.label}</text>}
+          {m.label && <text x={xs(m.x) - 6} y={ys(m.y) - 8} textAnchor="end" fontSize="9" fill="var(--ink)" fontFamily="Inter" fontWeight="700">{m.label}</text>}
         </g>
       ))}
-      {xLabels?.map((l, i) => <text key={i} x={xs(l.x)} y={H - 4} textAnchor={i === 0 ? "start" : i === xLabels.length - 1 ? "end" : "middle"} fontSize="9" fill="var(--ink)" fontFamily="Space Mono">{l.label}</text>)}
+      {xLabels?.map((l, i) => <text key={i} x={xs(l.x)} y={H - 4} textAnchor={i === 0 ? "start" : i === xLabels.length - 1 ? "end" : "middle"} fontSize="9" fill="var(--ink)" fontFamily="Inter" fontWeight="700">{l.label}</text>)}
     </svg>
   );
 }
@@ -182,9 +182,9 @@ export function Empty({ children }: { children: ReactNode }) {
 
 export function Wordmark({ size = 22 }: { size?: number }) {
   return (
-    <span className="inline-flex items-center gap-2" aria-label="Corpus" data-testid="wordmark">
-      <Logo size={size * 1.1} />
-      <span className="display" style={{ fontSize: size * 1.3 }}>CORPUS</span>
-    </span>
+    <svg role="img" aria-label="Corpus" data-testid="wordmark" viewBox={`0 0 ${WORDMARK_VIEWBOX.w} ${WORDMARK_VIEWBOX.h}`} height={size * 1.25} width={(size * 1.25 * WORDMARK_VIEWBOX.w) / WORDMARK_VIEWBOX.h} style={{ display: "block" }}>
+      <path d={WORDMARK_SQUARE} fill={BRAND_PINK} />
+      {WORDMARK_LETTERS.map((d, i) => <path key={i} d={d} fill={BRAND_BLACK} />)}
+    </svg>
   );
 }

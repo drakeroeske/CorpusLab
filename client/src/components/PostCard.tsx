@@ -31,12 +31,12 @@ export function PostCard({ id, author, mine, ts, title, durationMin, prNo, sets,
         <span className="shrink-0">{prNo ? `PR CARD Nº ${pad3(prNo)}` : durationMin != null ? `${durationMin} MIN` : "CHECK-IN"}</span>
       </div>
       <div className="flex items-center gap-3 px-3 pt-3">
-        <div className="shrink-0" style={{ border: "1px solid var(--line)", padding: 4, background: prCount ? "var(--signal)" : "transparent" }}>
+        <div className="shrink-0" style={{ border: "1px solid var(--line)", padding: 4, background: prCount ? "var(--bone-dark)" : "transparent" }}>
           <Silhouette height={88} marks />
         </div>
         <div className="min0">
           <div className="text-xs font-bold">{title} {prCount > 0 && <Tag signal>PR</Tag>}</div>
-          {top && <div className="display mt-1" style={{ fontSize: 44 }} data-testid={`text-headline-${id}`}>{top.weight > 0 ? `${fmtW(top.weight)} ${top.units.toUpperCase()}` : `BW × ${top.reps}`}</div>}
+          {top && <div className="num-big mt-1" style={{ fontSize: 44 }} data-testid={`text-headline-${id}`}>{top.weight > 0 ? `${fmtW(top.weight)} ${top.units.toUpperCase()}` : `BW × ${top.reps}`}</div>}
           {top && <div className="text-xs">{top.name}</div>}
         </div>
       </div>

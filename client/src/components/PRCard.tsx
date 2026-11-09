@@ -2,22 +2,21 @@ import { useEffect, useRef, useState } from "react";
 import { Download } from "lucide-react";
 import { Sheet } from "./ui";
 import { downloadDataUrl } from "@/lib/actions";
+import { BRAND_BLACK, BRAND_PINK, WORDMARK_LETTERS, WORDMARK_SQUARE, WORDMARK_VIEWBOX } from "@/lib/brand";
 
 export interface PRData { lift: string; weight: number; reps: number; e1rm: number; units: string; why: string; name: string; date: string }
 
-const BONE = "#ECE8DF", COBALT = "#2B3FD6", SIGNAL = "#E9A6D8";
-const MONO = "'Space Mono', monospace", DISPLAY = "'Archivo Black', 'Arial Black', sans-serif";
+const BONE = "#ECE8DF", INK = BRAND_PINK, SIGNAL = "#E9A6D8";
+// Same type as the app: Archivo Black titles, Space Grotesk words, bold Inter numbers.
+const MONO = "'Space Grotesk', sans-serif", NUM = "Inter, sans-serif", DISPLAY = "'Archivo Black', 'Arial Black', sans-serif";
 
-function drawLogo(g: CanvasRenderingContext2D, x: number, y: number, size: number, ink: string) {
-  const nodes = Array.from({ length: 7 }, (_, i) => { const a = ((50 + (i * 260) / 6) * Math.PI) / 180; return [50 + 36 * Math.cos(a), 50 - 36 * Math.sin(a)] as [number, number]; });
-  const k = size / 100, P = (v: number, o: number) => o + v * k;
-  g.strokeStyle = ink; g.lineWidth = 5 * k; g.lineCap = "square";
-  const line = (a: [number, number], b: [number, number]) => { g.beginPath(); g.moveTo(P(a[0], x), P(a[1], y)); g.lineTo(P(b[0], x), P(b[1], y)); g.stroke(); };
-  for (let i = 0; i < 6; i++) line(nodes[i], nodes[i + 1]);
-  for (const i of [0, 2, 4, 6]) line([50, 50], nodes[i]);
-  g.fillStyle = ink;
-  for (const [nx, ny] of nodes) g.fillRect(P(nx - 6, x), P(ny - 6, y), 12 * k, 12 * k);
-  g.fillRect(P(41, x), P(41, y), 18 * k, 18 * k);
+/** The Corpus wordmark, `width` px wide, top-left at x, y. */
+function drawWordmark(g: CanvasRenderingContext2D, x: number, y: number, width: number) {
+  const k = width / WORDMARK_VIEWBOX.w;
+  g.save(); g.translate(x, y); g.scale(k, k);
+  g.fillStyle = BRAND_PINK; g.fill(new Path2D(WORDMARK_SQUARE));
+  g.fillStyle = BRAND_BLACK; for (const d of WORDMARK_LETTERS) g.fill(new Path2D(d));
+  g.restore();
 }
 function drawDiagram(g: CanvasRenderingContext2D, cx: number, cy: number, r: number, ink: string) {
   g.strokeStyle = ink; g.lineWidth = 2;
@@ -36,37 +35,39 @@ function bakeGrain(g: CanvasRenderingContext2D, W: number, H: number, amount: nu
   g.putImageData(img, 0, 0);
 }
 
-/** Draw a 1080×1350 Riso PR card (bone, pink band, cobalt ink) as PNG. */
+/** Draw a 1080×1350 Riso PR card (bone, light pink band, pink ink) as PNG. */
 export async function drawPRCard(canvas: HTMLCanvasElement, d: PRData) {
   const W = 1080, H = 1350;
   canvas.width = W; canvas.height = H;
-  try { await Promise.all([document.fonts.load(`400 80px ${DISPLAY}`), document.fonts.load(`700 80px ${MONO}`), document.fonts.load(`400 30px ${MONO}`)]); } catch { /* fonts optional */ }
+  try { await Promise.all([document.fonts.load(`400 80px ${DISPLAY}`), document.fonts.load(`700 80px ${MONO}`), document.fonts.load(`400 30px ${MONO}`), document.fonts.load(`700 80px ${NUM}`)]); } catch { /* fonts optional */ }
   const g = canvas.getContext("2d")!;
   const U = d.units.toUpperCase();
   g.fillStyle = BONE; g.fillRect(0, 0, W, H);
   // pink header band
   g.fillStyle = SIGNAL; g.fillRect(0, 0, W, 250);
-  g.fillStyle = COBALT; g.fillRect(0, 250, W, 8);
+  g.fillStyle = INK; g.fillRect(0, 250, W, 8);
+  g.fillStyle = BRAND_BLACK;
   g.font = `700 26px ${MONO}`; g.textBaseline = "alphabetic";
   g.fillText("SPOTTER // PR", 60, 72);
-  g.textAlign = "right"; g.fillText(`${d.date.slice(5, 7)}.${d.date.slice(8, 10)}.${d.date.slice(2, 4)}`, W - 60, 72); g.textAlign = "left";
+  g.font = `700 26px ${NUM}`; g.textAlign = "right"; g.fillText(`${d.date.slice(5, 7)}.${d.date.slice(8, 10)}.${d.date.slice(2, 4)}`, W - 60, 72); g.textAlign = "left";
   g.font = `150px ${DISPLAY}`; g.fillText("NEW PR.", 50, 215);
   // diagram
-  drawDiagram(g, 860, 500, 140, COBALT);
+  drawDiagram(g, 860, 500, 140, INK);
   // lift + weight + delta
-  g.fillStyle = COBALT; g.font = `700 34px ${MONO}`;
+  g.fillStyle = INK; g.font = `700 34px ${MONO}`;
   g.fillText(d.lift.toUpperCase(), 60, 350);
-  g.font = `190px ${DISPLAY}`; g.fillText(fmt(d.weight), 48, 540);
-  g.font = `700 54px ${MONO}`; g.fillText(`${U} × ${d.reps}`, 60, 620);
+  g.font = `700 190px ${NUM}`; g.fillText(fmt(d.weight), 44, 540);
+  g.font = `700 54px ${NUM}`; g.fillText(`${U} × ${d.reps}`, 60, 620);
   g.fillRect(60, 690, W - 120, 4);
-  g.font = `700 30px ${MONO}`;
+  g.font = `700 30px ${NUM}`;
   g.fillText(`e1RM ${Math.round(d.e1rm)} ${U}`, 60, 755);
+  g.font = `700 30px ${MONO}`;
   g.fillText("VERIFIED BY CORPUS", 60, 805);
   g.font = `400 30px ${MONO}`; wrap(g, `WHY: ${d.why.toUpperCase()}`, 60, 880, W - 120, 42);
   // footer
   g.fillRect(60, 1150, W - 120, 4);
-  drawLogo(g, 60, 1190, 90, COBALT);
-  g.font = `64px ${DISPLAY}`; g.fillText("CORPUS", 175, 1262);
+  drawWordmark(g, 60, 1192, 300);
+  g.fillStyle = INK;
   g.font = `700 24px ${MONO}`; g.textAlign = "right"; g.fillText(d.name.toUpperCase(), W - 60, 1258); g.textAlign = "left";
   bakeGrain(g, W, H, 0.12);
   return canvas.toDataURL("image/png");

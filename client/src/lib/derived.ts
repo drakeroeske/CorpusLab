@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useStore } from "./store";
 import {
-  computeReadiness, dateKey, dayForDate, dayMuscles, deloadCheck, hrvBaseline, logsForPe, muscleFatigue,
+  computeReadiness, trainingLoad, dateKey, dayForDate, dayMuscles, deloadCheck, hrvBaseline, logsForPe, muscleFatigue,
   phaseInfo, plateauFlags, prescribe, setProteinTarget, fatiguePct, sessionPRs, e1rmSeries, avgSleep, proteinHitRate,
   addDays, daysBetween, mean, r1, proteinByDate, fmtDate, fmtW, readinessEffect, roundTo, type Prescription,
 } from "./engine";
@@ -16,7 +16,7 @@ export function useToday() {
     const day = dayForDate(state.program, today);
     const checkin = state.checkins.find((c) => c.date === today);
     const muscles = dayMuscles(day);
-    const readiness = computeReadiness(checkin, hrvBaseline(state.checkins, today), muscles);
+    const readiness = computeReadiness(checkin, hrvBaseline(state.checkins, today), muscles, trainingLoad(state.sessions, today));
     const fatigueUnits = muscleFatigue(state.sessions, state.checkins, state.meals, targets.protein, Date.now());
     const fatigue = Object.fromEntries(Object.entries(fatigueUnits).map(([k, v]) => [k, fatiguePct(v)])) as Record<Muscle, number>;
     const flags = plateauFlags(state, today);

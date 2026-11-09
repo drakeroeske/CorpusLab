@@ -18,7 +18,7 @@ export function RecoveryCodeView({ code, username, onDone, doneLabel = "Continue
   };
   return (
     <div data-testid="view-recovery-code">
-      <div className="flex items-center gap-2"><KeyRound size={18} className="lime" /><h2 className="text-lg font-semibold">Save your recovery code</h2></div>
+      <div className="flex items-center gap-2"><KeyRound size={18} className="lime" /><h2 className="display text-[20px]">Save your recovery code</h2></div>
       <p className="text-sm muted mt-2">If you forget your password, this code is the only way back into your account. Keep it somewhere safe, like your password manager, Notes or a screenshot.</p>
       <div className="card-flat mt-4 text-center" style={{ borderColor: "var(--lime)", background: "var(--lime-dim)" }}>
         <div className="label">Recovery code</div><div className="mono text-xs muted mt-1">for @{username}</div>

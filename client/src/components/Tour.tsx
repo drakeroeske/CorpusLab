@@ -108,7 +108,7 @@ export function Tour() {
         {finished ? (
           <>
             <div className="label">All set</div>
-            <h2 id="tour-title" className="text-[18px] font-bold mt-1">You're ready for day one</h2>
+            <h2 id="tour-title" className="display text-[20px] mt-1">You're ready for day one</h2>
             <p id="tour-text" className="text-sm mt-1">Want to make it official? The pledge is four promises to yourself. It's optional, and you can sign later in Profile.</p>
             <div className="flex gap-2 mt-4">
               <button className="btn btn-sm btn-ghost" onClick={done} data-testid="button-tour-done">Maybe later</button>
@@ -119,7 +119,7 @@ export function Tour() {
         ) : (
           <>
             <div className="label" aria-live="polite">{i + 1} of {STEPS.length}</div>
-            <h2 id="tour-title" className="text-[18px] font-bold mt-1">{step.title}</h2>
+            <h2 id="tour-title" className="display text-[20px] mt-1">{step.title}</h2>
             <p id="tour-text" className="text-sm mt-1">{step.text}</p>
             <div className="flex items-center gap-2 mt-4">
               <button className="btn btn-sm btn-ghost" style={{ paddingLeft: 0 }} onClick={done} data-testid="button-tour-skip">Skip tour</button>

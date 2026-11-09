@@ -1,7 +1,7 @@
 /** One place for every training term the app explains on tap, so the wording stays the same everywhere. */
 export const GLOSSARY = {
-  readiness: { term: "Readiness", text: "A 0–100 score from today's check-in (sleep, energy, soreness, stress, HRV). It adjusts today's weights: 75+ progress as planned, 50–74 hold weights, under 50 cut targets by 10%." },
-  confidence: { term: "Confidence", text: "How much of the check-in the readiness score is based on. Six inputs is high; two or three is low, so treat the score as a rough guide." },
+  readiness: { term: "Readiness", text: "A 0–100 score from today's check-in (sleep, energy, soreness, stress, HRV) and your training over the last 2 days compared with usual. It adjusts today's weights: 75+ HIGH, progress as planned; 50–74 MODERATE, hold weights; under 50 LOW, cut targets by 10%." },
+  confidence: { term: "Confidence", text: "How much of the check-in the readiness score is based on. Six or seven inputs is high; three or fewer is low, so treat the score as a rough guide." },
   rir: { term: "RIR", text: "Reps in reserve: how many more reps you could have done before failing. 2 RIR means you stopped with 2 left in the tank." },
   e1rm: { term: "e1RM", text: "Estimated one-rep max: the most you could lift once, worked out from the weight and reps you logged. No need to actually test it." },
   deload: { term: "Deload", text: "A lighter week (about 60% of your usual sets, same weights) that lets built-up fatigue clear so you come back stronger." },

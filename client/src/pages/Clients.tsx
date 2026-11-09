@@ -380,7 +380,7 @@ function ClientProgress({ cs, units }: { cs: AppState; units: string }) {
         <div className="flex items-end gap-1" style={{ height: 90 }}>
           {weeks.map((w) => (
             <div key={w.from} className="flex-1 flex flex-col items-center justify-end" style={{ height: "100%" }} title={`${fmtDate(w.from)}: ${Math.round(w.vol)} ${units}`}>
-              <div style={{ width: "100%", height: `${Math.max(2, (w.vol / maxVol) * 100)}%`, background: w.from === weeks[weeks.length - 1].from ? "var(--signal)" : "var(--ink)" }} />
+              <div style={{ width: "100%", height: `${Math.max(2, (w.vol / maxVol) * 100)}%`, background: w.from === weeks[weeks.length - 1].from ? "var(--ink-deep)" : "var(--ink)" }} />
             </div>
           ))}
         </div>

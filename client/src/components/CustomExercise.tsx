@@ -142,7 +142,7 @@ export function CustomExerciseSheet({ exercise, initialName = "", onClose, onSav
           {equipment ? ` · ${EQUIPMENT_LABEL[equipment]}` : ""} · {effKind === "compound" ? `Compound (${PATTERN_LABEL[effPattern]})` : "Isolation"}
         </p>
       </div>
-      {tried && missing && <p className="text-sm mt-4" role="alert" style={{ color: "var(--signal)" }} data-testid="text-custom-error">{missing}</p>}
+      {tried && missing && <p className="text-sm mt-4" role="alert" style={{ color: "var(--ink-deep)" }} data-testid="text-custom-error">{missing}</p>}
       <button className="btn btn-primary btn-block btn-lg mt-5" onClick={save} data-testid="button-save-custom">{exercise ? "Save changes" : "Create exercise"}</button>
 
       {exercise && (
