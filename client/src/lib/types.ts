@@ -25,6 +25,8 @@ export interface Exercise {
   archived?: boolean;
   /** strength ratio relative to the reference lift of its pattern (used for substitution weight conversion) */
   ratio: number;
+  /** Optional cues or setup notes on a custom exercise. */
+  notes?: string;
 }
 
 export type ProgressionStyle = "double" | "straight";

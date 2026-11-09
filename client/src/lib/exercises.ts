@@ -147,6 +147,10 @@ export const PATTERN_LABEL: Record<Exercise["pattern"], string> = {
 };
 
 export const isCompound = (ex: Exercise) => ex.pattern !== "isolation";
+export const EQUIPMENT_LABEL: Record<Exercise["equipment"], string> = {
+  barbell: "Barbell", dumbbell: "Dumbbell", machine: "Machine", cable: "Cable", bodyweight: "Bodyweight", smith: "Smith machine", kettlebell: "Kettlebell",
+};
+export const EQUIPMENT_LIST = Object.keys(EQUIPMENT_LABEL) as Exercise["equipment"][];
 
 /* ---------- templates ---------- */
 let uid = 0;
