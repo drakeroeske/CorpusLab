@@ -1,10 +1,9 @@
-import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, BookmarkPlus, ChevronDown, ChevronRight, Copy, GripVertical, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { ArrowDown, ArrowUp, BookmarkPlus, ChevronDown, ChevronRight, Copy, GripVertical, Plus, Trash2 } from "lucide-react";
 import { moveItem, useDragReorder } from "./DragList";
-import type { Exercise, Pattern, Program, ProgramDay, ProgramExercise, Units } from "@/lib/types";
-import { EX, EXERCISES, MUSCLE_LABEL, PATTERN_LABEL, customExercises, isCompound, newId } from "@/lib/exercises";
-import { useStore } from "@/lib/store";
-import { CustomExerciseSheet } from "./CustomExercise";
+import type { Program, ProgramDay, ProgramExercise, Units } from "@/lib/types";
+import { EX, isCompound, newId } from "@/lib/exercises";
+import { ExerciseCatalog } from "./ExerciseCatalog";
 import { NumInput, Seg, Sheet } from "./ui";
 import { DEFAULT_INC_PCT, fmtW, jumpFor } from "@/lib/engine";
 
@@ -12,65 +11,9 @@ const WD = ["S", "M", "T", "W", "T", "F", "S"];
 const WD_LONG = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export function ExercisePicker({ onPick, onClose, title = "Exercise library" }: { onPick: (id: string) => void; onClose: () => void; title?: string }) {
-  useStore(); // re-render when custom exercises change
-  const [q, setQ] = useState("");
-  const [pat, setPat] = useState<Pattern | "all">("all");
-  // null = browsing; "new" = creating; an Exercise = editing that one.
-  const [editing, setEditing] = useState<Exercise | "new" | null>(null);
-  const match = (e: Exercise) => (pat === "all" || e.pattern === pat) && (q === "" || e.name.toLowerCase().includes(q.toLowerCase()) || e.primary.some((m) => MUSCLE_LABEL[m].toLowerCase().includes(q.toLowerCase())));
-  const mine = customExercises().filter(match);
-  const list = EXERCISES.filter(match);
-
-  if (editing) return (
-    <CustomExerciseSheet exercise={editing === "new" ? undefined : editing} initialName={editing === "new" ? q.trim() : ""}
-      onClose={() => setEditing(null)} onSaved={(id) => { if (editing === "new") onPick(id); }} />
-  );
-
-  const row = (e: Exercise) => (
-    <div key={e.id} className="flex items-center">
-      <button className="rowline w-full text-left min0 flex-1" onClick={() => onPick(e.id)} data-testid={`pick-exercise-${e.id}`}>
-        <div className="min0">
-          <div className="font-semibold text-[15px]">{e.name}</div>
-          <div className="text-xs muted mt-0.5">{e.primary.map((m) => MUSCLE_LABEL[m]).join(", ")}{e.secondary.length ? <span className="faint"> · {e.secondary.map((m) => MUSCLE_LABEL[m]).join(", ")}</span> : null}</div>
-        </div>
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          <span className="chip">{e.custom ? "Custom" : PATTERN_LABEL[e.pattern]}</span>
-          <span className="label">{e.equipment}</span>
-        </div>
-      </button>
-      {e.custom && <button className="icon-btn shrink-0 ml-1" aria-label={`Edit ${e.name}`} onClick={() => setEditing(e)} data-testid={`button-edit-custom-${e.id}`}><Pencil size={15} /></button>}
-    </div>
-  );
-
   return (
     <Sheet title={title} onClose={onClose} full testId="sheet-exercise-picker">
-      <div className="relative mb-3">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 faint" />
-        <input className="input" style={{ paddingLeft: 36 }} placeholder="Search name or muscle" value={q} onChange={(e) => setQ(e.target.value)} data-testid="input-exercise-search" autoFocus />
-      </div>
-      <div className="scroll-x flex gap-2 mb-3">
-        {(["all", "squat", "hinge", "horizontal_push", "vertical_push", "horizontal_pull", "vertical_pull", "isolation"] as const).map((p) => (
-          <button key={p} className={`chip ${pat === p ? "chip-lime" : ""}`} style={{ height: 32 }} onClick={() => setPat(p)} data-testid={`filter-pattern-${p}`}>{p === "all" ? "All" : PATTERN_LABEL[p]}</button>
-        ))}
-      </div>
-      {mine.length + list.length === 0 && (
-        <div className="empty mb-3" data-testid="text-no-exercise-match">
-          <p className="text-sm">No exercise matches “{q}”.</p>
-          <button className="btn btn-primary btn-sm mt-3" onClick={() => setEditing("new")} data-testid="button-create-from-search"><Plus size={14} /> Create “{q.trim()}”</button>
-        </div>
-      )}
-      {mine.length > 0 && (
-        <div className="mb-4" data-testid="group-your-exercises">
-          <div className="label mb-2">Your exercises</div>
-          {mine.map(row)}
-        </div>
-      )}
-      {list.length > 0 && <div className="label mb-2">{mine.length ? "Library · " : ""}{list.length} exercises</div>}
-      <div>{list.map(row)}</div>
-      <div className="mt-4 mb-2 text-center">
-        <p className="text-xs muted mb-2">Can't find it?</p>
-        <button className="btn btn-outline btn-block" onClick={() => setEditing("new")} data-testid="button-create-exercise"><Plus size={16} /> Create exercise</button>
-      </div>
+      <ExerciseCatalog onPick={onPick} />
     </Sheet>
   );
 }

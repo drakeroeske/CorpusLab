@@ -16,6 +16,7 @@ import {
 } from "@/lib/engine";
 import { EX, MUSCLE_LABEL, MUSCLES, TEMPLATES, buildTemplate, newId } from "@/lib/exercises";
 import { convertProgram } from "@/lib/actions";
+import { ExerciseCatalog } from "@/components/ExerciseCatalog";
 import type { Experiment, Program, ProgramDay } from "@/lib/types";
 
 export default function Train() {
@@ -24,8 +25,18 @@ export default function Train() {
     <div>
       <EngineHeader title="Train" />
       <Sectioned name="Train" value={ui.sub.train ?? "session"} onChange={(s) => ui.setSub("train", s)}
-        sections={[{ id: "session", label: "Workout" }, { id: "program", label: "Program" }]}
-        render={(id) => (id === "program" ? <ProgramTab /> : <Logger />)} />
+        sections={[{ id: "session", label: "Workout" }, { id: "program", label: "Program" }, { id: "exercises", label: "Exercises" }]}
+        render={(id) => (id === "program" ? <ProgramTab /> : id === "exercises" ? <ExercisesTab /> : <Logger />)} />
+    </div>
+  );
+}
+
+/** Browse every exercise by muscle, equipment or type, and manage your own. */
+function ExercisesTab() {
+  return (
+    <div data-testid="view-exercises">
+      <p className="text-sm muted mb-3">Everything you can add to a program or workout. Tap one for details and your history.</p>
+      <ExerciseCatalog embedded />
     </div>
   );
 }
