@@ -86,7 +86,7 @@ export default function PrivacyPage({ onBack }: { onBack: () => void }) {
         </S>
 
         <S title="Changes and contact">
-          <p>If this page changes, the date at the top changes too.{PRIVACY_CONTACT ? <> Questions or requests: <a className="lime" href={`mailto:${PRIVACY_CONTACT}`}>{PRIVACY_CONTACT}</a>.</> : " For questions, contact the person who invited you to RXS."}</p>
+          <p>If this page changes, the date at the top changes too.{PRIVACY_CONTACT ? <> Questions or requests: <a className="lime" style={{ display: "inline-block", padding: "12px 0" }} href={`mailto:${PRIVACY_CONTACT}`}>{PRIVACY_CONTACT}</a>.</> : " For questions, contact the person who invited you to RXS."}</p>
         </S>
 
         <button className="btn btn-block mt-8" onClick={onBack} data-testid="button-privacy-done">Back to RXS</button>

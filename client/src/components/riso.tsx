@@ -1,5 +1,5 @@
 // Riso Lab building blocks: Surface, Grain, PageHeader, Tag, NoteLine, FigCaption, LabTable, Rings, diagrams.
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useStore } from "@/lib/store";
 import { dateKey } from "@/lib/engine";
 
@@ -88,7 +88,9 @@ export function useHeaderMeta() {
   const count = state.sessions.filter((s) => s.end).length;
   const day = state.program ? state.program.days.find((d) => d.weekdays?.includes(new Date(today + "T12:00:00").getDay())) : null;
   const live = state.activeSession ? `${state.activeSession.dayName.toUpperCase()} [LIVE]` : null;
-  return { center: `SESSION ${pad3(count)} · ${shortDate(today)}`, status: live ?? (day ? `${day.name.toUpperCase()} [TODAY]` : "REST DAY") };
+  const done = state.sessions.find((s) => s.end && s.date === today);
+  const status = live ?? (done ? `${done.dayName.toUpperCase()} [DONE]` : day ? `${day.name.toUpperCase()} [TODAY]` : "REST DAY");
+  return { center: `SESSION ${pad3(count)} · ${shortDate(today)}`, status };
 }
 
 /** Screen header: corner metadata, huge display title with a full stop, optional sub line. */
@@ -96,12 +98,31 @@ export function PageHeader({ title, section = "ENGINE", brand = "RXS", status, c
   title: string; section?: string; brand?: string; status?: string; center?: string; sub?: ReactNode; right?: ReactNode; back?: () => void; testId?: string;
 }) {
   const t = title.toUpperCase().replace(/[.!?]$/, "");
+  const ref = useRef<HTMLHeadingElement>(null);
+  // Shrink the display title until it fits beside the right-hand button; wrap only as a last resort.
+  useLayoutEffect(() => {
+    const el = ref.current; if (!el) return;
+    const fit = () => {
+      el.style.fontSize = ""; el.style.whiteSpace = "nowrap";
+      const base = parseFloat(getComputedStyle(el).fontSize);
+      const avail = el.clientWidth;
+      const need = el.scrollWidth;
+      if (need > avail && avail > 0) {
+        const size = Math.floor(base * avail / need);
+        if (size >= 24) el.style.fontSize = `${size}px`;
+        else { el.style.fontSize = "24px"; el.style.whiteSpace = "normal"; }
+      }
+    };
+    fit();
+    const ro = new ResizeObserver(fit); ro.observe(el.parentElement ?? el);
+    return () => ro.disconnect();
+  }, [t, !!right]);
   return (
     <div className="pagehead" data-testid={testId}>
       <CornerLabels left={`${brand} // ${section}`} center={center} right={status} />
       {back && <button className="btn btn-sm mt-3" onClick={back} data-testid="button-back">← Back</button>}
       <div className="flex items-end justify-between gap-3">
-        <h1 className={`display min0 ${t.length > 12 ? "xlong" : t.length > (right ? 5 : 7) ? "long" : ""}`}>{t}.</h1>
+        <h1 ref={ref} className={`display min0 flex-1 ${t.length > 12 ? "xlong" : t.length > (right ? 5 : 7) ? "long" : ""}`}>{t}.</h1>
         {right && <div className="shrink-0 pb-2">{right}</div>}
       </div>
       {sub && <div className="mt-2 mono text-xs uppercase">{sub}</div>}

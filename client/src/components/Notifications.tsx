@@ -1,3 +1,4 @@
+import { useInstallBannerShown } from "@/components/Install";
 import { useEffect, useRef, useState } from "react";
 import { Bell, BellOff, X } from "lucide-react";
 import { useStore } from "@/lib/store";
@@ -146,8 +147,11 @@ export function NotifNudge({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { state, set, mode } = useStore();
   const auth = useAuth();
   const st = usePushStatus();
+  const installShown = useInstallBannerShown();
   if (mode !== "remote" || auth.me?.isDemo || state.notifNudgeDismissed || st.subscribed !== false || st.perm === "denied") return null;
   if (st.support !== "ok" && st.support !== "ios-not-installed") return null;
+  // One nudge at a time: wait until the home-screen banner is gone and the lifter has finished a session.
+  if (installShown || !state.sessions.some((x) => x.end)) return null;
   const dismiss = () => set((s) => ({ ...s, notifNudgeDismissed: true }));
   return (
     <div className="card" data-testid="card-notif-nudge">

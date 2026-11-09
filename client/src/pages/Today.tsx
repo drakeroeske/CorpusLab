@@ -77,7 +77,7 @@ export default function Today() {
           </div>
           {r.score != null && (
             <>
-              <button className="flex items-center gap-1 label mt-3" style={{ minHeight: 32 }} onClick={() => setShowParts(!showParts)} data-testid="button-toggle-breakdown">
+              <button className="flex items-center gap-1 label mt-3" style={{ minHeight: 44 }} onClick={() => setShowParts(!showParts)} data-testid="button-toggle-breakdown">
                 {showParts ? <ChevronDown size={14} /> : <ChevronRight size={14} />} Breakdown · {r.inputs}/6 inputs
               </button>
               {showParts && (

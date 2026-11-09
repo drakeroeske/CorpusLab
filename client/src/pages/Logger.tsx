@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { newSession, prescriptionsFor, prWhyStat, sessionStale, sessionSummary, syncSession, useToday } from "@/lib/derived";
 import { Tag } from "@/components/riso";
-import { e1rm, fmtDate, fmtW, jumpFor, logsForPe, platesPerSide, prescribe, restDefault, substitutes, warmupSets, type Prescription } from "@/lib/engine";
+import { dateKey, e1rm, fmtDate, fmtW, jumpFor, logsForPe, platesPerSide, prescribe, restDefault, substitutes, warmupSets, type Prescription } from "@/lib/engine";
 import { EX, MUSCLE_LABEL, isCompound, newId } from "@/lib/exercises";
 import type { ExerciseLog, FeedPost, ProgramExercise, Session, Units } from "@/lib/types";
 import { Seg, Sheet, Stepper } from "@/components/ui";
@@ -99,8 +99,8 @@ function ExerciseCard({ log, idx, rx, pe, active, onActivate, session, fatigue, 
             {subbed && <span className="chip chip-blue">sub for {EX[log.originalExId].name}</span>}
             {hot.length > 0 && <span className="chip chip-orange" data-testid={`badge-fatigue-${idx}`}><Flame size={11} />{MUSCLE_LABEL[hot[0]]} {fatigue[hot[0]]}%</span>}
           </div>
-          <div className="mono text-[15px] mt-1" data-testid={`text-target-${idx}`}>
-            <span className="lime">{target > 0 ? fmtW(target) : "BW"}</span>{target > 0 && <span className="muted"> {u}</span>} × {rx.repMin}–{rx.repMax} <span className="muted">· {rx.sets} sets · {rx.rir} RIR</span>
+          <div className="mono text-[14px] mt-1" data-testid={`text-target-${idx}`}>
+            <span className="lime">{target > 0 ? fmtW(target) : "BW"}</span>{target > 0 && <span className="muted"> {u}</span>} × {rx.repMin}–{rx.repMax} <span className="muted" style={{ whiteSpace: "nowrap" }}>· {rx.sets} sets · {rx.rir} RIR</span>
           </div>
           <div className="text-xs muted mt-1" data-testid={`text-why-${idx}`}>{rx.why}</div>
         </div>
@@ -299,12 +299,13 @@ export default function Logger() {
 
   if (!s) {
     const days = state.program?.days ?? [];
+    const doneToday = state.sessions.find((x) => x.end && x.date === dateKey());
     return (
       <div className="stack">
         <div className="card">
           <div className="label">No active workout</div>
-          <p className="text-sm muted mt-1">{t.day ? `${t.day.name} is planned today.` : "Rest day — you can still run any session."}</p>
-          {t.day && <button className="btn btn-primary btn-lg btn-block mt-3" onClick={() => set((st) => ({ ...st, activeSession: newSession(st, t.day!, t.readiness.score, t.inDeload, u) }))} data-testid="button-start-planned">Start {t.day.name}</button>}
+          <p className="text-sm muted mt-1">{doneToday ? `${doneToday.dayName} is done for today. Run another day below if you want more.` : t.day ? `${t.day.name} is planned today.` : "Rest day — you can still run any session."}</p>
+          {t.day && !doneToday && <button className="btn btn-primary btn-lg btn-block mt-3" onClick={() => set((st) => ({ ...st, activeSession: newSession(st, t.day!, t.readiness.score, t.inDeload, u) }))} data-testid="button-start-planned">Start {t.day.name}</button>}
           <div className="flex gap-2 mt-3">
             <select className="select" value={pick} onChange={(e) => setPick(e.target.value)} data-testid="select-other-day"><option value="">Run a different day…</option>{days.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
             <button className="btn" disabled={!pick} onClick={() => { const d = days.find((x) => x.id === pick)!; set((st) => ({ ...st, activeSession: newSession(st, d, t.readiness.score, t.inDeload, u) })); }} data-testid="button-start-other">Start</button>

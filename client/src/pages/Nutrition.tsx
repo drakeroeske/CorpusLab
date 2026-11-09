@@ -197,8 +197,8 @@ export function NutritionSheet({ onClose }: { onClose: () => void }) {
             </div>
           ))}
           <div className="flex gap-2 mt-3">
-            <input className="input" placeholder={mealNameFor()} value={name} onChange={(e) => setName(e.target.value)} data-testid="input-basket-name" aria-label="Meal name" />
-            <input className="input mono" type="time" style={{ width: 132 }} value={time} onChange={(e) => setTime(e.target.value)} data-testid="input-basket-time" aria-label="Meal time" />
+            <input className="input min0 flex-1" placeholder={mealNameFor()} value={name} onChange={(e) => setName(e.target.value)} data-testid="input-basket-name" aria-label="Meal name" />
+            <input className="input mono" type="time" style={{ width: 132, flexShrink: 0, paddingLeft: 8, paddingRight: 8 }} value={time} onChange={(e) => setTime(e.target.value)} data-testid="input-basket-time" aria-label="Meal time" />
           </div>
           <label className="flex items-center gap-2 text-sm muted" style={{ minHeight: 44 }}>
             <input type="checkbox" checked={fav} onChange={(e) => setFav(e.target.checked)} style={{ width: 18, height: 18, accentColor: "#111418" }} data-testid="checkbox-basket-favorite" />
@@ -238,7 +238,7 @@ export function NutritionSheet({ onClose }: { onClose: () => void }) {
               <div className="mono text-[11px] muted">{new Date(x.time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · {Math.round(x.p)}p {Math.round(x.c)}c {Math.round(x.f)}f {pre ? <span className="lime"> · pre-workout</span> : null}</div>
             </div>
             <div className="flex items-center gap-2"><span className="mono text-sm">{x.cal}</span>
-              <button className="faint" style={{ padding: 10 }} aria-label="Delete meal" onClick={() => set((s) => ({ ...s, meals: s.meals.filter((y) => y.id !== x.id) }))}><Trash2 size={14} /></button></div>
+              <button className="faint" aria-label="Delete meal" style={{ padding: 14, margin: -14 }} onClick={() => set((s) => ({ ...s, meals: s.meals.filter((y) => y.id !== x.id) }))}><Trash2 size={14} /></button></div>
           </div>
         );
       })}
@@ -284,7 +284,7 @@ function PortionPicker({ init, onCancel, onAdd }: { init: { food: FoodDef; qty: 
     <div className="card-flat mt-3" data-testid="card-portion-picker" style={{ borderColor: "var(--border-strong)" }}>
       <div className="flex items-start justify-between gap-2">
         <div className="min0"><div className="text-sm font-semibold">{food.name}</div>{food.brand && <div className="text-[12px] muted">{food.brand}</div>}</div>
-        <button className="faint shrink-0" aria-label="Cancel" onClick={onCancel} style={{ padding: 10, margin: -10 }}><X size={16} /></button>
+        <button className="faint shrink-0" aria-label="Cancel" onClick={onCancel} style={{ padding: 14, margin: -14 }}><X size={16} /></button>
       </div>
       <div className="flex gap-2 mt-3">
         <label className="field" style={{ width: 96 }}><span className="label">Amount</span>
@@ -334,7 +334,7 @@ function QuickAdd() {
         <div className="stack" style={{ gap: 8 }}>
           <div className="flex gap-2">
             <input className="input" placeholder="Meal name" value={m.name} onChange={(e) => setM({ ...m, name: e.target.value })} data-testid="input-meal-name" />
-            <input className="input mono" type="time" style={{ width: 132 }} value={m.time} onChange={(e) => setM({ ...m, time: e.target.value })} data-testid="input-meal-time" aria-label="Meal time" />
+            <input className="input mono" type="time" style={{ width: 132, flexShrink: 0, paddingLeft: 8, paddingRight: 8 }} value={m.time} onChange={(e) => setM({ ...m, time: e.target.value })} data-testid="input-meal-time" aria-label="Meal time" />
           </div>
           <div className="grid grid-cols-4 gap-2">
             {([["cal", "kcal"], ["p", "Protein"], ["c", "Carbs"], ["f", "Fat"]] as const).map(([k, l]) => (
