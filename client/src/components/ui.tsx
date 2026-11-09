@@ -2,14 +2,22 @@ import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode }
 import { Minus, Plus, X } from "lucide-react";
 import { Logo } from "@/components/riso";
 
+// Sheets can stack (e.g. the exercise picker opens the New exercise form). Count them so page scrolling
+// only unlocks when the last one closes, no matter which order they unmount in.
+let openSheets = 0;
 export function Sheet({ title, onClose, children, full, right, testId }: { title: ReactNode; onClose: () => void; children: ReactNode; full?: boolean; right?: ReactNode; testId?: string }) {
+  const closeRef = useRef(onClose); closeRef.current = onClose;
   useEffect(() => {
-    const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const k = (e: KeyboardEvent) => e.key === "Escape" && closeRef.current();
     window.addEventListener("keydown", k);
-    const prev = document.body.style.overflow;
+    openSheets++;
     document.body.style.overflow = "hidden";
-    return () => { window.removeEventListener("keydown", k); document.body.style.overflow = prev; };
-  }, [onClose]);
+    return () => {
+      window.removeEventListener("keydown", k);
+      openSheets = Math.max(0, openSheets - 1);
+      if (openSheets === 0) document.body.style.overflow = "";
+    };
+  }, []);
   return (
     <div className="overlay" onClick={onClose} role="dialog" aria-modal="true" data-testid={testId}>
       <div className={`sheet ${full ? "full" : ""}`} onClick={(e) => e.stopPropagation()}>
