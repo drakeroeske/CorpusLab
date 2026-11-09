@@ -1,15 +1,13 @@
 import { Info } from "@/components/Term";
 import { EngineHeader, setGrain, setInk, useGrain, useInk } from "@/components/riso";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, KeyRound, Lock, Copy, Database, Download, Eye, LogOut, MessageSquare, RefreshCw, Upload, UserCog, X } from "lucide-react";
+import { AlertTriangle, KeyRound, Lock, Copy, Database, Download, Eye, LogOut, MessageSquare, Upload, X } from "lucide-react";
 import { useAuth, type PubUser } from "@/lib/auth";
 import { api } from "@/lib/api";
-import { clientFromState } from "@/lib/social";
 import { useStore, emptyState, storageAvailable, remoteAvailable } from "@/lib/store";
-import { upgradeState } from "@/lib/empty";
 import { useUI } from "@/App";
-import { NumInput, Seg, Sheet, Spark, Stepper, initials } from "@/components/ui";
-import { ProgramEditor } from "@/components/ProgramEditor";
+import { NumInput, Seg, Sheet, Stepper, initials } from "@/components/ui";
+import { MessageThread, useUnreadMessages } from "@/components/MessageThread";
 import { SharedCodes } from "@/components/ProgramLibrary";
 import { RecoveryCodeView } from "@/components/Recovery";
 import { InstallCard } from "@/components/Install";
@@ -17,9 +15,9 @@ import { PLEDGE_ENABLED, PledgeSheet } from "@/components/Pledge";
 import { NotificationsCard } from "@/components/Notifications";
 import { buildDemo } from "@/lib/demo";
 import { convertUnits, downloadText, sessionsCsv, shareOrDownload } from "@/lib/actions";
-import { dateKey, fmtDate, mean } from "@/lib/engine";
-import { EX, customExercisesIn, newId } from "@/lib/exercises";
-import type { AppState, Client, Experience, Goal, Profile as P, Program, Sex } from "@/lib/types";
+import { dateKey, fmtDate } from "@/lib/engine";
+import { EX } from "@/lib/exercises";
+import type { AppState, Experience, Goal, Profile as P, Sex } from "@/lib/types";
 
 const GOALS: { v: Goal; l: string }[] = [{ v: "muscle", l: "Build muscle" }, { v: "strength", l: "Get stronger" }, { v: "fatloss", l: "Lose fat" }, { v: "recomp", l: "Recomp" }];
 
@@ -116,7 +114,14 @@ export default function Profile() {
                 </label>
               )}
             </div>
-            {live ? (auth.me?.role === "coach" ? <LiveCoachDashboard /> : <MyCoachCard />) : profile.coachMode && <CoachDashboard />}
+            {live ? (auth.me?.role === "coach" ? (
+              <div className="card mt-3 flex items-center gap-3" data-testid="card-clients-link">
+                <span className="text-sm flex-1">Your clients, their progress and messages now live on the Clients tab.</span>
+                <button className="btn btn-sm" onClick={() => ui.setTab("clients")} data-testid="button-go-clients">Open</button>
+              </div>
+            ) : <MyCoachCard />) : profile.coachMode && (
+              <div className="card mt-3 flex items-center gap-3"><span className="text-sm flex-1">Sample clients are on the Clients tab.</span><button className="btn btn-sm" onClick={() => ui.setTab("clients")} data-testid="button-go-clients">Open</button></div>
+            )}
           </>
         )}
 
@@ -222,157 +227,6 @@ function ImportSheet({ onClose, onImport }: { onClose: () => void; onImport: (s:
       <textarea className="textarea mono" style={{ height: 140, fontSize: 11 }} value={txt} onChange={(e) => { setTxt(e.target.value); setErr(""); }} data-testid="textarea-import" />
       {err && <p className="text-xs orange mt-2" data-testid="text-import-error">{err}</p>}
       <button className="btn btn-primary btn-lg btn-block mt-3" disabled={!txt.trim()} onClick={() => parse(txt)} data-testid="button-import-paste">Import</button>
-    </Sheet>
-  );
-}
-
-function clientFlags(c: Client): string[] {
-  const f: string[] = [];
-  let run = 0, maxRun = 0;
-  const rs = c.readiness.filter((r) => r > 0);
-  for (const r of rs) { run = r < 50 ? run + 1 : 0; maxRun = Math.max(maxRun, run); }
-  const tail = (() => { let n = 0; for (let i = rs.length - 1; i >= 0 && rs[i] < 50; i--) n++; return n; })();
-  if (tail >= 3) f.push(`readiness below 50 for ${tail} days`);
-  else if (maxRun >= 3) f.push(`readiness dipped below 50 for ${maxRun} days this week`);
-  else if (tail >= 1 && c.readiness[c.readiness.length - 1] > 0) f.push(`readiness ${c.readiness[c.readiness.length - 1]} today`);
-  if (c.missedRecent >= 2) f.push(`missed ${c.missedRecent} sessions`);
-  const p = mean(c.protein);
-  if (c.protein.some((x) => x > 0) && p < 85) f.push(`protein averaging ${Math.round(p)}% of target`);
-  if (c.adherence < 0.75) f.push(`adherence ${Math.round(c.adherence * 100)}%`);
-  return f;
-}
-
-function CoachDashboard() {
-  const { state } = useStore();
-  const [open, setOpen] = useState<string | null>(null);
-  const client = state.clients.find((c) => c.id === open);
-  if (!state.clients.length) return <div className="card mt-3"><p className="text-sm muted">No clients yet. Load demo data to see three sample clients.</p></div>;
-  const allFlags = state.clients.flatMap((c) => clientFlags(c).map((f) => `${c.name.split(" ")[0]}: ${f}`));
-  return (
-    <div className="mt-3" data-testid="view-coach-dashboard">
-      {allFlags.length > 0 && (
-        <div className="card" style={{ borderColor: "rgba(180,35,24,.4)" }}>
-          <div className="label orange mb-2 flex items-center gap-2"><AlertTriangle size={13} /> Needs attention</div>
-          {allFlags.map((f, i) => <p key={i} className="text-sm py-1" data-testid={`text-coach-flag-${i}`}>{f}</p>)}
-        </div>
-      )}
-      <div className="stack mt-3">
-        {state.clients.map((c) => {
-          const today = c.readiness[c.readiness.length - 1];
-          const flags = clientFlags(c);
-          return (
-            <button key={c.id} className="card w-full text-left" onClick={() => setOpen(c.id)} data-testid={`card-client-${c.id}`}>
-              <div className="flex items-center gap-3">
-                <span className="avatar">{initials(c.name)}</span>
-                <div className="flex-1 min0">
-                  <div className="text-sm font-semibold">{c.name}</div>
-                  <div className="text-[11px] muted truncate">Last: {c.lastSession.name} · {fmtDate(c.lastSession.date)} · {c.lastSession.topSet}</div>
-                </div>
-                <div className="text-right">
-                  <div className={`mono text-lg ${today < 50 ? "orange" : today >= 75 ? "lime" : "blue"}`}>{today}</div>
-                  <div className="label">ready</div>
-                </div>
-              </div>
-              <div className="flex items-center justify-between mt-3">
-                <Spark values={c.readiness} color={today < 50 ? "var(--orange)" : "var(--lime)"} width={90} />
-                <span className="mono text-xs muted">adherence {Math.round(c.adherence * 100)}%</span>
-                {flags.length > 0 ? <span className="chip chip-orange">{flags.length} flag{flags.length > 1 ? "s" : ""}</span> : <span className="chip chip-lime">on track</span>}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-      {client && <ClientSheet client={client} onClose={() => setOpen(null)} />}
-    </div>
-  );
-}
-
-interface ClientActions {
-  saveSessionNote: (sessionId: string, note: string) => Promise<void>;
-  saveProgram: (p: Program) => Promise<void>;
-  /** Drop a program into the client's inbox; they choose when to switch. */
-  sendProgram?: (p: Program) => Promise<void>;
-  addNote: (text: string) => Promise<void>;
-  openAccount?: () => void;
-}
-
-function ClientSheet({ client, onClose, actions }: { client: Client; onClose: () => void; actions?: ClientActions }) {
-  const { set, profile, state } = useStore();
-  const ui = useUI();
-  const [tab, setTab] = useState<"sessions" | "program" | "notes">("sessions");
-  const [prog, setProg] = useState<Program>(client.program);
-  const [sendOpen, setSendOpen] = useState(false);
-  const sendable = [...(state.program ? [{ id: "current", name: `${state.program.name} (what I'm running)`, program: state.program }] : []), ...(state.savedPrograms ?? []).map((sp) => ({ id: sp.id, name: sp.name, program: sp.program }))];
-  const [note, setNote] = useState("");
-  const [sessNotes, setSessNotes] = useState<Record<string, string>>(Object.fromEntries(client.recent.map((r) => [r.id, r.note])));
-  const updClient = (f: (c: Client) => Client) => set((s) => ({ ...s, clients: s.clients.map((c) => (c.id === client.id ? f(c) : c)) }));
-  const flags = clientFlags(client);
-  const act: ClientActions = actions ?? {
-    saveSessionNote: async (id, n) => updClient((c) => ({ ...c, recent: c.recent.map((x) => (x.id === id ? { ...x, note: n } : x)) })),
-    saveProgram: async (p) => updClient((c) => ({ ...c, program: p })),
-    addNote: async (text) => updClient((c) => ({ ...c, notes: [{ id: newId("n"), date: dateKey(), text }, ...c.notes] })),
-  };
-  const run = async (f: () => Promise<void>, msg?: string) => { try { await f(); if (msg) ui.toast(msg); } catch (e) { ui.toast((e as Error).message); } };
-  return (
-    <Sheet title={client.name} onClose={onClose} full testId="sheet-client" right={<UserCog size={18} className="muted" />}>
-      {act.openAccount && (
-        <button className="btn btn-outline btn-block mb-3" onClick={act.openAccount} data-testid="button-open-client-account"><Eye size={16} /> Open {client.name.split(" ")[0]}'s account (read-only)</button>
-      )}
-      {flags.length > 0 && <div className="flex flex-wrap gap-2 mb-3">{flags.map((f) => <span key={f} className="chip chip-orange">{f}</span>)}</div>}
-      <div className="stat-grid mb-3" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
-        <div className="stat"><div className="label">Readiness</div><div className="v">{client.readiness[client.readiness.length - 1]}</div><div className="s">7d avg {Math.round(mean(client.readiness))}</div></div>
-        <div className="stat"><div className="label">Adherence</div><div className="v">{Math.round(client.adherence * 100)}%</div><div className="s">4 weeks</div></div>
-        <div className="stat"><div className="label">Protein</div><div className="v">{Math.round(mean(client.protein))}%</div><div className="s">of target</div></div>
-      </div>
-      <Seg value={tab} onChange={setTab} options={[{ v: "sessions", l: "Sessions" }, { v: "program", l: "Program" }, { v: "notes", l: "Notes" }]} testId="seg-client-tab" />
-      <div className="mt-3">
-        {tab === "sessions" && (
-          <div className="stack">
-            {client.recent.map((r) => (
-              <div key={r.id} className="card-flat">
-                <div className="flex justify-between"><span className="text-sm font-semibold">{r.name}</span><span className="mono text-xs muted">{fmtDate(r.date)}</span></div>
-                <div className="mono text-xs muted mt-1">Top set {r.topSet}</div>
-                <div className="flex gap-2 mt-2">
-                  <input className="input" placeholder="Leave a note on this session" value={sessNotes[r.id] ?? ""} onChange={(e) => setSessNotes({ ...sessNotes, [r.id]: e.target.value })} data-testid={`input-session-note-${r.id}`} />
-                  <button className="btn" onClick={() => run(() => act.saveSessionNote(r.id, sessNotes[r.id] ?? ""), "Note saved")} data-testid={`button-save-session-note-${r.id}`}>Save</button>
-                </div>
-                {r.note && <p className="text-xs blue mt-2">Saved: {r.note}</p>}
-              </div>
-            ))}
-          </div>
-        )}
-        {tab === "program" && (
-          <>
-            <ProgramEditor program={prog} units={profile.units} onChange={setProg} />
-            <button className="btn btn-primary btn-lg btn-block mt-3" disabled={JSON.stringify(prog) === JSON.stringify(client.program)} onClick={() => run(() => act.saveProgram(prog), `Program updated for ${client.name.split(" ")[0]}`)} data-testid="button-save-client-program">Save program for {client.name.split(" ")[0]}</button>
-            {act.sendProgram && sendable.length > 0 && (
-              <button className="btn btn-block mt-2" onClick={() => setSendOpen(true)} data-testid="button-send-program-open">Send one of my programs</button>
-            )}
-            {sendOpen && (
-              <Sheet title="Send a program" onClose={() => setSendOpen(false)} testId="sheet-send-program">
-                <p className="text-sm">{client.name.split(" ")[0]} gets it on their Program tab and chooses to switch to it or save it — nothing changes until they do.</p>
-                {sendable.map((sp) => (
-                  <button key={sp.id} className="card w-full text-left mt-2" onClick={() => { setSendOpen(false); run(() => act.sendProgram!({ ...sp.program, name: sp.program.name, deloadUntil: null }), `Sent to ${client.name.split(" ")[0]}`); }} data-testid={`button-send-program-${sp.id}`}>
-                    <div className="font-semibold">{sp.name}</div>
-                    <div className="mono text-[11px] mt-1">{sp.program.days.length} days · {sp.program.days.map((d) => d.name).join(" · ")}</div>
-                  </button>
-                ))}
-              </Sheet>
-            )}
-          </>
-        )}
-        {tab === "notes" && (
-          <>
-            <textarea className="textarea" placeholder="Private coaching note" value={note} onChange={(e) => setNote(e.target.value)} data-testid="textarea-client-note" />
-            <button className="btn btn-primary btn-block mt-2" disabled={!note.trim()} onClick={() => { const t = note.trim(); setNote(""); run(() => act.addNote(t), "Note added"); }} data-testid="button-add-client-note">Add note</button>
-            <div className="mt-3">
-              {client.notes.length === 0 ? <p className="text-sm muted">No notes yet.</p> : client.notes.map((n) => (
-                <div key={n.id} className="rowline" style={{ alignItems: "flex-start" }}><span className="text-sm">{n.text}</span><span className="mono text-xs muted">{fmtDate(n.date)}</span></div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
     </Sheet>
   );
 }
@@ -509,6 +363,18 @@ function MyCoachCard() {
   const me = auth.me!;
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
+  const [chat, setChat] = useState<PubUser | null>(null);
+  const { unread, reload } = useUnreadMessages(me.coaches.length > 0);
+  // Deep link from a coach's message notification: open that thread straight away.
+  useEffect(() => {
+    const want = ui.sub.profile;
+    if (want?.startsWith("coachmsg")) {
+      const id = want.split(":")[1];
+      const c = me.coaches.find((x) => x.id === id) ?? me.coaches[0];
+      if (c) setChat(c);
+      ui.setSub("profile", "");
+    }
+  }, [ui.sub.profile]); // eslint-disable-line react-hooks/exhaustive-deps
   const add = async () => {
     setBusy(true);
     try { auth.setMe(await api("POST", "/api/coach/link", { code })); setCode(""); ui.toast("Coach added"); } catch (e) { ui.toast((e as Error).message); } finally { setBusy(false); }
@@ -522,10 +388,15 @@ function MyCoachCard() {
       <div className="card stack" data-testid="card-my-coach">
         {me.coaches.length === 0 && <p className="text-sm muted">Add a coach with their code. They'll get read-only access to your training, check-ins and nutrition, and can edit your program and leave session notes.</p>}
         {me.coaches.map((c) => (
-          <div key={c.id} className="flex items-center gap-3">
-            <span className="avatar">{initials(c.displayName)}</span>
-            <div className="flex-1 min0"><div className="text-sm font-semibold">{c.displayName}</div><div className="mono text-[11px] muted">@{c.username} · can view your data</div></div>
-            <button className="btn btn-ghost btn-sm" onClick={() => remove(c)} aria-label={`Remove coach ${c.displayName}`} data-testid={`button-remove-coach-${c.username}`}><X size={15} /></button>
+          <div key={c.id} className="stack" style={{ gap: 10 }}>
+            <div className="flex items-center gap-3">
+              <span className="avatar">{initials(c.displayName)}</span>
+              <div className="flex-1 min0"><div className="text-sm font-semibold">{c.displayName}</div><div className="mono text-[11px] muted">@{c.username} · can view your data</div></div>
+              <button className="btn btn-ghost btn-sm" onClick={() => remove(c)} aria-label={`Remove coach ${c.displayName}`} data-testid={`button-remove-coach-${c.username}`}><X size={15} /></button>
+            </div>
+            <button className="btn btn-block" style={{ position: "relative" }} onClick={() => setChat(c)} data-testid={`button-message-coach-${c.username}`}>
+              <MessageSquare size={16} /> Messages with {c.displayName.split(" ")[0]}{unread[c.id] ? <span className="inbox-badge" data-testid={`text-coach-unread-${c.username}`}>{unread[c.id]}</span> : null}
+            </button>
           </div>
         ))}
         <div className="flex gap-2">
@@ -539,83 +410,15 @@ function MyCoachCard() {
           </label>
         )}
       </div>
+      {chat && (
+        <Sheet title={`Messages with ${chat.displayName}`} onClose={() => { setChat(null); reload(); }} full testId="sheet-coach-messages">
+          <p className="text-xs muted mb-2">Only you and {chat.displayName.split(" ")[0]} can see this conversation.</p>
+          <MessageThread otherId={chat.id} otherName={chat.displayName} onRead={reload} height={380} />
+        </Sheet>
+      )}
     </>
   );
 }
-
-interface LiveClient extends PubUser { sharesVault: boolean; updatedAt: string | null; state: AppState | null; notes: { id: string; date: string; text: string }[] }
-
-function LiveCoachDashboard() {
-  const auth = useAuth();
-  const [data, setData] = useState<LiveClient[] | null>(null);
-  const [err, setErr] = useState("");
-  const [open, setOpen] = useState<string | null>(null);
-  const load = useCallback(() => api<{ clients: LiveClient[] }>("GET", "/api/coach/clients").then((r) => { setData(r.clients); setErr(""); }).catch((e) => setErr(e.message)), []);
-  useEffect(() => { load(); }, [load]);
-  if (err) return <div className="card mt-3"><p className="text-sm orange">{err}</p><button className="btn btn-sm mt-2" onClick={load}><RefreshCw size={14} /> Retry</button></div>;
-  if (!data) return <p className="text-sm muted mt-3">Loading clients…</p>;
-  const withState = data.filter((c) => c.state?.profile?.onboarded);
-  const clients = withState.map((c) => clientFromState(c.id, c.displayName, upgradeState(c.state!), c.notes));
-  const pendingSetup = data.filter((c) => !c.state?.profile?.onboarded);
-  const raw = data.find((c) => c.id === open);
-  const client = clients.find((c) => c.id === open);
-  const allFlags = clients.flatMap((c) => clientFlags(c).map((f) => `${c.name.split(" ")[0]}: ${f}`));
-  return (
-    <div className="mt-3" data-testid="view-coach-dashboard">
-      <div className="section-title"><h2>Clients</h2><span className="label">{data.length}</span></div>
-      {data.length === 0 && <div className="card"><p className="text-sm muted">No clients yet. Share your coach code; clients who add it appear here.</p></div>}
-      {allFlags.length > 0 && (
-        <div className="card" style={{ borderColor: "rgba(180,35,24,.4)" }}>
-          <div className="label orange mb-2 flex items-center gap-2"><AlertTriangle size={13} /> Needs attention</div>
-          {allFlags.map((f, i) => <p key={i} className="text-sm py-1" data-testid={`text-coach-flag-${i}`}>{f}</p>)}
-        </div>
-      )}
-      <div className="stack mt-3">
-        {clients.map((c) => {
-          const today = c.readiness[c.readiness.length - 1];
-          const flags = clientFlags(c);
-          return (
-            <button key={c.id} className="card w-full text-left" onClick={() => setOpen(c.id)} data-testid={`card-client-${c.id}`}>
-              <div className="flex items-center gap-3">
-                <span className="avatar">{initials(c.name)}</span>
-                <div className="flex-1 min0">
-                  <div className="text-sm font-semibold">{c.name}</div>
-                  <div className="text-[11px] muted truncate">Last: {c.lastSession.name} · {fmtDate(c.lastSession.date)} · {c.lastSession.topSet}</div>
-                </div>
-                <div className="text-right">
-                  <div className={`mono text-lg ${today < 50 ? "orange" : today >= 75 ? "lime" : "blue"}`}>{today}</div>
-                  <div className="label">ready</div>
-                </div>
-              </div>
-              <div className="flex items-center justify-between mt-3">
-                <Spark values={c.readiness} color={today < 50 ? "var(--orange)" : "var(--lime)"} width={90} />
-                <span className="mono text-xs muted">adherence {Math.round(c.adherence * 100)}%</span>
-                {flags.length > 0 ? <span className="chip chip-orange">{flags.length} flag{flags.length > 1 ? "s" : ""}</span> : <span className="chip chip-lime">on track</span>}
-              </div>
-            </button>
-          );
-        })}
-        {pendingSetup.map((c) => (
-          <div key={c.id} className="card-flat flex items-center gap-3"><span className="avatar">{initials(c.displayName)}</span><span className="text-sm flex-1">{c.displayName}</span><span className="mono text-[11px] muted">setting up</span></div>
-        ))}
-      </div>
-      {client && raw && (
-        <ClientSheet key={client.id + (raw.updatedAt ?? "")} client={client} onClose={() => setOpen(null)} actions={{
-          saveSessionNote: async (sessionId, note) => { await api("POST", `/api/coach/clients/${client.id}/session-note`, { sessionId, note }); await load(); },
-          saveProgram: async (program) => { await api("PUT", `/api/coach/clients/${client.id}/program`, { program }); await load(); },
-          sendProgram: async (program) => {
-            // The coach's own exercises travel with the program so the client sees real names.
-            const custom = customExercisesIn(program).map(({ archived: _a, ...e }) => e);
-            await api("POST", `/api/coach/clients/${client.id}/program-send`, { program: custom.length ? { ...program, customExercises: custom } : program });
-          },
-          addNote: async (text) => { await api("POST", `/api/coach/clients/${client.id}/notes`, { text, date: dateKey() }); await load(); },
-          openAccount: () => { setOpen(null); auth.viewAs({ id: client.id, name: client.name, state: upgradeState(raw.state!) }); },
-        }} />
-      )}
-    </div>
-  );
-}
-
 
 function GrainCard() {
   const g = useGrain();

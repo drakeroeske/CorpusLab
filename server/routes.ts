@@ -586,21 +586,70 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const links = must(await sb.from("coach_links").select("client_id").eq("coach_id", me.id)) as Row[];
     const ids = links.map((l) => l.client_id);
     if (!ids.length) return res.json({ clients: [] });
-    const [users, states, notes] = await Promise.all([
+    const [users, states, notes, unreadRows, lastMsgs] = await Promise.all([
       sb.from("users").select("id, username, display_name, share_vault_with_coach").in("id", ids).then(must) as Promise<Row[]>,
       sb.from("user_state").select("user_id, state, updated_at").in("user_id", ids).then(must) as Promise<Row[]>,
       sb.from("coach_notes").select("id, client_id, text, date, created_at").eq("coach_id", me.id).in("client_id", ids).order("created_at", { ascending: false }).then(must) as Promise<Row[]>,
+      sb.from("coach_messages").select("client_id").eq("coach_id", me.id).neq("sender_id", me.id).is("read_at", null).then(must) as Promise<Row[]>,
+      sb.from("coach_messages").select("client_id, text, created_at, sender_id").eq("coach_id", me.id).order("created_at", { ascending: false }).limit(200).then(must) as Promise<Row[]>,
     ]);
     res.json({
       clients: users.map((u) => {
         const st = states.find((s) => s.user_id === u.id);
+        const lm = lastMsgs.find((m) => m.client_id === u.id);
         return {
           ...pub(u as DbUser), sharesVault: u.share_vault_with_coach, updatedAt: st?.updated_at ?? null,
           state: clientView(st?.state ?? null, u.share_vault_with_coach),
           notes: notes.filter((n) => n.client_id === u.id).map((n) => ({ id: n.id, date: n.date, text: n.text })),
+          unread: unreadRows.filter((r) => r.client_id === u.id).length,
+          lastMessage: lm ? { text: lm.text, ts: new Date(lm.created_at).getTime(), mine: lm.sender_id === me.id } : null,
         };
       }),
     });
+  }));
+
+  /* ---- coach <-> client messages. Either side of a coach link may read and write; `other` is the user on the far side. */
+  async function coachPair(me: DbUser, otherId: string): Promise<{ coachId: string; clientId: string; other: DbUser }> {
+    const other = must(await sb.from("users").select("*").eq("id", otherId).maybeSingle()) as DbUser | null;
+    if (!other) throw new HttpError(404, "User not found");
+    const asCoach = me.role === "coach" ? must(await sb.from("coach_links").select("client_id").eq("coach_id", me.id).eq("client_id", otherId).maybeSingle()) : null;
+    if (asCoach) return { coachId: me.id, clientId: otherId, other };
+    const asClient = must(await sb.from("coach_links").select("client_id").eq("coach_id", otherId).eq("client_id", me.id).maybeSingle());
+    if (asClient) return { coachId: otherId, clientId: me.id, other };
+    throw new HttpError(404, "You're not linked with that account");
+  }
+  const msgOut = (m: Row, meId: string) => ({ id: m.id, text: m.text, ts: new Date(m.created_at).getTime(), mine: m.sender_id === meId, read: !!m.read_at });
+
+  app.get("/api/messages/:userId", authed(async (req, res, me) => {
+    const { coachId, clientId } = await coachPair(me, String(req.params.userId));
+    const rows = must(await sb.from("coach_messages").select("*").eq("coach_id", coachId).eq("client_id", clientId).order("created_at", { ascending: true }).limit(500)) as Row[];
+    res.json({ messages: rows.map((m) => msgOut(m, me.id)) });
+  }));
+
+  app.post("/api/messages/:userId", authed(async (req, res, me) => {
+    noDemo(me);
+    limit(req, "message", 120, 3600_000);
+    const { coachId, clientId, other } = await coachPair(me, String(req.params.userId));
+    const text = str(req.body?.text, 2000);
+    if (!text) throw bad("Message is empty");
+    const row = must(await sb.from("coach_messages").insert({ coach_id: coachId, client_id: clientId, sender_id: me.id, text }).select("*").single()) as Row;
+    const url = me.id === coachId ? `/?go=me&open=coachmsg&coach=${me.id}` : `/?go=clients&client=${me.id}&sub=messages`;
+    void notify(other.id, "coach", { title: `${me.display_name}`, body: text.length > 120 ? text.slice(0, 117) + "..." : text, url, tag: `msg-${me.id}` });
+    res.json({ message: msgOut(row, me.id) });
+  }));
+
+  app.post("/api/messages/:userId/read", authed(async (req, res, me) => {
+    const { coachId, clientId } = await coachPair(me, String(req.params.userId));
+    must(await sb.from("coach_messages").update({ read_at: new Date().toISOString() }).eq("coach_id", coachId).eq("client_id", clientId).neq("sender_id", me.id).is("read_at", null));
+    res.json({ ok: true });
+  }));
+
+  /** Unread messages from the other side of each coach link, for badges. */
+  app.get("/api/messages", authed(async (_req, res, me) => {
+    const rows = must(await sb.from("coach_messages").select("coach_id, client_id").or(`coach_id.eq.${me.id},client_id.eq.${me.id}`).neq("sender_id", me.id).is("read_at", null)) as Row[];
+    const byUser: Record<string, number> = {};
+    for (const r of rows) { const o = r.coach_id === me.id ? r.client_id : r.coach_id; byUser[o] = (byUser[o] ?? 0) + 1; }
+    res.json({ unread: byUser });
   }));
 
   app.post("/api/coach/clients/:id/notes", authed(async (req, res, me) => {

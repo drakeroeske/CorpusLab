@@ -30,7 +30,7 @@ export function NotifPlanSync() {
 
 /* ------------------------------------------------------------------ deep links */
 // Old names (body, spotters, me) stay mapped so notifications sent before the 4-tab layout still land correctly.
-const TAB: Record<string, UI["tab"]> = { today: "today", train: "train", progress: "progress", body: "progress", social: "social", spotters: "social", me: "profile", profile: "profile" };
+const TAB: Record<string, UI["tab"]> = { today: "today", train: "train", progress: "progress", body: "progress", social: "social", spotters: "social", me: "profile", profile: "profile", clients: "clients" };
 // Sections that moved from Train to Progress.
 const MOVED_TO_PROGRESS = new Set(["lab", "experiments", "history"]);
 /** Opens the right screen when the app is launched from a notification (or receives one while open). */
@@ -42,6 +42,9 @@ export function applyDeepLink(u: UI, url?: string): boolean {
   if (tab === "train" && d.sub && MOVED_TO_PROGRESS.has(d.sub)) tab = "progress";
   if (tab) u.setTab(tab);
   if (tab && d.sub) u.setSub(tab, d.sub);
+  // Messages: a coach lands on the client's thread; a client lands on their coach's thread in Profile.
+  if (tab === "clients" && d.client) u.setSub("clients", `client:${d.client}:${d.sub || "messages"}`);
+  if (tab === "profile" && d.open === "coachmsg") u.setSub("profile", `coachmsg:${d.coach ?? ""}`);
   if (d.open === "checkin") u.open("checkin");
   if (d.open === "fuel" || d.open === "nutrition") u.open("nutrition");
   return true;

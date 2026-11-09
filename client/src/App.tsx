@@ -19,8 +19,10 @@ import { InviteHandler } from "@/components/InviteHandler";
 import PrivacyPage from "@/pages/Privacy";
 import { CoachChat } from "@/pages/Coach";
 import { Tour } from "@/components/Tour";
+import ClientsPage from "@/pages/Clients";
+import { useUnreadMessages } from "@/components/MessageThread";
 
-export type Tab = "today" | "train" | "progress" | "social" | "profile";
+export type Tab = "today" | "train" | "progress" | "social" | "clients" | "profile";
 export type SheetName = "checkin" | "nutrition" | "coach" | null;
 export interface UI {
   tab: Tab; setTab: (t: Tab) => void;
@@ -47,8 +49,11 @@ function ViewBanner() {
 }
 
 function Shell() {
-  const { state } = useStore();
-  const { viewing, viewAs } = useAuth();
+  const { state, mode } = useStore();
+  const { viewing, viewAs, me } = useAuth();
+  // Coaches get a fifth tab for their clients; offline Coach mode shows the sample clients there.
+  const isCoach = mode === "remote" ? me?.role === "coach" : !!state.profile?.coachMode;
+  const { total: unreadMsgs } = useUnreadMessages(mode === "remote" && isCoach && !viewing, 60_000);
   const [tab, setTabState] = useState<Tab>("today");
   const [prevTab, setPrevTab] = useState<UI["prevTab"]>("today");
   const [sub, setSubs] = useState<UI["sub"]>({});
@@ -75,6 +80,7 @@ function Shell() {
     { id: "train", label: "Train" },
     { id: "progress", label: "Progress" },
     { id: "social", label: "Social" },
+    ...(isCoach ? [{ id: "clients" as Tab, label: "Clients" }] : []),
   ];
   const surface = "surface-riso";
   return (
@@ -86,11 +92,13 @@ function Shell() {
         {tab === "train" && <Train />}
         {tab === "progress" && <Progress />}
         {tab === "social" && <Spotters />}
+        {tab === "clients" && (isCoach ? <ClientsPage /> : <Today />)}
         {tab === "profile" && <ProfilePage />}
-        <nav className="tabbar" aria-label="Main">
+        <nav className={`tabbar ${tabs.length === 5 ? "tabs-5" : ""}`} aria-label="Main">
           {tabs.map((x) => (
             <button key={x.id} aria-current={tab === x.id ? "page" : undefined} onClick={() => setTab(x.id)} data-testid={`tab-${x.id}`}>
               <span>{x.label}</span>
+              {x.id === "clients" && unreadMsgs > 0 && <span className="tab-badge" data-testid="text-tab-clients-unread">{unreadMsgs}</span>}
             </button>
           ))}
         </nav>
