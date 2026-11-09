@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, BookmarkPlus, ChevronDown, ChevronRight, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, BookmarkPlus, ChevronDown, ChevronRight, Copy, GripVertical, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { moveItem, useDragReorder } from "./DragList";
 import type { Exercise, Pattern, Program, ProgramDay, ProgramExercise, Units } from "@/lib/types";
 import { EX, EXERCISES, MUSCLE_LABEL, PATTERN_LABEL, customExercises, isCompound, newId } from "@/lib/exercises";
 import { useStore } from "@/lib/store";
@@ -83,18 +84,24 @@ function NumField({ label, value, onChange, step = 1, testId }: { label: string;
   );
 }
 
-function ExerciseRow({ pe, units, onChange, onRemove, onMove, idx, total }: { pe: ProgramExercise; units: Units; onChange: (p: ProgramExercise) => void; onRemove: () => void; onMove: (d: -1 | 1) => void; idx: number; total: number }) {
+function ExerciseRow({ pe, units, onChange, onRemove, onMove, idx, total, itemProps, handleProps }: {
+  pe: ProgramExercise; units: Units; onChange: (p: ProgramExercise) => void; onRemove: () => void; onMove: (d: -1 | 1) => void; idx: number; total: number;
+  itemProps: { "data-drag-item": string; className: string }; handleProps: Record<string, unknown>;
+}) {
   const [open, setOpen] = useState(false);
   const ex = EX[pe.exId];
   return (
-    <div className="card-flat" style={{ padding: 0 }} data-testid={`program-exercise-${pe.id}`}>
-      <button className="w-full flex items-center gap-3 text-left" style={{ padding: "10px 12px", minHeight: 52 }} onClick={() => setOpen(!open)} data-testid={`toggle-exercise-${pe.id}`}>
-        {open ? <ChevronDown size={16} className="muted shrink-0" /> : <ChevronRight size={16} className="muted shrink-0" />}
-        <div className="min0 flex-1">
-          <div className="font-semibold truncate">{ex.name}</div>
-          <div className="mono text-xs muted">{pe.sets} × {pe.repMin}–{pe.repMax} · {pe.startWeight} {units} · +{pe.incrementPct ?? DEFAULT_INC_PCT}% (≈{fmtW(jumpFor(pe, pe.startWeight))} {units}){pe.technique ? ` · ${pe.technique}` : ""}</div>
-        </div>
-      </button>
+    <div {...itemProps} className={`card-flat ${itemProps.className}`} style={{ padding: 0 }} data-testid={`program-exercise-${pe.id}`}>
+      <div className="flex items-center">
+        <span className="drag-handle shrink-0" {...handleProps} data-testid={`drag-exercise-${pe.id}`}><GripVertical size={18} /></span>
+        <button className="flex-1 min0 flex items-center gap-3 text-left" style={{ padding: "10px 12px 10px 0", minHeight: 52 }} onClick={() => setOpen(!open)} data-testid={`toggle-exercise-${pe.id}`}>
+          <div className="min0 flex-1">
+            <div className="font-semibold truncate">{ex.name}</div>
+            <div className="mono text-xs muted">{pe.sets} × {pe.repMin}–{pe.repMax} · {pe.startWeight} {units} · +{pe.incrementPct ?? DEFAULT_INC_PCT}% (≈{fmtW(jumpFor(pe, pe.startWeight))} {units}){pe.technique ? ` · ${pe.technique}` : ""}</div>
+          </div>
+          {open ? <ChevronDown size={16} className="muted shrink-0" /> : <ChevronRight size={16} className="muted shrink-0" />}
+        </button>
+      </div>
       {open && (
         <div style={{ padding: "0 12px 12px" }} className="stack">
           <div className="grid grid-cols-3 gap-2">
@@ -135,13 +142,14 @@ export function newProgramExercise(exId: string, units: Units): ProgramExercise 
   };
 }
 
-/** The exercises of one program day or saved workout: edit, reorder, remove, add from the library. */
+/** The exercises of one program day or saved workout: edit, drag to reorder, remove, add from the library. */
 export function DayExercises({ exercises, units, onChange, addTestId }: { exercises: ProgramExercise[]; units: Units; onChange: (x: ProgramExercise[]) => void; addTestId: string }) {
   const [picking, setPicking] = useState(false);
+  const drag = useDragReorder((from, to) => onChange(moveItem(exercises, from, to)));
   return (
-    <div className="stack">
+    <div className="stack" ref={drag.containerRef}>
       {exercises.map((pe, i) => (
-        <ExerciseRow key={pe.id} pe={pe} units={units} idx={i} total={exercises.length}
+        <ExerciseRow key={pe.id} pe={pe} units={units} idx={i} total={exercises.length} itemProps={drag.itemProps(i)} handleProps={drag.handleProps(i)}
           onChange={(np) => onChange(exercises.map((e) => (e.id === pe.id ? np : e)))}
           onRemove={() => onChange(exercises.filter((e) => e.id !== pe.id))}
           onMove={(dir) => { const a = [...exercises]; const j = i + dir; [a[i], a[j]] = [a[j], a[i]]; onChange(a); }} />
@@ -157,23 +165,32 @@ export function ProgramEditor({ program, units, onChange, onSaveDay }: { program
   const setDay = (id: string, fn: (d: ProgramDay) => ProgramDay) => onChange({ ...program, days: program.days.map((d) => (d.id === id ? fn(d) : d)) });
   const usedWeekdays = (except: string) => new Set(program.days.filter((d) => d.id !== except).flatMap((d) => d.weekdays));
 
+  const duplicateDay = (d: ProgramDay) => {
+    const copy: ProgramDay = { ...d, id: newId("day"), name: `${d.name} copy`, weekdays: [], exercises: d.exercises.map((e) => ({ ...e, id: newId("pe") })) };
+    const i = program.days.findIndex((x) => x.id === d.id);
+    onChange({ ...program, days: [...program.days.slice(0, i + 1), copy, ...program.days.slice(i + 1)] });
+    setOpenDay(copy.id);
+  };
+  const dayDrag = useDragReorder((from, to) => onChange({ ...program, days: moveItem(program.days, from, to) }));
+
   return (
     <div>
       <label className="field mb-3">
         <span className="label">Program name</span>
         <input className="input" value={program.name} onChange={(e) => onChange({ ...program, name: e.target.value })} data-testid="input-program-name" />
       </label>
-      <div className="stack">
-        {program.days.map((d) => {
+      {program.days.length > 1 && <p className="text-xs muted mb-2">Hold the grip to drag days or exercises into a new order.</p>}
+      <div className="stack" ref={dayDrag.containerRef}>
+        {program.days.map((d, di) => {
           const taken = usedWeekdays(d.id);
           const open = openDay === d.id;
+          const ip = dayDrag.itemProps(di);
           return (
-            <div key={d.id} className="card" data-testid={`program-day-${d.id}`}>
-              <div className="flex items-center gap-2">
+            <div key={d.id} {...ip} className={`card ${ip.className}`} data-testid={`program-day-${d.id}`}>
+              <div className="flex items-center gap-1">
+                <span className="drag-handle" {...dayDrag.handleProps(di)} data-testid={`drag-day-${d.id}`}><GripVertical size={18} /></span>
                 <button className="icon-btn" onClick={() => setOpenDay(open ? null : d.id)} aria-label="Toggle day" data-testid={`toggle-day-${d.id}`}>{open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</button>
-                <input className="input font-semibold" value={d.name} onChange={(e) => setDay(d.id, (x) => ({ ...x, name: e.target.value }))} data-testid={`input-day-name-${d.id}`} />
-                {onSaveDay && <button className="icon-btn" aria-label={`Save ${d.name} as a workout`} title="Save as workout" disabled={!d.exercises.length} onClick={() => onSaveDay(d)} data-testid={`button-save-day-${d.id}`}><BookmarkPlus size={16} /></button>}
-                <button className="icon-btn" aria-label="Delete day" onClick={() => onChange({ ...program, days: program.days.filter((x) => x.id !== d.id) })} data-testid={`button-delete-day-${d.id}`}><Trash2 size={16} /></button>
+                <input className="input font-semibold min0" value={d.name} onChange={(e) => setDay(d.id, (x) => ({ ...x, name: e.target.value }))} data-testid={`input-day-name-${d.id}`} />
               </div>
               <div className="grid grid-cols-7 gap-1 mt-3">
                 {WD.map((w, i) => {
@@ -187,7 +204,14 @@ export function ProgramEditor({ program, units, onChange, onSaveDay }: { program
                   );
                 })}
               </div>
-              {!open && <div className="text-xs muted mt-2">{d.exercises.length} exercises · {d.exercises.reduce((a, e) => a + e.sets, 0)} sets</div>}
+              <div className="flex items-center justify-between gap-2 mt-2">
+                <span className="text-xs muted">{d.exercises.length} exercises · {d.exercises.reduce((a, e) => a + e.sets, 0)} sets</span>
+                <span className="flex items-center gap-1">
+                  {onSaveDay && <button className="icon-btn" aria-label={`Save ${d.name} as a workout`} title="Save as workout" disabled={!d.exercises.length} onClick={() => onSaveDay(d)} data-testid={`button-save-day-${d.id}`}><BookmarkPlus size={16} /></button>}
+                  <button className="icon-btn" aria-label="Duplicate day" title="Duplicate day" onClick={() => duplicateDay(d)} data-testid={`button-duplicate-day-${d.id}`}><Copy size={16} /></button>
+                  <button className="icon-btn" aria-label="Delete day" title="Delete day" onClick={() => { if (!d.exercises.length || confirm(`Delete ${d.name}?`)) onChange({ ...program, days: program.days.filter((x) => x.id !== d.id) }); }} data-testid={`button-delete-day-${d.id}`}><Trash2 size={16} /></button>
+                </span>
+              </div>
               {open && (
                 <div className="mt-3"><DayExercises exercises={d.exercises} units={units} onChange={(x) => setDay(d.id, (dd) => ({ ...dd, exercises: x }))} addTestId={`button-add-exercise-${d.id}`} /></div>
               )}

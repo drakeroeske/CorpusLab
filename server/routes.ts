@@ -699,6 +699,95 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ ok: true });
   }));
 
+  /* ------------------------------------------------------------ in-app inbox */
+  app.get("/api/inbox", authed(async (_req, res, me) => {
+    const rows = must(await sb.from("notifications").select("id, kind, title, body, url, read_at, created_at").eq("user_id", me.id).order("created_at", { ascending: false }).limit(60)) as Row[];
+    res.json({
+      unread: rows.filter((r) => !r.read_at).length,
+      items: rows.map((r) => ({ id: r.id, kind: r.kind, title: r.title, body: r.body, url: r.url, read: !!r.read_at, ts: new Date(r.created_at).getTime() })),
+    });
+  }));
+  app.post("/api/inbox/read", authed(async (req, res, me) => {
+    const ids = Array.isArray(req.body?.ids) ? (req.body.ids as unknown[]).filter((x) => typeof x === "string" && UUID_RE.test(x)).slice(0, 100) : null;
+    let q = sb.from("notifications").update({ read_at: new Date().toISOString() }).eq("user_id", me.id).is("read_at", null);
+    if (ids) q = q.in("id", ids as string[]);
+    must(await q);
+    res.json({ ok: true });
+  }));
+  app.delete("/api/inbox", authed(async (_req, res, me) => {
+    must(await sb.from("notifications").delete().eq("user_id", me.id));
+    res.json({ ok: true });
+  }));
+
+  /* ------------------------------------------------------------ crews */
+  const CREW_MAX = 8;
+  async function crewView(crewIds: string[], meId: string) {
+    if (!crewIds.length) return [];
+    const crews = must(await sb.from("crews").select("id, name, owner_id, best, created_at").in("id", crewIds)) as Row[];
+    const mem = must(await sb.from("crew_members").select("crew_id, user_id").in("crew_id", crewIds)) as Row[];
+    const uids = Array.from(new Set(mem.map((m) => m.user_id)));
+    const users = uids.length ? (must(await sb.from("users").select("id, username, display_name, stats").in("id", uids)) as Row[]) : [];
+    const byId = new Map(users.map((u) => [u.id, u]));
+    const out = [];
+    for (const c of crews) {
+      const members = mem.filter((m) => m.crew_id === c.id).map((m) => byId.get(m.user_id)).filter((u): u is Row => !!u).map((u) => ({
+        ...pub(u as DbUser), me: u.id === meId,
+        streak: Number(u.stats?.streak ?? 0), adherence: Number(u.stats?.adherence ?? 0), missedThisWeek: !!u.stats?.missedThisWeek,
+      }));
+      const anyMissed = members.some((m) => m.missedThisWeek);
+      const streak = members.length && !anyMissed ? Math.min(...members.map((m) => m.streak)) : 0;
+      let best = Number(c.best ?? 0);
+      if (streak > best) { best = streak; must(await sb.from("crews").update({ best }).eq("id", c.id)); }
+      out.push({ id: c.id, name: c.name, ownerId: c.owner_id, streak, best, members: members.sort((a, b) => b.adherence - a.adherence), createdAt: c.created_at });
+    }
+    return out.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  }
+  async function myCrewIds(meId: string) {
+    return (must(await sb.from("crew_members").select("crew_id").eq("user_id", meId)) as Row[]).map((r) => r.crew_id as string);
+  }
+
+  app.get("/api/crews", authed(async (_req, res, me) => {
+    res.json({ crews: await crewView(await myCrewIds(me.id), me.id) });
+  }));
+
+  app.post("/api/crews", authed(async (req, res, me) => {
+    noDemo(me);
+    const name = str(req.body?.name, 32);
+    if (name.length < 2) throw bad("Crew name needs 2+ characters");
+    if ((await myCrewIds(me.id)).length >= 10) throw bad("You're in 10 crews already");
+    const fids = new Set(await friendIds(me.id));
+    const picks = Array.isArray(req.body?.memberIds) ? Array.from(new Set((req.body.memberIds as unknown[]).filter((x) => typeof x === "string" && UUID_RE.test(x) && fids.has(x)))) as string[] : [];
+    if (picks.length + 1 > CREW_MAX) throw bad(`Crews hold up to ${CREW_MAX} lifters`);
+    const crew = must(await sb.from("crews").insert({ name, owner_id: me.id }).select("id").single()) as Row;
+    must(await sb.from("crew_members").insert([me.id, ...picks].map((uid) => ({ crew_id: crew.id, user_id: uid }))));
+    for (const uid of picks) void notify(uid, "spotters", { title: "You joined a crew", body: `${me.display_name} added you to "${name}". The crew shares one streak.`, url: "/?go=spotters&sub=crews", tag: "crew" });
+    res.json({ crews: await crewView(await myCrewIds(me.id), me.id) });
+  }));
+
+  app.post("/api/crews/:id/members", authed(async (req, res, me) => {
+    noDemo(me);
+    const crewId = String(req.params.id);
+    const uid = String(req.body?.userId || "");
+    if (!UUID_RE.test(uid)) throw bad("Pick a spotter");
+    if (!(await myCrewIds(me.id)).includes(crewId)) throw new HttpError(404, "Crew not found");
+    if (!(await friendIds(me.id)).includes(uid)) throw bad("You can only add your own spotters");
+    const count = (must(await sb.from("crew_members").select("user_id").eq("crew_id", crewId)) as Row[]).length;
+    if (count >= CREW_MAX) throw bad(`Crews hold up to ${CREW_MAX} lifters`);
+    must(await sb.from("crew_members").upsert({ crew_id: crewId, user_id: uid }));
+    const crew = must(await sb.from("crews").select("name").eq("id", crewId).single()) as Row;
+    void notify(uid, "spotters", { title: "You joined a crew", body: `${me.display_name} added you to "${crew.name}". The crew shares one streak.`, url: "/?go=spotters&sub=crews", tag: "crew" });
+    res.json({ crews: await crewView(await myCrewIds(me.id), me.id) });
+  }));
+
+  app.delete("/api/crews/:id/members/me", authed(async (req, res, me) => {
+    noDemo(me);
+    const crewId = String(req.params.id);
+    must(await sb.from("crew_members").delete().eq("crew_id", crewId).eq("user_id", me.id));
+    const left = (must(await sb.from("crew_members").select("user_id").eq("crew_id", crewId)) as Row[]).length;
+    if (left === 0) must(await sb.from("crews").delete().eq("id", crewId));
+    res.json({ crews: await crewView(await myCrewIds(me.id), me.id) });
+  }));
+
   /* ------------------------------------------------------------ push notifications */
   app.get("/api/push/config", (_req, res) => res.json({ enabled: pushEnabled, publicKey: vapidPublicKey, defaults: DEFAULT_PREFS }));
 

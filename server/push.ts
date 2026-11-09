@@ -67,8 +67,18 @@ async function rowsFor(userId: string): Promise<Row[]> {
 
 async function dropRow(id: string) { if (sbRef) await sbRef.from("push_subscriptions").delete().eq("id", id); }
 
-/** Send to every device of a user whose prefs allow `kind`. Never throws; failures are logged. */
+/** In-app inbox copy of an event. Kept to the latest 200 rows per user. */
+async function inbox(userId: string, kind: string, msg: PushMessage) {
+  if (!sbRef) return;
+  const ins = await sbRef.from("notifications").insert({ user_id: userId, kind, title: msg.title, body: msg.body, url: msg.url ?? "/" });
+  if (ins.error) { console.error("db error:", ins.error.message); return; }
+  const old = await sbRef.from("notifications").select("id").eq("user_id", userId).order("created_at", { ascending: false }).range(200, 400);
+  if (!old.error && old.data?.length) await sbRef.from("notifications").delete().in("id", old.data.map((r: Row) => r.id));
+}
+
+/** Send to every device of a user whose prefs allow `kind`, and file a copy in their in-app inbox. Never throws; failures are logged. */
 export async function notify(userId: string, kind: "spotters" | "coach" | "test", msg: PushMessage): Promise<number> {
+  if (kind !== "test") await inbox(userId, kind, msg).catch((e) => console.error("inbox:", e));
   if (!pushEnabled || !sbRef) return 0;
   let sent = 0;
   for (const row of await rowsFor(userId)) {

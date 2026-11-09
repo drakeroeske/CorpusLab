@@ -212,7 +212,7 @@ function ExerciseList({ session, rxFor, current, onPick, onAdd, canRemove }: { s
         const { rx } = rxFor(l);
         const done = l.sets.length >= rx.sets;
         return (
-          <div key={l.peId + l.exId} className="rowline" style={{ gap: 6 }} data-testid={`row-exercise-${i}`}>
+          <div key={l.peId + l.exId} className={`rowline ${current === i ? "ex-active" : ""}`} style={{ gap: 6 }} data-testid={`row-exercise-${i}`}>
             <button className="min0 flex-1 text-left flex items-center gap-3" style={{ minHeight: 44 }} onClick={() => onPick(i)} aria-current={current === i ? "step" : undefined} data-testid={`button-goto-exercise-${i}`}>
               <span className="w-5 shrink-0 flex justify-center">{done ? <Check size={16} style={{ color: "var(--ink)" }} /> : <span className="mono text-xs muted">{i + 1}</span>}</span>
               <span className="min0">
@@ -469,7 +469,7 @@ export default function Logger() {
           <div className="flex gap-1 mb-3" aria-hidden data-testid="strip-exercises">
             {s.exercises.map((l, i) => {
               const done = l.sets.length >= rxFor(l).rx.sets;
-              return <button key={l.peId + l.exId} tabIndex={-1} onClick={() => go(i)} style={{ flex: 1, height: 6, background: done ? "var(--ink)" : "var(--tint)", boxShadow: i === cur && !listOpen ? "0 0 0 2px var(--page), 0 0 0 3px var(--ink)" : undefined }} />;
+              return <button key={l.peId + l.exId} tabIndex={-1} onClick={() => go(i)} style={{ flex: 1, height: 6, background: i === cur ? "var(--signal)" : done ? "var(--ink)" : "var(--tint)", boxShadow: i === cur && !listOpen ? "0 0 0 2px var(--page), 0 0 0 3px var(--ink)" : undefined }} />;
             })}
           </div>
 

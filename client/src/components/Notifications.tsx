@@ -34,20 +34,25 @@ const TAB: Record<string, UI["tab"]> = { today: "today", train: "train", progres
 // Sections that moved from Train to Progress.
 const MOVED_TO_PROGRESS = new Set(["lab", "experiments", "history"]);
 /** Opens the right screen when the app is launched from a notification (or receives one while open). */
+/** Apply a notification link like "/?go=spotters&sub=crews" to the UI. Returns false when the link has no target. */
+export function applyDeepLink(u: UI, url?: string): boolean {
+  const d = readDeepLink(url);
+  if (!d) return false;
+  let tab = TAB[d.go ?? ""];
+  if (tab === "train" && d.sub && MOVED_TO_PROGRESS.has(d.sub)) tab = "progress";
+  if (tab) u.setTab(tab);
+  if (tab && d.sub) u.setSub(tab, d.sub);
+  if (d.open === "checkin") u.open("checkin");
+  if (d.open === "fuel" || d.open === "nutrition") u.open("nutrition");
+  return true;
+}
+
 export function useDeepLinks(ui: UI, ready: boolean) {
   const uiRef = useRef(ui); uiRef.current = ui;
   useEffect(() => {
     if (!ready) return;
     const go = (url?: string) => {
-      const d = readDeepLink(url);
-      if (!d) return;
-      const u = uiRef.current;
-      let tab = TAB[d.go ?? ""];
-      if (tab === "train" && d.sub && MOVED_TO_PROGRESS.has(d.sub)) tab = "progress";
-      if (tab) u.setTab(tab);
-      if (tab && d.sub) u.setSub(tab, d.sub);
-      if (d.open === "checkin") u.open("checkin");
-      if (d.open === "fuel" || d.open === "nutrition") u.open("nutrition");
+      if (!applyDeepLink(uiRef.current, url)) return;
       if (!url) clearDeepLink();
     };
     go();

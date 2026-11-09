@@ -80,7 +80,7 @@ export async function sendTest(): Promise<number> {
 /** Deep links from notifications: /?go=train&sub=program&open=checkin */
 export function readDeepLink(url: string = window.location.href): { go?: string; sub?: string; open?: string } | null {
   try {
-    const u = new URL(url);
+    const u = new URL(url, window.location.origin);
     const go = u.searchParams.get("go");
     if (!go) return null;
     return { go, sub: u.searchParams.get("sub") ?? undefined, open: u.searchParams.get("open") ?? undefined };

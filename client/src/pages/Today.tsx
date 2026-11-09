@@ -11,6 +11,7 @@ import { EX, MUSCLE_LABEL, newId } from "@/lib/exercises";
 import { Bar } from "@/components/ui";
 import { EngineHeader, Rings, Tag } from "@/components/riso";
 import { Info, Term } from "@/components/Term";
+import { InboxButton } from "@/components/Inbox";
 import type { Meal } from "@/lib/types";
 
 export function readinessColor(score: number | null) {
@@ -62,7 +63,7 @@ export default function Today() {
   return (
     <div>
       <EngineHeader title="Today" testId="header-today"
-        right={<button className="btn btn-sm btn-outline" onClick={() => ui.open("coach")} data-testid="button-open-coach">Coach</button>}
+        right={<><InboxButton /><button className="btn btn-sm btn-outline" onClick={() => ui.open("coach")} data-testid="button-open-coach">Coach</button></>}
         sub={<span className="muted" data-testid="text-phase">{dateLine}{state.program ? ` · Week ${t.phase.week}` : ""}</span>} />
       <div className="screen">
 

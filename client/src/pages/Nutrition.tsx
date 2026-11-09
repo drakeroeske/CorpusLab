@@ -104,6 +104,7 @@ export function NutritionSheet({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState("");
   const [time, setTime] = useState(hhmm(new Date()));
   const [fav, setFav] = useState(false);
+  const [editFav, setEditFav] = useState(false);
   const [scan, setScan] = useState(false);
 
   const openFood = (food: FoodDef, qty?: number, unit?: string) => setPick({ food, qty: qty ?? (food.portions.length ? 1 : 100), unit });
@@ -169,6 +170,24 @@ export function NutritionSheet({ onClose }: { onClose: () => void }) {
         </div>
       )}
 
+      {!pick && q.trim().length < 2 && state.favorites.length > 0 && (
+        <>
+          <div className="flex items-center justify-between mt-3 mb-2">
+            <span className="label">Favorites · one tap</span>
+            <button className="btn btn-sm btn-ghost" style={{ paddingRight: 0 }} aria-pressed={editFav ? "true" : "false"} onClick={() => setEditFav(!editFav)} data-testid="button-edit-favorites">{editFav ? "Done" : "Edit"}</button>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+            {state.favorites.map((f) => (
+              <button key={f.id} className={`btn btn-sm shrink-0 ${editFav ? "btn-outline" : ""}`} style={{ minHeight: 44, background: editFav ? undefined : "var(--signal)" }}
+                onClick={() => { if (editFav) { set((s) => ({ ...s, favorites: s.favorites.filter((x) => x.id !== f.id) })); return; } set((s) => ({ ...s, meals: [...s.meals, logFavorite(f, today)] })); ui.toast(`Logged ${f.name}`); }}
+                aria-label={editFav ? `Remove ${f.name} from favorites` : `Log ${f.name}`} data-testid={`button-fav-${f.id}`}>
+                {editFav ? <X size={14} /> : <Star size={14} />} <span className="truncate" style={{ maxWidth: 150 }}>{f.name}</span> <span className="muted">· {f.cal} kcal</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
       {!pick && q.trim().length < 2 && recents.length > 0 && (
         <>
           <div className="label mt-3 mb-2">Recent</div>
@@ -200,30 +219,11 @@ export function NutritionSheet({ onClose }: { onClose: () => void }) {
             <input className="input min0 flex-1" placeholder={mealNameFor()} value={name} onChange={(e) => setName(e.target.value)} data-testid="input-basket-name" aria-label="Meal name" />
             <input className="input mono" type="time" style={{ width: 132, flexShrink: 0, paddingLeft: 8, paddingRight: 8 }} value={time} onChange={(e) => setTime(e.target.value)} data-testid="input-basket-time" aria-label="Meal time" />
           </div>
-          <label className="flex items-center gap-2 text-sm muted" style={{ minHeight: 44 }}>
-            <input type="checkbox" checked={fav} onChange={(e) => setFav(e.target.checked)} style={{ width: 18, height: 18, accentColor: "#111418" }} data-testid="checkbox-basket-favorite" />
-            <Star size={14} /> Save as favorite
-          </label>
+          <button type="button" className={`btn btn-sm ${fav ? "btn-primary" : ""}`} aria-pressed={fav ? "true" : "false"} onClick={() => setFav(!fav)} data-testid="checkbox-basket-favorite"><Star size={14} /> {fav ? "Saved as favorite" : "Save as favorite"}</button>
           <button className="btn btn-primary btn-block" onClick={logMeal} data-testid="button-log-basket"><Check size={16} /> Log meal</button>
         </div>
       )}
 
-      {state.favorites.length > 0 && (
-        <>
-          <div className="label mt-5 mb-2">Favorites · one tap</div>
-          <div className="grid grid-cols-2 gap-2">
-            {state.favorites.map((f) => (
-              <div key={f.id} className="card-flat flex items-center gap-2" style={{ padding: 8 }}>
-                <button className="flex-1 text-left min0" style={{ minHeight: 44 }} onClick={() => { set((s) => ({ ...s, meals: [...s.meals, logFavorite(f, today)] })); ui.toast(`Logged ${f.name}`); }} data-testid={`button-fav-${f.id}`}>
-                  <div className="text-[13px] font-semibold truncate">{f.name}</div>
-                  <div className="mono text-[11px] muted">{f.cal} kcal · {Math.round(f.p)}p</div>
-                </button>
-                <button className="faint" aria-label="Remove favorite" onClick={() => set((s) => ({ ...s, favorites: s.favorites.filter((x) => x.id !== f.id) }))} style={{ padding: 10 }}><Trash2 size={14} /></button>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
 
       <QuickAdd />
 
@@ -341,10 +341,7 @@ function QuickAdd() {
               <label key={k} className="field min0"><span className="label">{l}</span><input className="input mono" inputMode="decimal" value={m[k]} onChange={(e) => setM({ ...m, [k]: e.target.value })} onBlur={k !== "cal" && !m.cal ? autoCal : undefined} data-testid={`input-meal-${k}`} /></label>
             ))}
           </div>
-          <label className="flex items-center gap-2 text-sm muted" style={{ minHeight: 44 }}>
-            <input type="checkbox" checked={fav} onChange={(e) => setFav(e.target.checked)} style={{ width: 18, height: 18, accentColor: "#111418" }} data-testid="checkbox-save-favorite" />
-            <Star size={14} /> Save as favorite
-          </label>
+          <button type="button" className={`btn btn-sm ${fav ? "btn-primary" : ""}`} aria-pressed={fav ? "true" : "false"} onClick={() => setFav(!fav)} data-testid="checkbox-save-favorite"><Star size={14} /> {fav ? "Saved as favorite" : "Save as favorite"}</button>
           <button className="btn btn-outline btn-block" onClick={add} disabled={!m.cal && !m.p} data-testid="button-add-meal"><Plus size={16} /> Log meal</button>
         </div>
       )}

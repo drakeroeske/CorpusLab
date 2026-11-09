@@ -15,6 +15,7 @@ export interface PublicStats {
   lifts: Record<string, number>; // exId -> best e1RM in kg
   streak: number;
   adherence: number;
+  missedThisWeek: boolean; // a planned day earlier this week (Mon-based) with no finished session
   split: string;
   schedule: number[];
   gym: string;
@@ -42,9 +43,22 @@ export function computePublicStats(state: AppState): PublicStats | null {
   return {
     units: p.units, bodyWeightKg: Math.round(toKg(p.bodyWeight, p.units) * 10) / 10, sex: p.sex,
     lifts, streak: userStreak(state, today), adherence: Math.round(adherence4w(state, today) * 100) / 100,
+    missedThisWeek: missedPlannedThisWeek(state, today),
     split: state.program?.name ?? "", schedule: Array.from(new Set(state.program?.days.flatMap((d) => d.weekdays) ?? [])).sort(),
     gym: p.gym || "", lastSessionAt: last?.end ?? null, updatedAt: Date.now(),
   };
+}
+
+/** True when a planned training day earlier this week (Monday start) has no finished session. */
+export function missedPlannedThisWeek(state: AppState, today: string): boolean {
+  const dow = new Date(today + "T12:00:00").getDay();
+  const back = (dow + 6) % 7; // days since Monday
+  const done = new Set(state.sessions.filter((s) => s.end).map((s) => s.date));
+  for (let i = 1; i <= back; i++) {
+    const d = addDays(today, -i);
+    if (dayForDate(state.program, d) && !done.has(d)) return true;
+  }
+  return false;
 }
 
 export function topSetLabel(s: Session): string {

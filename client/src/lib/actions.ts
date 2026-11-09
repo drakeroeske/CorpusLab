@@ -60,3 +60,31 @@ export function downloadDataUrl(name: string, dataUrl: string) {
     return true;
   } catch { return false; }
 }
+
+
+/** Save a file via the share sheet when available (iPhone: "Save to Files"), otherwise download it. */
+export async function shareOrDownload(name: string, text: string, mime = "application/json"): Promise<"shared" | "downloaded" | "failed"> {
+  try {
+    const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+    if (typeof File !== "undefined" && nav.share && nav.canShare) {
+      const file = new File([text], name, { type: mime });
+      if (nav.canShare({ files: [file] })) { await nav.share({ files: [file], title: name }); return "shared"; }
+    }
+  } catch (e) {
+    if ((e as Error).name === "AbortError") return "failed";
+  }
+  return downloadText(name, text, mime) ? "downloaded" : "failed";
+}
+
+/** Every logged set as a spreadsheet-friendly CSV. */
+export function sessionsCsv(state: { sessions: { date: string; dayName: string; exercises: { exId: string; sets: { weight: number; reps: number; rir?: number | null; quality?: number | null }[] }[] }[]; profile: { units: string } | null }, exName: (id: string) => string): string {
+  const esc = (v: unknown) => { const t = String(v ?? ""); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const rows = [["date", "session", "exercise", "set", `weight_${state.profile?.units ?? "lb"}`, "reps", "rir", "quality", "e1rm"]];
+  for (const s of [...state.sessions].sort((a, b) => a.date.localeCompare(b.date))) {
+    for (const l of s.exercises) l.sets.forEach((st, i) => {
+      const e1 = st.reps > 0 ? Math.round(st.weight * (1 + st.reps / 30)) : "";
+      rows.push([s.date, s.dayName, exName(l.exId), String(i + 1), String(st.weight), String(st.reps), st.rir == null ? "" : String(st.rir), st.quality == null ? "" : String(st.quality), String(e1)]);
+    });
+  }
+  return rows.map((r) => r.map(esc).join(",")).join("\n");
+}

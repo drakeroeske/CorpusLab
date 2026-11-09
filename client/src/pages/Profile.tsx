@@ -16,9 +16,9 @@ import { InstallCard } from "@/components/Install";
 import { PLEDGE_ENABLED, PledgeSheet } from "@/components/Pledge";
 import { NotificationsCard } from "@/components/Notifications";
 import { buildDemo } from "@/lib/demo";
-import { convertUnits, downloadText } from "@/lib/actions";
+import { convertUnits, downloadText, sessionsCsv, shareOrDownload } from "@/lib/actions";
 import { dateKey, fmtDate, mean } from "@/lib/engine";
-import { customExercisesIn, newId } from "@/lib/exercises";
+import { EX, customExercisesIn, newId } from "@/lib/exercises";
 import type { AppState, Client, Experience, Goal, Profile as P, Program, Sex } from "@/lib/types";
 
 const GOALS: { v: Goal; l: string }[] = [{ v: "muscle", l: "Build muscle" }, { v: "strength", l: "Get stronger" }, { v: "fatloss", l: "Lose fat" }, { v: "recomp", l: "Recomp" }];
@@ -120,11 +120,13 @@ export default function Profile() {
           </>
         )}
 
-        <div className="section-title"><h2>Data</h2></div>
+        <div className="section-title"><h2>Backup</h2></div>
+        <BackupCard state={state} onMore={() => setExportOpen(true)} />
+
+        <div className="section-title mt-6"><h2>Data</h2></div>
         <SharedCodes />
         <div className="card stack mt-3">
-          <button className="btn btn-block" onClick={() => setExportOpen(true)} data-testid="button-export"><Download size={16} /> Export JSON</button>
-          <button className="btn btn-block" onClick={() => setImportOpen(true)} data-testid="button-import"><Upload size={16} /> Import JSON</button>
+          <button className="btn btn-block" onClick={() => setImportOpen(true)} data-testid="button-import"><Upload size={16} /> Import a backup (.json)</button>
           {mode !== "readonly" && <><button className="btn btn-outline btn-block" onClick={() => { replace(buildDemo()); ui.setTab("today"); ui.toast("Demo data loaded: 8 weeks of history"); }} data-testid="button-load-demo"><Database size={16} /> Load demo data</button>
           <button className="btn btn-ghost btn-block orange" onClick={() => setResetOpen(true)} data-testid="button-reset">Reset all data</button></>}
         </div>
@@ -142,6 +144,43 @@ export default function Profile() {
           </div>
         </Sheet>
       )}
+    </div>
+  );
+}
+
+const BACKUP_KEY = "rxs.lastBackupAt";
+function BackupCard({ state, onMore }: { state: AppState; onMore: () => void }) {
+  const ui = useUI();
+  const [last, setLast] = useState<string | null>(() => { try { return localStorage.getItem(BACKUP_KEY); } catch { return null; } });
+  const [busy, setBusy] = useState<"json" | "csv" | null>(null);
+  const mark = () => { const t = new Date().toISOString(); try { localStorage.setItem(BACKUP_KEY, t); } catch { /* ignore */ } setLast(t); };
+  const sets = state.sessions.reduce((a, s) => a + s.exercises.reduce((b, l) => b + l.sets.length, 0), 0);
+  const daysSince = last ? Math.floor((Date.now() - new Date(last).getTime()) / 86400000) : null;
+  const run = async (kind: "json" | "csv") => {
+    setBusy(kind);
+    try {
+      const r = kind === "json"
+        ? await shareOrDownload(`corpus-backup-${dateKey()}.json`, JSON.stringify(state), "application/json")
+        : await shareOrDownload(`corpus-workouts-${dateKey()}.csv`, sessionsCsv(state, (id) => EX[id]?.name ?? id), "text/csv");
+      if (r === "failed") ui.toast("Couldn't save the file. Use 'More options' to copy it instead.");
+      else { if (kind === "json") mark(); ui.toast(kind === "json" ? (r === "shared" ? "Backup shared" : "Backup downloaded") : (r === "shared" ? "CSV shared" : "CSV downloaded")); }
+    } finally { setBusy(null); }
+  };
+  return (
+    <div className="card" data-testid="card-backup">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min0">
+          <div className="text-sm font-semibold">Your data, in your hands</div>
+          <div className="text-xs muted mt-1">{state.sessions.length} sessions · {sets} sets · {state.checkins.length} check-ins · {state.meals.length} meals · {state.photos?.length ?? 0} photos</div>
+        </div>
+        <span className={`chip ${daysSince != null && daysSince <= 30 ? "chip-signal" : ""}`} data-testid="text-last-backup">{last ? (daysSince === 0 ? "Backed up today" : `Backup ${daysSince}d ago`) : "No backup yet"}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 mt-3">
+        <button className="btn btn-primary" disabled={busy !== null} onClick={() => run("json")} data-testid="button-backup-now"><Download size={16} /> {busy === "json" ? "Saving…" : "Back up now"}</button>
+        <button className="btn" disabled={busy !== null} onClick={() => run("csv")} data-testid="button-export-csv"><Download size={16} /> {busy === "csv" ? "Saving…" : "Workouts .csv"}</button>
+      </div>
+      <p className="text-[11px] faint mt-2">The backup is a full copy of this account's log that you can import later. On iPhone the share sheet opens so you can Save to Files. CSV opens in Numbers, Sheets or Excel.</p>
+      <button className="btn btn-ghost btn-sm mt-1" onClick={onMore} data-testid="button-export">More options (copy as text)</button>
     </div>
   );
 }

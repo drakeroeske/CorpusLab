@@ -181,7 +181,7 @@ input::placeholder, textarea::placeholder { color: var(--fg); opacity: 0.45; }
 
 .subtabs { display: flex; gap: 8px; overflow-x: auto; padding: 0 16px 12px; scrollbar-width: none; background: var(--page); }
 .subtabs::-webkit-scrollbar { display: none; }
-.subtabs button { min-height: 36px; padding: 0 14px; border: 1px solid var(--line); font-family: var(--font-sans); font-size: 14px; font-weight: 500; color: var(--fg); white-space: nowrap; flex-shrink: 0; }
+.subtabs button { min-height: 44px; padding: 0 14px; border: 1px solid var(--line); font-family: var(--font-sans); font-size: 14px; font-weight: 500; color: var(--fg); white-space: nowrap; flex-shrink: 0; }
 .subtabs button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--page); font-weight: 600; }
 .subtabs button:not([aria-pressed="true"]) { background: transparent; }
 
@@ -300,3 +300,30 @@ svg:not(.lucide) { color: var(--ink); }
 .tour-hole { position: fixed; pointer-events: none; box-shadow: 0 0 0 200vmax rgba(15, 17, 30, .62); outline: 2px solid var(--page); }
 .tour-card { position: fixed; background: var(--page); color: var(--fg); padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.25); animation: fade .15s; }
 .icon-btn:disabled { opacity: .3; pointer-events: none; }
+
+/* in-app inbox */
+.stack-tight > * + * { margin-top: 8px; }
+.inbox-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; background: var(--signal); color: var(--ink); border: 1px solid var(--ink); border-radius: 9px; font-family: var(--font-sans); font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.inbox-item { background: transparent; }
+.inbox-item.unread { background: var(--signal); }
+.inbox-item:active { background: var(--ink); color: var(--page); }
+.inbox-item:active .muted { color: var(--page); }
+
+/* feed: new posts pill + pull to refresh */
+.new-posts-pill { position: sticky; top: calc(8px + env(safe-area-inset-top)); z-index: 5; display: flex; justify-content: center; }
+.new-posts-pill button { background: var(--ink); color: var(--page); min-height: 40px; padding: 0 16px; font-family: var(--font-sans); font-size: 13px; font-weight: 600; border: 1px solid var(--ink); border-radius: 20px; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+.ptr { height: 0; overflow: hidden; display: flex; align-items: flex-end; justify-content: center; font-family: var(--font-sans); font-size: 12px; font-weight: 600; color: var(--muted); transition: height .15s; }
+.ptr.active { height: 36px; }
+
+/* logger: the exercise you're on is marked pink */
+.ex-active-card { box-shadow: inset 0 0 0 1px var(--ink); }
+.ex-active { background: var(--signal); }
+.ex-active .muted, .ex-active .faint { color: var(--ink); }
+.rowline.ex-active { margin: 0 -12px; padding-left: 12px; padding-right: 12px; }
+
+/* program editor: drag handles */
+.drag-handle { touch-action: none; cursor: grab; display: inline-flex; align-items: center; justify-content: center; width: 44px; min-height: 44px; color: var(--muted); }
+.drag-handle:active { cursor: grabbing; }
+.dragging { opacity: .5; }
+.drop-before { box-shadow: 0 -3px 0 0 var(--ink); }
+.drop-after { box-shadow: 0 3px 0 0 var(--ink); }

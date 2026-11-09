@@ -1,5 +1,7 @@
 import { Term } from "@/components/Term";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { PullToRefresh } from "@/components/PullToRefresh";
+import { StreakCells, Tag } from "@/components/riso";
 import { Award, Check, Copy, Heart, MapPin, MessageCircle, RefreshCw, Send, Share, Trash2, UserMinus, UserPlus, X } from "lucide-react";
 import { inviteLink } from "@/lib/invite";
 import { PostCard } from "@/components/PostCard";
@@ -12,7 +14,7 @@ import { useAuth, type PubUser } from "@/lib/auth";
 import { prWhyStat } from "@/lib/derived";
 import { Empty, Seg, Sheet, initials } from "@/components/ui";
 import { PRCardSheet, type PRData } from "@/components/PRCard";
-import { dots, fmtW, fromKg, r1, sessionPRs } from "@/lib/engine";
+import { addDays, dateKey, dayForDate, dots, fmtW, fromKg, r1, sessionPRs } from "@/lib/engine";
 import { EX } from "@/lib/exercises";
 import type { PublicStats } from "@/lib/social";
 
@@ -46,11 +48,11 @@ export default function SpottersLive() {
       <EngineHeader title="Social" />
       <Sectioned name="Social" value={sub} onChange={setSub}
         sections={[
-          { id: "feed", label: "Feed" }, { id: "friends", label: pending ? `Friends · ${pending}` : "Friends", title: "Friends" },
+          { id: "feed", label: "Feed" }, { id: "crews", label: "Crews" }, { id: "friends", label: pending ? `Friends · ${pending}` : "Friends", title: "Friends" },
           { id: "gym", label: "Gym", title: "Your gym", more: true, hint: "Who trains where you do" },
           { id: "leaders", label: "Leaders", title: "Leaderboards", more: true, hint: "Strength rankings among your spotters" },
         ]}
-        render={(id) => (id === "friends" ? <Friends onChange={setPending} /> : id === "gym" ? <Gym /> : id === "leaders" ? <Leaders /> : <Feed goFriends={() => setSub("friends")} />)} />
+        render={(id) => (id === "friends" ? <Friends onChange={setPending} /> : id === "crews" ? <Crews goFriends={() => setSub("friends")} /> : id === "gym" ? <Gym /> : id === "leaders" ? <Leaders /> : <Feed goFriends={() => setSub("friends")} />)} />
     </div>
   );
 }
@@ -76,7 +78,22 @@ function Feed({ goFriends }: { goFriends: () => void }) {
   const { data, err, reload } = useLoad<{ posts: LivePost[] }>("/api/feed", 20000);
   const [card, setCard] = useState<PRData | null>(null);
   const [posts, setPosts] = useState<LivePost[]>([]);
-  useEffect(() => { if (data) setPosts(data.posts); }, [data]);
+  const [held, setHeld] = useState<LivePost[] | null>(null); // fresh posts from others, waiting while you read
+  const seen = useRef(false);
+  useEffect(() => {
+    if (!data) return;
+    const fresh = data.posts;
+    if (!seen.current) { seen.current = true; setPosts(fresh); return; }
+    setPosts((cur) => {
+      const have = new Set(cur.map((p) => p.id));
+      const incoming = fresh.filter((p) => !have.has(p.id) && !p.mine);
+      if (incoming.length && window.scrollY > 160) { setHeld(fresh); return cur.map((p) => fresh.find((f) => f.id === p.id) ?? p); }
+      setHeld(null);
+      return fresh;
+    });
+  }, [data]);
+  const showHeld = () => { if (held) { setPosts(held); setHeld(null); } window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const heldCount = held ? held.filter((p) => !posts.some((q) => q.id === p.id)).length : 0;
 
   const like = async (p: LivePost) => {
     setPosts((ps) => ps.map((x) => (x.id === p.id ? { ...x, liked: !x.liked, likes: x.likes + (x.liked ? -1 : 1) } : x)));
@@ -103,7 +120,13 @@ function Feed({ goFriends }: { goFriends: () => void }) {
   if (!data && !err) return <p className="text-sm muted" data-testid="status-feed-loading">Loading feed…</p>;
   if (err && !data) return <div className="stack"><Empty>{err}</Empty><button className="btn btn-block" onClick={reload}><RefreshCw size={15} /> Try again</button></div>;
   return (
+    <PullToRefresh onRefresh={async () => { await reload(); setHeld(null); }}>
     <div className="stack" data-testid="view-feed">
+      {heldCount > 0 && <div className="new-posts-pill"><button onClick={showHeld} data-testid="button-new-posts">{heldCount} new {heldCount === 1 ? "post" : "posts"} · tap to show</button></div>}
+      <div className="flex items-center justify-between">
+        <span className="label">Feed · pull down to refresh</span>
+        <button className="btn btn-sm" onClick={() => { reload(); setHeld(null); }} aria-label="Refresh feed" data-testid="button-feed-refresh"><RefreshCw size={14} /> Refresh</button>
+      </div>
       {!me?.shareFeed && <p className="text-xs orange">Your workouts aren't being shared. Turn on "Share workouts" in Profile to post them.</p>}
       {posts.length === 0 && (
         <>
@@ -126,6 +149,107 @@ function Feed({ goFriends }: { goFriends: () => void }) {
         );
       })}
       {card && <PRCardSheet data={card} onClose={() => setCard(null)} />}
+    </div>
+    </PullToRefresh>
+  );
+}
+
+/* ----------------------------------------------------------------- crews */
+interface CrewMember extends PubUser { me: boolean; streak: number; adherence: number; missedThisWeek: boolean }
+interface Crew { id: string; name: string; ownerId: string; streak: number; best: number; members: CrewMember[] }
+
+function Crews({ goFriends }: { goFriends: () => void }) {
+  const { state } = useStore();
+  const { me } = useAuth();
+  const ui = useUI();
+  const { data, err, reload } = useLoad<{ crews: Crew[] }>("/api/crews", 30000);
+  const friends = useLoad<{ friends: FriendRow[] }>("/api/friends");
+  const [crews, setCrews] = useState<Crew[]>([]);
+  useEffect(() => { if (data) setCrews(data.crews); }, [data]);
+  const [create, setCreate] = useState(false);
+  const [addTo, setAddTo] = useState<Crew | null>(null);
+  const [cname, setCname] = useState("");
+  const [picked, setPicked] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const today = dateKey();
+  const myLog = Array.from({ length: 14 }, (_, i) => {
+    const date = addDays(today, i - 13);
+    const planned = !!dayForDate(state.program, date);
+    const done = state.sessions.some((x) => x.date === date && x.end);
+    return { date, planned: planned && !done && date < today, done };
+  });
+  const flist = friends.data?.friends ?? [];
+  const run = async (fn: () => Promise<{ crews: Crew[] }>, okMsg: string) => {
+    setBusy(true);
+    try { const r = await fn(); setCrews(r.crews); ui.toast(okMsg); return true; } catch (e) { ui.toast((e as Error).message); return false; } finally { setBusy(false); }
+  };
+  const first = (n: string) => n.split(" ")[0];
+
+  if (!data && !err) return <p className="text-sm muted">Loading crews…</p>;
+  if (err && !data) return <div className="stack"><Empty>{err}</Empty><button className="btn btn-block" onClick={reload}><RefreshCw size={15} /> Try again</button></div>;
+  return (
+    <div className="stack" data-testid="view-crews">
+      <p className="text-sm muted">Crews share one streak. It resets to zero if any member misses a planned session this week, and it can never be higher than the lowest member's streak.</p>
+      {crews.length === 0 && <Empty>No crews yet. Make one with your spotters.</Empty>}
+      {crews.map((c) => {
+        const missed = c.members.filter((m) => m.missedThisWeek);
+        return (
+          <div key={c.id} className="card" data-testid={`card-crew-${c.id}`}>
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-[20px] font-bold min0 truncate">{c.name}</span>
+              {c.streak > 0 ? <Tag signal>{c.streak} session streak</Tag> : <Tag>No streak</Tag>}
+            </div>
+            <div className="flex items-end gap-4 mt-3">
+              <div><div className="label">Shared streak</div><div className="big-num text-[40px]" data-testid={`text-crew-streak-${c.id}`}>{c.streak}</div></div>
+              <div><div className="label">Best</div><div className="big-num text-[40px]">{Math.max(c.best, c.streak)}</div></div>
+              <div className="flex-1 min0"><div className="label">Last 14 days · you</div><div className="mt-1"><StreakCells log={myLog} testId={`streak-${c.id}`} /></div></div>
+            </div>
+            {missed.length > 0 && <p className="text-xs orange mt-1">Streak broken — {missed.map((m) => (m.me ? "you" : first(m.displayName))).join(", ")} missed a planned session this week.</p>}
+            <div className="label mt-4 mb-1">Consistency leaderboard · 4 wk</div>
+            {c.members.map((m, i) => (
+              <div key={m.id} className="grid items-center gap-3" style={{ gridTemplateColumns: "18px 30px 1fr 50px", minHeight: 44 }}>
+                <span className="mono text-xs muted">{i + 1}</span>
+                <Avatar name={m.displayName} me={m.me} size={28} />
+                <span className="text-sm min0 truncate">{m.me ? "You" : m.displayName}{m.missedThisWeek && <span className="orange text-[11px] ml-2">missed</span>}</span>
+                <span className="mono text-sm text-right">{Math.round(m.adherence * 100)}%</span>
+              </div>
+            ))}
+            <div className="flex gap-2 mt-3">
+              {c.members.length < 8 && <button className="btn btn-sm" onClick={() => { setAddTo(c); setPicked([]); }} data-testid={`button-crew-add-${c.id}`}><UserPlus size={14} /> Add spotter</button>}
+              <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => { if (confirm(`Leave ${c.name}?`)) run(() => api("DELETE", `/api/crews/${c.id}/members/me`), "Left crew"); }} data-testid={`button-leave-crew-${c.id}`}><UserMinus size={14} /> Leave</button>
+            </div>
+          </div>
+        );
+      })}
+      {me?.isDemo
+        ? <p className="text-xs faint">Sample accounts can't make crews. Create your own account to try it.</p>
+        : <button className="btn btn-primary btn-block" onClick={() => { setCreate(true); setCname(""); setPicked([]); }} data-testid="button-create-crew">Create crew</button>}
+
+      {(create || addTo) && (
+        <Sheet title={addTo ? `Add to ${addTo.name}` : "New crew"} onClose={() => { setCreate(false); setAddTo(null); }} testId="sheet-create-crew">
+          {create && <input className="input" placeholder="Crew name" maxLength={32} value={cname} onChange={(e) => setCname(e.target.value)} data-testid="input-crew-name" />}
+          <div className="label mt-4 mb-2">{addTo ? "Your spotters" : `Members (${picked.length + 1}/8, including you)`}</div>
+          {flist.length === 0 && <div className="stack"><Empty>You need spotters first.</Empty><button className="btn btn-block" onClick={() => { setCreate(false); setAddTo(null); goFriends(); }}>Add spotters</button></div>}
+          {flist.filter((f) => !addTo || !addTo.members.some((m) => m.id === f.id)).map((f) => {
+            const on = picked.includes(f.id);
+            const cap = addTo ? picked.length >= 1 && !on : !on && picked.length >= 7;
+            return (
+              <label key={f.id} className="flex items-center justify-between gap-3" style={{ minHeight: 48 }}>
+                <span className="flex items-center gap-2 min0"><Avatar name={f.displayName} size={28} /><span className="text-sm truncate">{f.displayName}</span><span className="mono text-[11px] muted">@{f.username}</span></span>
+                <input type="checkbox" className="toggle" checked={on} disabled={cap} onChange={() => setPicked(on ? picked.filter((x) => x !== f.id) : addTo ? [f.id] : [...picked, f.id])} data-testid={`toggle-crew-member-${f.id}`} />
+              </label>
+            );
+          })}
+          {flist.length > 0 && (
+            <button className="btn btn-primary btn-block mt-4" disabled={busy || (create ? cname.trim().length < 2 : picked.length !== 1)} onClick={async () => {
+              const ok = addTo
+                ? await run(() => api("POST", `/api/crews/${addTo.id}/members`, { userId: picked[0] }), "Spotter added")
+                : await run(() => api("POST", "/api/crews", { name: cname.trim(), memberIds: picked }), "Crew created");
+              if (ok) { setCreate(false); setAddTo(null); }
+            }} data-testid="button-save-crew">{addTo ? "Add to crew" : "Create crew"}</button>
+          )}
+        </Sheet>
+      )}
     </div>
   );
 }
