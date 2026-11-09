@@ -98,8 +98,8 @@ export function ExerciseCatalog({ onPick, embedded, initialQuery = "", onCreated
       </div>
       <Seg value={groupBy} onChange={pickGroup} options={[{ v: "muscle", l: "By muscle" }, { v: "equipment", l: "By equipment" }, { v: "type", l: "By type" }]} testId="seg-catalog-group" />
       <div className="scroll-x flex gap-2 mt-3 mb-3">
-        <button className={`chip ${filter === "all" ? "chip-lime" : ""}`} style={{ height: 32 }} onClick={() => setFilter("all")} data-testid="filter-all">All</button>
-        {chips.map((c) => <button key={c.v} className={`chip ${filter === c.v ? "chip-lime" : ""}`} style={{ height: 32 }} onClick={() => setFilter(filter === c.v ? "all" : c.v)} data-testid={`filter-${groupBy}-${c.v}`}>{c.l}</button>)}
+        <button className="chip chip-pick" aria-pressed={filter === "all"} onClick={() => setFilter("all")} data-testid="filter-all">All</button>
+        {chips.map((c) => <button key={c.v} className="chip chip-pick" aria-pressed={filter === c.v} onClick={() => setFilter(filter === c.v ? "all" : c.v)} data-testid={`filter-${groupBy}-${c.v}`}>{c.l}</button>)}
       </div>
 
       {all.length === 0 && (

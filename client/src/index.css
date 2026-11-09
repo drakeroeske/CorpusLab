@@ -338,3 +338,9 @@ svg:not(.lucide) { color: var(--ink); }
 .tabbar.tabs-5 { grid-template-columns: repeat(5, 1fr); }
 .tabbar button { position: relative; }
 .tabbar .tab-badge { position: absolute; top: 6px; right: calc(50% - 30px); min-width: 16px; height: 16px; padding: 0 4px; background: var(--signal); color: var(--ink); border-radius: 8px; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+
+/* Toggle chips (custom exercise form, catalog filters): a picked chip fills with ink so the choice is obvious. */
+.chip-pick { min-height: 44px; padding: 0 14px; font-size: 13px; border-radius: 0; }
+.chip-pick[aria-pressed="true"] { background: var(--ink); color: var(--page); border-color: var(--ink); }
+.chip-pick.alt[aria-pressed="true"] { background: var(--signal-soft); color: var(--ink); border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.chip-pick:disabled { opacity: .45; text-decoration: line-through; }

@@ -48,6 +48,7 @@ export function CustomExerciseSheet({ exercise, initialName = "", onClose, onSav
   const effPattern: Exercise["pattern"] = effKind === "isolation" ? "isolation" : (pattern ?? (guessedCompound === "isolation" ? "horizontal_push" : guessedCompound));
   const uses = exercise ? customExerciseUses(state, exercise.id) : [];
 
+  // Picking a main muscle also clears it from "Also works" so one muscle never counts twice.
   const toggle = (m: Muscle) => { setPrimary((p) => (p.includes(m) ? p.filter((x) => x !== m) : [...p, m])); setSecondary((p) => p.filter((x) => x !== m)); };
   const toggleSec = (m: Muscle) => setSecondary((p) => (p.includes(m) ? p.filter((x) => x !== m) : [...p, m]));
 
@@ -86,15 +87,15 @@ export function CustomExerciseSheet({ exercise, initialName = "", onClose, onSav
       <div className="label mt-5 mb-2">Main muscles</div>
       <div className="flex flex-wrap gap-2" role="group" aria-label="Main muscles">
         {MUSCLES.map((m) => (
-          <button key={m} type="button" className={`chip ${primary.includes(m) ? "chip-lime" : ""}`} style={{ height: 34 }} aria-pressed={primary.includes(m)} onClick={() => toggle(m)} data-testid={`chip-muscle-${m}`}>{MUSCLE_LABEL[m]}</button>
+          <button key={m} type="button" className="chip chip-pick" aria-pressed={primary.includes(m)} onClick={() => toggle(m)} data-testid={`chip-muscle-${m}`}>{MUSCLE_LABEL[m]}</button>
         ))}
       </div>
       <p className="text-xs faint mt-2">Used for muscle fatigue and weekly sets.</p>
 
       <div className="label mt-5 mb-2">Also works <span className="faint" style={{ textTransform: "none", letterSpacing: 0 }}>(optional)</span></div>
       <div className="flex flex-wrap gap-2" role="group" aria-label="Secondary muscles">
-        {MUSCLES.filter((m) => !primary.includes(m)).map((m) => (
-          <button key={m} type="button" className={`chip ${secondary.includes(m) ? "chip-blue" : ""}`} style={{ height: 34 }} aria-pressed={secondary.includes(m)} onClick={() => toggleSec(m)} data-testid={`chip-secondary-${m}`}>{MUSCLE_LABEL[m]}</button>
+        {MUSCLES.map((m) => (
+          <button key={m} type="button" className="chip chip-pick alt" disabled={primary.includes(m)} title={primary.includes(m) ? "Already a main muscle" : undefined} aria-pressed={secondary.includes(m)} onClick={() => toggleSec(m)} data-testid={`chip-secondary-${m}`}>{MUSCLE_LABEL[m]}</button>
         ))}
       </div>
       <p className="text-xs faint mt-2">Secondary muscles count as half a set for fatigue.</p>
@@ -102,7 +103,7 @@ export function CustomExerciseSheet({ exercise, initialName = "", onClose, onSav
       <div className="label mt-5 mb-2">Equipment</div>
       <div className="flex flex-wrap gap-2" role="group" aria-label="Equipment">
         {EQUIPMENT.map((o) => (
-          <button key={o.v} type="button" className={`chip ${equipment === o.v ? "chip-lime" : ""}`} style={{ height: 34 }} aria-pressed={equipment === o.v} onClick={() => setEquipment(o.v)} data-testid={`chip-equipment-${o.v}`}>{o.l}</button>
+          <button key={o.v} type="button" className="chip chip-pick" aria-pressed={equipment === o.v} onClick={() => setEquipment(o.v)} data-testid={`chip-equipment-${o.v}`}>{o.l}</button>
         ))}
       </div>
 
@@ -120,7 +121,7 @@ export function CustomExerciseSheet({ exercise, initialName = "", onClose, onSav
               <p className="text-xs muted mb-2">Movement pattern, used to suggest swaps and convert weights. Change it if our guess is wrong.</p>
               <div className="flex flex-wrap gap-2" role="group" aria-label="Movement pattern">
                 {COMPOUND_PATTERNS.map((p) => (
-                  <button key={p} type="button" className={`chip ${effPattern === p ? "chip-lime" : ""}`} style={{ height: 32 }} aria-pressed={effPattern === p} onClick={() => setPattern(p)} data-testid={`chip-pattern-${p}`}>{PATTERN_LABEL[p]}</button>
+                  <button key={p} type="button" className="chip chip-pick" aria-pressed={effPattern === p} onClick={() => setPattern(p)} data-testid={`chip-pattern-${p}`}>{PATTERN_LABEL[p]}</button>
                 ))}
               </div>
             </div>
@@ -133,6 +134,14 @@ export function CustomExerciseSheet({ exercise, initialName = "", onClose, onSav
         <textarea className="textarea" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Setup, cues, which machine at your gym" maxLength={300} data-testid="textarea-custom-notes" />
       </label>
 
+      <div className="card-flat mt-5" data-testid="text-custom-summary">
+        <div className="label mb-1">Summary</div>
+        <p className="text-sm">
+          <b>{trimmed || "Unnamed exercise"}</b> · {primary.length ? primary.map((m) => MUSCLE_LABEL[m]).join(", ") : "no main muscle yet"}
+          {secondary.length ? <span className="muted"> · also {secondary.map((m) => MUSCLE_LABEL[m]).join(", ")}</span> : null}
+          {equipment ? ` · ${EQUIPMENT_LABEL[equipment]}` : ""} · {effKind === "compound" ? `Compound (${PATTERN_LABEL[effPattern]})` : "Isolation"}
+        </p>
+      </div>
       {tried && missing && <p className="text-sm mt-4" role="alert" style={{ color: "var(--signal)" }} data-testid="text-custom-error">{missing}</p>}
       <button className="btn btn-primary btn-block btn-lg mt-5" onClick={save} data-testid="button-save-custom">{exercise ? "Save changes" : "Create exercise"}</button>
 
