@@ -29,7 +29,10 @@ export function NotifPlanSync() {
 }
 
 /* ------------------------------------------------------------------ deep links */
-const TAB: Record<string, UI["tab"]> = { today: "today", train: "train", body: "body", spotters: "spotters", me: "profile", profile: "profile" };
+// Old names (body, spotters, me) stay mapped so notifications sent before the 4-tab layout still land correctly.
+const TAB: Record<string, UI["tab"]> = { today: "today", train: "train", progress: "progress", body: "progress", social: "social", spotters: "social", me: "profile", profile: "profile" };
+// Sections that moved from Train to Progress.
+const MOVED_TO_PROGRESS = new Set(["lab", "experiments", "history"]);
 /** Opens the right screen when the app is launched from a notification (or receives one while open). */
 export function useDeepLinks(ui: UI, ready: boolean) {
   const uiRef = useRef(ui); uiRef.current = ui;
@@ -39,9 +42,10 @@ export function useDeepLinks(ui: UI, ready: boolean) {
       const d = readDeepLink(url);
       if (!d) return;
       const u = uiRef.current;
-      const tab = TAB[d.go ?? ""];
+      let tab = TAB[d.go ?? ""];
+      if (tab === "train" && d.sub && MOVED_TO_PROGRESS.has(d.sub)) tab = "progress";
       if (tab) u.setTab(tab);
-      if (tab === "train" && d.sub) u.setTrainSub(d.sub);
+      if (tab && d.sub) u.setSub(tab, d.sub);
       if (d.open === "checkin") u.open("checkin");
       if (d.open === "fuel" || d.open === "nutrition") u.open("nutrition");
       if (!url) clearDeepLink();
@@ -62,7 +66,7 @@ function usePushStatus() {
 }
 
 const SUPPORT_TEXT: Record<string, string> = {
-  "ios-not-installed": "On iPhone, notifications only work once RXS is on your home screen. Add it (see above), open it from there, and come back here.",
+  "ios-not-installed": "On iPhone, notifications only work once Corpus is on your home screen. Add it (see above), open it from there, and come back here.",
   "no-push": "This browser can't receive push notifications. Chrome, Edge, Firefox, and Safari 16.4+ do.",
   "no-sw": "This browser can't run the background worker notifications need.",
   insecure: "Notifications need a secure (https) connection.",
@@ -89,7 +93,7 @@ export function NotificationsCard() {
     try {
       const r = await enablePush(prefs);
       if (r.ok) { setMsg("On. We sent a test so you can see where they land."); try { await sendTest(); } catch { /* ignore */ } }
-      else setMsg(r.reason === "denied" ? "Notifications are blocked for RXS in your browser settings. Allow them there, then try again." : r.reason === "dismissed" ? "No permission given. Tap again when you're ready." : SUPPORT_TEXT[r.reason] ?? "Couldn't turn notifications on.");
+      else setMsg(r.reason === "denied" ? "Notifications are blocked for Corpus in your browser settings. Allow them there, then try again." : r.reason === "dismissed" ? "No permission given. Tap again when you're ready." : SUPPORT_TEXT[r.reason] ?? "Couldn't turn notifications on.");
     } catch (e) { setMsg((e as Error).message); }
     setBusy(false); st.refresh();
   };
@@ -142,12 +146,19 @@ function HourPick({ label, value, onChange, id }: { label: string; value: number
 
 /* ------------------------------------------------------------------ Today nudge */
 /** One-time card on Today: turn notifications on. Hidden when on, dismissed, unsupported, or a sample account. */
-export function NotifNudge({ onOpenSettings }: { onOpenSettings: () => void }) {
-  const { state, set, mode } = useStore();
+/** Whether the notifications nudge would show, so Today can show it instead of (not alongside) the install banner. */
+export function useNotifNudgeVisible() {
+  const { state, mode } = useStore();
   const auth = useAuth();
   const st = usePushStatus();
-  if (mode !== "remote" || auth.me?.isDemo || state.notifNudgeDismissed || st.subscribed !== false || st.perm === "denied") return null;
-  if (st.support !== "ok" && st.support !== "ios-not-installed") return null;
+  if (mode !== "remote" || auth.me?.isDemo || state.notifNudgeDismissed || st.subscribed !== false || st.perm === "denied") return false;
+  return st.support === "ok" || st.support === "ios-not-installed";
+}
+
+export function NotifNudge({ onOpenSettings }: { onOpenSettings: () => void }) {
+  const { set } = useStore();
+  const st = usePushStatus();
+  if (!useNotifNudgeVisible()) return null;
   const dismiss = () => set((s) => ({ ...s, notifNudgeDismissed: true }));
   return (
     <div className="card" data-testid="card-notif-nudge">
@@ -155,7 +166,7 @@ export function NotifNudge({ onOpenSettings }: { onOpenSettings: () => void }) {
         <Bell size={18} className="lime" style={{ flexShrink: 0, marginTop: 2 }} />
         <div className="flex-1 min0">
           <div className="text-sm font-semibold">Turn on notifications</div>
-          <p className="text-xs muted mt-1">Spotter requests, coach changes, and a nudge when a check-in, meal, or planned session is still open.{st.support === "ios-not-installed" ? " On iPhone this needs RXS on your home screen first." : ""}</p>
+          <p className="text-xs muted mt-1">Spotter requests, coach changes, and a nudge when a check-in, meal, or planned session is still open.{st.support === "ios-not-installed" ? " On iPhone this needs Corpus on your home screen first." : ""}</p>
           <button className="btn btn-sm btn-primary mt-2" onClick={onOpenSettings} data-testid="button-notif-nudge-open">{st.support === "ios-not-installed" ? "Show me how" : "Set up"}</button>
         </div>
         <button className="icon-btn" aria-label="Dismiss" onClick={dismiss} data-testid="button-notif-nudge-dismiss"><X size={16} /></button>

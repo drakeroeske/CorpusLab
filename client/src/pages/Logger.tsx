@@ -1,10 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Check, ChevronDown, ChevronRight, Disc, Flame, Repeat, Timer, Trash2, X } from "lucide-react";
+import { Info, Term } from "@/components/Term";
+import { useEffect, useMemo, useRef, useState, type TouchEvent as RTouchEvent } from "react";
+import { AlertTriangle, ArrowDown, ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, Disc, Flame, List as ListIcon, Plus, Repeat, Timer, Trash2, X } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
 import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
-import { newSession, prescriptionsFor, prWhyStat, sessionStale, sessionSummary, syncSession, useToday } from "@/lib/derived";
+import { freeLog, freeRx, isFreeSession, newSession, savedFromSession, prescriptionsFor, prWhyStat, sessionStale, sessionSummary, syncSession, useToday } from "@/lib/derived";
+import { StartWorkoutSheet } from "@/components/StartWorkout";
+import { SaveAsWorkoutSheet } from "@/components/SavedWorkouts";
+import { ExercisePicker } from "@/components/ProgramEditor";
 import { Tag } from "@/components/riso";
 import { e1rm, fmtDate, fmtW, jumpFor, logsForPe, platesPerSide, prescribe, restDefault, substitutes, warmupSets, type Prescription } from "@/lib/engine";
 import { EX, MUSCLE_LABEL, isCompound, newId } from "@/lib/exercises";
@@ -52,20 +56,23 @@ const QUALITY_HINT: Record<number, string> = {
   5: "Crisp — every rep looked the same. Ready for a jump.",
 };
 
-function ExerciseCard({ log, idx, rx, pe, active, onActivate, session, fatigue, isFirstCompound }: {
-  log: ExerciseLog; idx: number; rx: Prescription; pe: ProgramExercise; active: boolean; onActivate: () => void; session: Session; fatigue: Record<string, number>; isFirstCompound: boolean;
+/** One exercise, full screen: target, logged sets, big inputs, Log set. Extras sit behind "More". */
+function FocusExercise({ log, idx, rx, pe, fatigue, isFirstCompound, nextName, onNext }: {
+  log: ExerciseLog; idx: number; rx: Prescription; pe: ProgramExercise; fatigue: Record<string, number>; isFirstCompound: boolean; nextName: string | null; onNext: () => void;
 }) {
   const { set, profile, state } = useStore();
   const ui = useUI();
   const u = profile.units;
   const ex = EX[log.exId];
   const subbed = log.exId !== log.originalExId;
+  const subs = substitutes(log.originalExId, rx.weight, pe.increment || 5).filter((c) => c.ex.id !== log.exId);
   const target = log.targetWeight;
   const last = log.sets[log.sets.length - 1];
   const [w, setW] = useState<number>(last?.weight ?? target);
   const [reps, setReps] = useState<number>(last?.reps ?? rx.repGoal);
   const [rir, setRir] = useState<number | null>(null);
   const [quality, setQuality] = useState<number | null>(null);
+  const [more, setMore] = useState(false);
   const [sheet, setSheet] = useState<"warm" | "plates" | "sub" | null>(null);
   useEffect(() => { setW(last?.weight ?? target); }, [target]); // eslint-disable-line
   const hot = ex.primary.filter((m) => (fatigue[m] ?? 0) > 60);
@@ -90,64 +97,64 @@ function ExerciseCard({ log, idx, rx, pe, active, onActivate, session, fatigue, 
   };
 
   return (
-    <section className="card" style={{ padding: 0, borderColor: active ? "var(--border-strong)" : undefined }} data-testid={`card-exercise-${idx}`}>
-      <button className="w-full text-left flex items-start gap-3" style={{ padding: "12px 14px" }} onClick={onActivate} data-testid={`button-activate-exercise-${idx}`}>
-        <span className="mono text-xs faint mt-1 w-4 shrink-0">{String(idx + 1).padStart(2, "0")}</span>
-        <div className="min0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold">{ex.name}</span>
-            {subbed && <span className="chip chip-blue">sub for {EX[log.originalExId].name}</span>}
-            {hot.length > 0 && <span className="chip chip-orange" data-testid={`badge-fatigue-${idx}`}><Flame size={11} />{MUSCLE_LABEL[hot[0]]} {fatigue[hot[0]]}%</span>}
-          </div>
-          <div className="mono text-[15px] mt-1" data-testid={`text-target-${idx}`}>
-            <span className="lime">{target > 0 ? fmtW(target) : "BW"}</span>{target > 0 && <span className="muted"> {u}</span>} × {rx.repMin}–{rx.repMax} <span className="muted">· {rx.sets} sets · {rx.rir} RIR</span>
-          </div>
-          <div className="text-xs muted mt-1" data-testid={`text-why-${idx}`}>{rx.why}</div>
-        </div>
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          {done ? <span className="chip chip-lime"><Check size={11} /> {log.sets.length}/{rx.sets}</span> : <span className="chip">{log.sets.length}/{rx.sets}</span>}
-          {active ? <ChevronDown size={16} className="muted" /> : <ChevronRight size={16} className="muted" />}
-        </div>
-      </button>
+    <section className="card" data-testid={`card-exercise-${idx}`}>
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="text-[22px] font-bold leading-tight min0" data-testid={`text-exercise-name-${idx}`}>{ex.name}</h2>
+        {done ? <span className="chip chip-signal shrink-0"><Check size={12} /> Done</span> : <span className="chip shrink-0" data-testid={`text-set-count-${idx}`}>Set {log.sets.length + 1} of {rx.sets}</span>}
+      </div>
+      {subbed && <div className="text-[13px] muted mt-0.5">Swapped in for {EX[log.originalExId].name}</div>}
+      <div className="mono text-[17px] mt-2" data-testid={`text-target-${idx}`}>
+        <b>{target > 0 ? `${fmtW(target)} ${u}` : ex.equipment === "bodyweight" ? "Body weight" : rx.decision === "start" ? "Your pick" : "Body weight"}</b> × {rx.repMin}–{rx.repMax}
+        <span className="muted text-[14px]" style={{ fontFamily: "var(--font-sans)" }}> · {rx.sets} sets · <Term k="rir">{rx.rir} RIR</Term></span>
+      </div>
 
-      {active && (
-        <div style={{ padding: "0 14px 14px" }}>
-          <div className="flex gap-2 mb-3 flex-wrap">
-            {isFirstCompound && target > 0 && <button className="btn btn-sm btn-outline" onClick={() => setSheet("warm")} data-testid={`button-warmup-${idx}`}><Flame size={14} /> Warm-up</button>}
-            {["barbell", "smith"].includes(ex.equipment) && <button className="btn btn-sm btn-outline" onClick={() => setSheet("plates")} data-testid={`button-plates-${idx}`}><Disc size={14} /> Plates</button>}
-            <button className="btn btn-sm btn-outline" onClick={() => setSheet("sub")} data-testid={`button-sub-${idx}`}><Repeat size={14} /> Equipment busy?</button>
-          </div>
+      {/* Tools that matter before or between sets. */}
+      <div className="flex gap-2 mt-3 flex-wrap">
+        {isFirstCompound && target > 0 && log.sets.length === 0 && <button className="btn btn-sm btn-outline" onClick={() => setSheet("warm")} data-testid={`button-warmup-${idx}`}><Flame size={14} /> Warm-up</button>}
+        {["barbell", "smith"].includes(ex.equipment) && <button className="btn btn-sm btn-outline" onClick={() => setSheet("plates")} data-testid={`button-plates-${idx}`}><Disc size={14} /> Plates</button>}
+        <button className="btn btn-sm btn-outline" onClick={() => setSheet("sub")} data-testid={`button-sub-${idx}`}><Repeat size={14} /> Swap</button>
+      </div>
 
-          {log.sets.length > 0 && (
-            <div className="mb-3">
-              {log.sets.map((st, i) => (
-                <div key={i} className="flex items-center gap-3 mono text-sm" style={{ minHeight: 36, borderTop: i ? "1px solid var(--border)" : undefined }} data-testid={`row-set-${idx}-${i}`}>
-                  <span className="faint w-6">S{i + 1}</span>
-                  <span className="flex-1">{fmtW(st.weight)} × {st.reps}{st.rir != null && <span className="muted"> @ {st.rir} RIR</span>}{st.quality != null && <span className="muted"> · Q{st.quality}</span>}</span>
-                  <span className="faint text-xs">e1RM {Math.round(e1rm(st.weight, st.reps))}</span>
-                  <button aria-label="Delete set" className="faint" style={{ padding: 8 }} onClick={() => updLog((l) => ({ ...l, sets: l.sets.filter((_, j) => j !== i) }))} data-testid={`button-delete-set-${idx}-${i}`}><Trash2 size={13} /></button>
-                </div>
-              ))}
+      {log.sets.length > 0 && (
+        <div className="mt-3">
+          {log.sets.map((st, i) => (
+            <div key={i} className="flex items-center gap-3 text-[15px]" style={{ minHeight: 40, borderTop: "1px solid var(--line)" }} data-testid={`row-set-${idx}-${i}`}>
+              <Check size={15} className="shrink-0" style={{ color: "var(--ink)" }} />
+              <span className="muted w-12">Set {i + 1}</span>
+              <span className="mono flex-1"><b>{fmtW(st.weight)}</b> × {st.reps}{st.rir != null && <span className="muted"> · {st.rir} RIR</span>}{st.quality != null && <span className="muted"> · Q{st.quality}</span>}</span>
+              <button aria-label={`Delete set ${i + 1}`} className="faint" style={{ padding: 10, margin: -6 }} onClick={() => updLog((l) => ({ ...l, sets: l.sets.filter((_, j) => j !== i) }))} data-testid={`button-delete-set-${idx}-${i}`}><Trash2 size={15} /></button>
             </div>
-          )}
+          ))}
+        </div>
+      )}
 
-          <div className="grid grid-cols-2 gap-2">
-            <div className="field"><span className="label">Weight · ±{inc}</span><Stepper value={w} step={inc} unit={u} onChange={setW} testId={`stepper-weight-${idx}`} /></div>
-            <div className="field"><span className="label">Reps · goal {rx.repGoal}</span><Stepper value={reps} step={1} min={0} max={100} unit="reps" decimals={0} onChange={setReps} testId={`stepper-reps-${idx}`} /></div>
-          </div>
-          <div className="field mt-2"><span className="label">Reps in reserve (optional)</span>
+      <div className="grid grid-cols-2 gap-3 mt-4">
+        <div className="field"><span className="label">Weight ({u})</span><Stepper value={w} step={inc} unit={u} onChange={setW} testId={`stepper-weight-${idx}`} /></div>
+        <div className="field"><span className="label">Reps · aim for {rx.repGoal}</span><Stepper value={reps} step={1} min={0} max={100} unit="reps" decimals={0} onChange={setReps} testId={`stepper-reps-${idx}`} /></div>
+      </div>
+
+      <button className="btn btn-sm btn-ghost mt-2" style={{ paddingLeft: 0 }} onClick={() => setMore(!more)} aria-expanded={more} data-testid={`button-more-${idx}`}>
+        {more ? <ChevronDown size={16} /> : <ChevronRight size={16} />} More: effort, set quality, why this target
+      </button>
+      {more && (
+        <div className="stack" style={{ gap: 10 }} data-testid={`panel-more-${idx}`}>
+          <div className="field"><span className="label flex items-center">Reps in reserve (optional)<Info k="rir" /></span>
             <Seg className="seg-num" value={rir ?? -1} onChange={(v) => setRir(v === -1 ? null : v)} options={[{ v: -1, l: "–" }, { v: 0, l: "0" }, { v: 1, l: "1" }, { v: 2, l: "2" }, { v: 3, l: "3" }, { v: 4, l: "4" }]} testId={`seg-rir-${idx}`} />
           </div>
-          <div className="field mt-2"><span className="label">Set quality (optional) · 1 grind → 5 crisp</span>
+          <div className="field"><span className="label">Set quality (optional) · 1 grind → 5 crisp</span>
             <Seg className="seg-num seg-lime" value={quality ?? -1} onChange={(v) => setQuality(v === -1 ? null : v)} options={[{ v: -1, l: "–" }, { v: 1, l: "1" }, { v: 2, l: "2" }, { v: 3, l: "3" }, { v: 4, l: "4" }, { v: 5, l: "5" }]} testId={`seg-quality-${idx}`} />
             {quality != null && <p className="text-xs mt-1">{QUALITY_HINT[quality]}</p>}
           </div>
-          <button className={`btn btn-lg btn-block mt-3 ${done ? "btn-outline" : "btn-primary"}`} onClick={logSet} data-testid={`button-log-set-${idx}`}>
-            <Check size={18} /> {done ? "Log extra set" : `Log set ${log.sets.length + 1}`} · <span className="mono">{fmtW(w)}×{reps}</span>
-          </button>
-          {pe.technique && log.sets.length === rx.sets - 1 && <p className="text-xs blue mt-2">Last set: {pe.technique === "drop" ? "drop set — strip ~25% and continue to near failure" : pe.technique === "restpause" ? "rest-pause — 15s rest, 2 mini-sets" : "take this set to failure"}.</p>}
+          <p className="text-[13px] muted" data-testid={`text-why-${idx}`}>{rx.why}</p>
+          {hot.length > 0 && <p className="text-[13px] muted flex items-center flex-wrap" data-testid={`badge-fatigue-${idx}`}><Flame size={13} className="mr-1" /> {MUSCLE_LABEL[hot[0]]} is still {fatigue[hot[0]]}% fatigued <Info k="fatigue" size={13} /></p>}
         </div>
       )}
+
+      <button className={`btn btn-lg btn-block mt-3 ${done ? "btn-outline" : "btn-primary"}`} onClick={logSet} data-testid={`button-log-set-${idx}`}>
+        <Check size={18} /> {done ? "Log an extra set" : `Log set ${log.sets.length + 1}`} · <span className="mono">{fmtW(w)} × {reps}</span>
+      </button>
+      {done && nextName && <button className="btn btn-lg btn-block btn-primary mt-2" onClick={onNext} data-testid="button-next-exercise">Next: {nextName} <ChevronRight size={18} /></button>}
+      {pe.technique && log.sets.length === rx.sets - 1 && <p className="text-xs blue mt-2">Last set: {pe.technique === "drop" ? "drop set — strip ~25% and continue to near failure" : pe.technique === "restpause" ? "rest-pause — 15s rest, 2 mini-sets" : "take this set to failure"}.</p>}
 
       {sheet === "warm" && (
         <Sheet title={`Warm-up · ${ex.name}`} onClose={() => setSheet(null)} testId="sheet-warmup">
@@ -172,7 +179,10 @@ function ExerciseCard({ log, idx, rx, pe, active, onActivate, session, fatigue, 
               <div className="font-semibold">Back to {EX[log.originalExId].name}</div><div className="mono text-xs muted">{fmtW(rx.weight)} {u}</div>
             </button>
           )}
-          {substitutes(log.originalExId, rx.weight, pe.increment || 5).filter((c) => c.ex.id !== log.exId).map((c) => (
+          {subs.length === 0 && (
+            <p className="text-sm muted" data-testid="text-no-subs">{EX[log.originalExId].custom ? "Your own exercises don't get automatic swap suggestions, since the app can't convert their weights." : "No close swaps for this one."}</p>
+          )}
+          {subs.map((c) => (
             <button key={c.ex.id} className="card w-full text-left flex items-center justify-between gap-3" onClick={() => { updLog((l) => ({ ...l, exId: c.ex.id, equivFactor: c.equivFactor, targetWeight: c.weight })); setW(c.weight); setSheet(null); ui.toast(`Swapped to ${c.ex.name}`); }} data-testid={`button-sub-${c.ex.id}`}>
               <div className="min0"><div className="font-semibold">{c.ex.name}</div><div className="text-xs muted">{c.ex.equipment}{c.ex.equipment === "dumbbell" ? " · per hand" : ""} · {c.ex.primary.map((m) => MUSCLE_LABEL[m]).join(", ")}</div></div>
               <span className="mono text-[15px] shrink-0">{fmtW(c.weight)} {u}</span>
@@ -181,6 +191,43 @@ function ExerciseCard({ log, idx, rx, pe, active, onActivate, session, fatigue, 
         </Sheet>
       )}
     </section>
+  );
+}
+
+/** Every exercise in order: jump to one, or move it up/down (e.g. when a station is busy). */
+function ExerciseList({ session, rxFor, current, onPick, onAdd, canRemove }: { session: Session; rxFor: (l: ExerciseLog) => { rx: Prescription }; current: number; onPick: (i: number) => void; onAdd: () => void; canRemove: (l: ExerciseLog) => boolean }) {
+  const { set } = useStore();
+  const move = (i: number, d: -1 | 1) => set((s) => {
+    if (!s.activeSession) return s;
+    const ex = [...s.activeSession.exercises];
+    const j = i + d;
+    if (j < 0 || j >= ex.length) return s;
+    [ex[i], ex[j]] = [ex[j], ex[i]];
+    return { ...s, activeSession: { ...s.activeSession, exercises: ex } };
+  });
+  const remove = (i: number) => set((s) => (s.activeSession ? { ...s, activeSession: { ...s.activeSession, exercises: s.activeSession.exercises.filter((_, k) => k !== i) } } : s));
+  return (
+    <div className="card" style={{ padding: "4px 12px" }} data-testid="list-exercises">
+      {session.exercises.map((l, i) => {
+        const { rx } = rxFor(l);
+        const done = l.sets.length >= rx.sets;
+        return (
+          <div key={l.peId + l.exId} className="rowline" style={{ gap: 6 }} data-testid={`row-exercise-${i}`}>
+            <button className="min0 flex-1 text-left flex items-center gap-3" style={{ minHeight: 44 }} onClick={() => onPick(i)} aria-current={current === i ? "step" : undefined} data-testid={`button-goto-exercise-${i}`}>
+              <span className="w-5 shrink-0 flex justify-center">{done ? <Check size={16} style={{ color: "var(--ink)" }} /> : <span className="mono text-xs muted">{i + 1}</span>}</span>
+              <span className="min0">
+                <span className={`block text-[15px] ${current === i ? "font-bold" : "font-semibold"}`}>{EX[l.exId].name}</span>
+                <span className="block text-[13px] muted">{l.sets.length} of {rx.sets} sets{current === i ? " · current" : ""}</span>
+              </span>
+            </button>
+            <button className="icon-btn" style={{ width: 36, height: 36, border: 0 }} disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Move ${EX[l.exId].name} up`} data-testid={`button-move-up-${i}`}><ArrowUp size={16} /></button>
+            <button className="icon-btn" style={{ width: 36, height: 36, border: 0 }} disabled={i === session.exercises.length - 1} onClick={() => move(i, 1)} aria-label={`Move ${EX[l.exId].name} down`} data-testid={`button-move-down-${i}`}><ArrowDown size={16} /></button>
+            {canRemove(l) && <button className="icon-btn" style={{ width: 36, height: 36, border: 0 }} onClick={() => remove(i)} aria-label={`Remove ${EX[l.exId].name}`} data-testid={`button-remove-exercise-${i}`}><X size={16} /></button>}
+          </div>
+        );
+      })}
+      <button className="btn btn-ghost btn-block" style={{ minHeight: 48 }} onClick={onAdd} data-testid="button-add-exercise-list"><Plus size={16} /> Add exercise</button>
+    </div>
   );
 }
 
@@ -232,7 +279,9 @@ export default function Logger() {
   const [active, setActive] = useState<number>(0);
   const [summary, setSummary] = useState<Session | null>(null);
   const [pr, setPr] = useState<PRData | null>(null);
-  const [pick, setPick] = useState("");
+  const [startOpen, setStartOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [saveOpen, setSaveOpen] = useState(false);
   const u = profile.units;
 
   const day = s ? state.program?.days.find((d) => d.id === s.dayId) : null;
@@ -253,11 +302,16 @@ export default function Logger() {
     return m;
   }, [day, state.sessions, t.readiness.score, s?.deload, u]);
 
+  const [listOpen, setListOpen] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const swipe = useRef<{ x: number; y: number } | null>(null);
+  // Opening (or resuming) a workout lands on the first exercise that still has sets to do.
+  // After that we never jump on our own: finishing an exercise shows a "Next" button instead.
   useEffect(() => {
     if (!s) return;
-    const i = s.exercises.findIndex((l) => l.sets.length < (rxMap[l.peId]?.rx.sets ?? 3));
-    if (i >= 0 && s.exercises[active] && s.exercises[active].sets.length >= (rxMap[s.exercises[active].peId]?.rx.sets ?? 3)) setActive(i);
-  }, [s?.exercises.map((l) => l.sets.length).join(",")]); // eslint-disable-line
+    const i = s.exercises.findIndex((l) => l.sets.length < (rxMap[l.peId]?.rx.sets ?? l.plan?.sets ?? 3));
+    setActive(i >= 0 ? i : 0);
+  }, [s?.id]); // eslint-disable-line
 
   if (summary) {
     const sum = sessionSummary(state, summary);
@@ -291,7 +345,9 @@ export default function Logger() {
           </div>
         )}
         <p className="text-xs muted text-center">Posted to your Spotters feed.</p>
+        {!summary.dayId.startsWith("saved:") && <button className="btn btn-outline btn-block" onClick={() => setSaveOpen(true)} data-testid="button-save-as-workout">Save as workout</button>}
         <button className="btn btn-lg btn-block" onClick={() => { setSummary(null); ui.setTab("today"); }} data-testid="button-summary-done">Done</button>
+        {saveOpen && <SaveAsWorkoutSheet defaultName={summary.dayName === "Freestyle" ? "My workout" : summary.dayName} make={(name) => savedFromSession(summary, name, u)} onClose={() => setSaveOpen(false)} />}
         {pr && <PRCardSheet data={pr} onClose={() => setPr(null)} />}
       </div>
     );
@@ -303,13 +359,11 @@ export default function Logger() {
       <div className="stack">
         <div className="card">
           <div className="label">No active workout</div>
-          <p className="text-sm muted mt-1">{t.day ? `${t.day.name} is planned today.` : "Rest day — you can still run any session."}</p>
+          <p className="text-sm muted mt-1">{t.day ? `${t.day.name} is planned today.` : days.length ? "Rest day. You can still train if you want to." : "No program yet. You can still log a workout."}</p>
           {t.day && <button className="btn btn-primary btn-lg btn-block mt-3" onClick={() => set((st) => ({ ...st, activeSession: newSession(st, t.day!, t.readiness.score, t.inDeload, u) }))} data-testid="button-start-planned">Start {t.day.name}</button>}
-          <div className="flex gap-2 mt-3">
-            <select className="select" value={pick} onChange={(e) => setPick(e.target.value)} data-testid="select-other-day"><option value="">Run a different day…</option>{days.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
-            <button className="btn" disabled={!pick} onClick={() => { const d = days.find((x) => x.id === pick)!; set((st) => ({ ...st, activeSession: newSession(st, d, t.readiness.score, t.inDeload, u) })); }} data-testid="button-start-other">Start</button>
-          </div>
+          <button className={`btn btn-block mt-3 ${t.day ? "btn-ghost" : "btn-primary btn-lg"}`} onClick={() => setStartOpen(true)} data-testid="button-start-different">{t.day ? "Start a different workout" : days.length ? "Start a workout" : "Start an empty workout"}</button>
         </div>
+        {startOpen && <StartWorkoutSheet onClose={() => setStartOpen(false)} />}
         {t.readiness.score == null && <p className="text-xs faint">Tip: do your check-in first — targets adjust to readiness.</p>}
       </div>
     );
@@ -338,40 +392,105 @@ export default function Logger() {
     setSummary(done);
   };
 
+  const free = isFreeSession(s);
+  // Program exercises get program targets; freestyle and added exercises get "last time" targets.
+  const rxFor = (l: ExerciseLog) => rxMap[l.peId] ?? (free || l.extra ? freeRx(state.sessions, l, t.readiness.score, u) : orphanRx(l, t.readiness.score, !!s.deload, u));
+  const addExercise = (exId: string) => {
+    set((st) => (st.activeSession ? { ...st, activeSession: { ...st.activeSession, exercises: [...st.activeSession.exercises, freeLog(st.sessions, exId, t.readiness.score, u, { extra: !free })] } } : st));
+    setAdding(false); setListOpen(false); setActive(s.exercises.length); window.scrollTo({ top: 0 });
+  };
+  const n = s.exercises.length;
+  const cur = Math.min(Math.max(0, active), Math.max(0, n - 1));
+  const log = s.exercises[cur];
+  const go = (i: number) => { if (i >= 0 && i < n) { setActive(i); setListOpen(false); window.scrollTo({ top: 0 }); } };
+  const nextIdx = (() => { for (let k = 1; k < n; k++) { const j = (cur + k) % n; const l = s.exercises[j]; if (l.sets.length < rxFor(l).rx.sets) return j; } return cur + 1 < n ? cur + 1 : -1; })();
+
+  // Swipe left/right on the exercise card to move between exercises (taps and vertical scrolls are ignored).
+  const onTouchStart = (e: RTouchEvent) => { const p = e.touches[0]; swipe.current = { x: p.clientX, y: p.clientY }; };
+  const onTouchEnd = (e: RTouchEvent) => {
+    const st = swipe.current; swipe.current = null;
+    if (!st) return;
+    const p = e.changedTouches[0];
+    const dx = p.clientX - st.x, dy = p.clientY - st.y;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) go(cur + (dx < 0 ? 1 : -1));
+  };
+
   return (
     <div data-testid="view-logger">
       <div className="flex items-center gap-3 mb-3">
         <div className="min0 flex-1">
-          <div className="font-semibold">{s.dayName}{s.deload && <span className="chip chip-orange ml-2">deload</span>}</div>
-          <div className="mono text-xs muted"><span data-testid="text-elapsed">{mmss(elapsed)}</span> · {totalSets} sets logged{t.readiness.score != null ? ` · readiness ${t.readiness.score}` : ""}</div>
+          <div className="font-semibold">{s.dayName}{s.deload && <span className="chip ml-2">Deload</span>}</div>
+          <div className="text-[13px] muted"><span className="mono" data-testid="text-elapsed">{mmss(elapsed)}</span> · {totalSets} sets logged</div>
         </div>
-        <button className="btn btn-ghost btn-sm" onClick={() => set((st) => ({ ...st, activeSession: null }))} data-testid="button-discard-workout">Discard</button>
-        <button className="btn btn-primary" disabled={totalSets === 0} onClick={finish} data-testid="button-finish-workout">Finish</button>
+        {confirmDiscard ? (
+          <>
+            <button className="btn btn-sm btn-ghost" onClick={() => setConfirmDiscard(false)} data-testid="button-discard-cancel">Keep</button>
+            <button className="btn btn-sm btn-warn" onClick={() => { setConfirmDiscard(false); set((st) => ({ ...st, activeSession: null })); }} data-testid="button-discard-confirm">Discard workout</button>
+          </>
+        ) : (
+          <>
+            <button className="btn btn-ghost btn-sm" onClick={() => (totalSets ? setConfirmDiscard(true) : set((st) => ({ ...st, activeSession: null })))} data-testid="button-discard-workout">Discard</button>
+            <button className="btn btn-primary" disabled={totalSets === 0} onClick={finish} data-testid="button-finish-workout">Finish</button>
+          </>
+        )}
       </div>
-      {!day && (
-        <div className="warn hatch mb-3" data-testid="card-day-missing"><div className="inner">
-          <Tag signal>Program changed</Tag>
+      {!day && !free && (
+        <div className="warn mb-3" data-testid="card-day-missing"><div className="inner">
+          <div className="font-bold">Program changed</div>
           <p className="text-[13px] mt-1">This day was removed from your program. You can keep logging what's here and finish, or discard the workout.</p>
         </div></div>
       )}
       {day && stale && (
-        <div className="warn hatch mb-3" data-testid="card-session-stale"><div className="inner">
-          <Tag signal>Program changed</Tag>
+        <div className="warn mb-3" data-testid="card-session-stale"><div className="inner">
+          <div className="font-bold">Program changed</div>
           <p className="text-[13px] mt-1">{day.name} was edited after this workout started. Sets you've logged are kept.</p>
           <button className="btn btn-sm mt-2" onClick={resync} data-testid="button-sync-session">Update workout</button>
         </div></div>
       )}
       {t.readiness.effect !== "normal" && t.readiness.score != null && (
-        <div className="card-flat text-xs mb-3 flex gap-2" style={{ borderColor: "rgba(92,58,33,.35)" }}><AlertTriangle size={14} className="blue shrink-0 mt-0.5" /><span className="muted">{t.readiness.reason}</span></div>
+        <p className="text-[13px] muted mb-3 flex gap-2" data-testid="text-readiness-adjust"><AlertTriangle size={14} className="shrink-0 mt-0.5" /><span>Readiness {t.readiness.score}: {t.readiness.effect === "hold" ? "weights held today" : "targets cut 10% today"}.</span></p>
       )}
-      <div className="stack">
-        {s.exercises.map((log, i) => {
-          const m = rxMap[log.peId] ?? orphanRx(log, t.readiness.score, !!s.deload, u);
-          return <ExerciseCard key={log.peId + log.exId} log={log} idx={i} rx={m.rx} pe={m.pe} active={active === i} onActivate={() => setActive(active === i ? -1 : i)} session={s} fatigue={t.fatigue} isFirstCompound={i === firstCompound} />;
-        })}
-      </div>
+
+      {n === 0 ? (
+        <div className="card text-center" style={{ padding: "32px 18px" }} data-testid="card-empty-workout">
+          <p className="text-sm muted">{free ? "Add your first exercise. If you've done it before, last time's weight is filled in." : "This workout has no exercises."}</p>
+          <button className="btn btn-primary btn-lg btn-block mt-4" onClick={() => setAdding(true)} data-testid="button-add-first-exercise"><Plus size={18} /> Add exercise</button>
+        </div>
+      ) : (
+        <>
+          {/* Progress strip: one segment per exercise; filled = done, outlined = current. */}
+          <div className="flex items-center gap-3 mb-2">
+            <div className="text-[13px] font-semibold" aria-live="polite" data-testid="text-exercise-progress">{listOpen ? `${n} exercises` : `Exercise ${cur + 1} of ${n}`}</div>
+            <div className="flex-1" />
+            <button className="btn btn-sm btn-ghost" style={{ paddingRight: 0 }} onClick={() => setListOpen(!listOpen)} aria-expanded={listOpen} data-testid="button-all-exercises">
+              <ListIcon size={16} /> {listOpen ? "Back to exercise" : "All exercises"}
+            </button>
+          </div>
+          <div className="flex gap-1 mb-3" aria-hidden data-testid="strip-exercises">
+            {s.exercises.map((l, i) => {
+              const done = l.sets.length >= rxFor(l).rx.sets;
+              return <button key={l.peId + l.exId} tabIndex={-1} onClick={() => go(i)} style={{ flex: 1, height: 6, background: done ? "var(--ink)" : "var(--tint)", boxShadow: i === cur && !listOpen ? "0 0 0 2px var(--page), 0 0 0 3px var(--ink)" : undefined }} />;
+            })}
+          </div>
+
+          {listOpen ? (
+            <ExerciseList session={s} rxFor={rxFor} current={cur} onPick={go} onAdd={() => setAdding(true)} canRemove={(l) => (free || !!l.extra) && l.sets.length === 0} />
+          ) : (
+            <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+              <FocusExercise key={log.peId + log.exId} log={log} idx={cur} rx={rxFor(log).rx} pe={rxFor(log).pe} fatigue={t.fatigue} isFirstCompound={cur === firstCompound}
+                nextName={nextIdx >= 0 && nextIdx !== cur ? EX[s.exercises[nextIdx].exId].name : null} onNext={() => go(nextIdx)} />
+              <div className="flex items-center justify-between mt-2">
+                <button className="btn btn-sm btn-ghost" style={{ paddingLeft: 0 }} disabled={cur === 0} onClick={() => go(cur - 1)} data-testid="button-prev-exercise"><ChevronLeft size={16} /> Previous</button>
+                <span className="text-[12px] faint">or swipe</span>
+                <button className="btn btn-sm btn-ghost" style={{ paddingRight: 0 }} disabled={cur === n - 1} onClick={() => go(cur + 1)} data-testid="button-forward-exercise">Next <ChevronRight size={16} /></button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
       <div style={{ height: 70 }} />
       <RestBar session={s} />
+      {adding && <ExercisePicker title="Add exercise" onClose={() => setAdding(false)} onPick={addExercise} />}
     </div>
   );
 }

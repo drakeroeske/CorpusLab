@@ -174,9 +174,9 @@ export function Empty({ children }: { children: ReactNode }) {
 
 export function Wordmark({ size = 22 }: { size?: number }) {
   return (
-    <span className="inline-flex items-center gap-2" aria-label="RXS" data-testid="wordmark">
+    <span className="inline-flex items-center gap-2" aria-label="Corpus" data-testid="wordmark">
       <Logo size={size * 1.1} />
-      <span className="display" style={{ fontSize: size * 1.3 }}>RXS</span>
+      <span className="display" style={{ fontSize: size * 1.3 }}>CORPUS</span>
     </span>
   );
 }

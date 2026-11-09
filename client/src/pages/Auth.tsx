@@ -65,7 +65,7 @@ export default function AuthScreen() {
         {inviter && mode !== "reset" && (
           <div className="card mt-5 flex items-start gap-3" data-testid="card-invited-by">
             <UserPlus size={18} className="shrink-0 mt-0.5" />
-            <div className="min0"><div className="text-sm font-bold uppercase"><Tag signal>Invite</Tag> {inviter.displayName} invited you</div>
+            <div className="min0"><div className="text-sm font-bold"><Tag signal>Invite</Tag> {inviter.displayName} invited you</div>
               <div className="text-xs muted">{mode === "signup" ? "Create an account and you'll be Spotters automatically." : "Sign in and we'll ask before adding them as a Spotter."}</div></div>
           </div>
         )}

@@ -126,7 +126,7 @@ async function offLookup(code: string): Promise<FoodOut | null> {
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 8000);
   try {
     const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands,nutriments,serving_quantity,serving_size`, {
-      headers: { "User-Agent": "RXS/1.0 (rxs-lab.pplx.app)" }, signal: ctl.signal,
+      headers: { "User-Agent": "Corpus/1.0 (rxs-lab.pplx.app)" }, signal: ctl.signal,
     });
     if (!r.ok) return null;
     const j: any = await r.json();

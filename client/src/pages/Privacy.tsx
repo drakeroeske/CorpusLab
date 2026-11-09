@@ -26,7 +26,7 @@ export default function PrivacyPage({ onBack }: { onBack: () => void }) {
       <div className="screen" style={{ paddingBottom: 60 }}>
         <p className="label mt-4">Privacy · updated {PRIVACY_UPDATED}</p>
         <h1 className="text-[26px] font-semibold leading-tight mt-2" style={{ letterSpacing: "-0.02em" }}>Your data, in plain language</h1>
-        <p className="text-sm muted mt-3 leading-relaxed">RXS holds personal things: your body weight, sleep, meals and photos. This page explains what's stored, who can see it, and how to get it back or delete it.</p>
+        <p className="text-sm muted mt-3 leading-relaxed">Corpus holds personal things: your body weight, sleep, meals and photos. This page explains what's stored, who can see it, and how to get it back or delete it.</p>
 
         <div className="card mt-5 stack" style={{ gap: 6 }}>
           <div className="text-sm"><span className="lime mono">—</span> No ads, and we don't sell or rent your data.</div>
@@ -76,20 +76,20 @@ export default function PrivacyPage({ onBack }: { onBack: () => void }) {
         <S title="Your controls">
           <L>
             <li><b className="text-[var(--text)]">Export:</b> Profile → Export JSON downloads all your training data.</li>
-            <li><b className="text-[var(--text)]">Sharing:</b> turn workout and leaderboard sharing on or off in Profile, remove Spotters in the Spotters tab, and remove coaches in Profile.</li>
+            <li><b className="text-[var(--text)]">Sharing:</b> turn workout and leaderboard sharing on or off in Profile, remove Spotters in the Social tab, and remove coaches in Profile.</li>
             <li><b className="text-[var(--text)]">Delete:</b> Profile → Delete account permanently removes your login, training data, posts, Spotters and coach links right away.</li>
           </L>
         </S>
 
         <S title="Health information">
-          <p>RXS gives training and nutrition suggestions based on what you log. It isn't medical advice. Talk to a doctor before big changes, especially with an injury or health condition.</p>
+          <p>Corpus gives training and nutrition suggestions based on what you log. It isn't medical advice. Talk to a doctor before big changes, especially with an injury or health condition.</p>
         </S>
 
         <S title="Changes and contact">
-          <p>If this page changes, the date at the top changes too.{PRIVACY_CONTACT ? <> Questions or requests: <a className="lime" href={`mailto:${PRIVACY_CONTACT}`}>{PRIVACY_CONTACT}</a>.</> : " For questions, contact the person who invited you to RXS."}</p>
+          <p>If this page changes, the date at the top changes too.{PRIVACY_CONTACT ? <> Questions or requests: <a className="lime" href={`mailto:${PRIVACY_CONTACT}`}>{PRIVACY_CONTACT}</a>.</> : " For questions, contact the person who invited you to Corpus."}</p>
         </S>
 
-        <button className="btn btn-block mt-8" onClick={onBack} data-testid="button-privacy-done">Back to RXS</button>
+        <button className="btn btn-block mt-8" onClick={onBack} data-testid="button-privacy-done">Back to Corpus</button>
       </div>
     </div>
   );

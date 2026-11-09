@@ -1,5 +1,5 @@
 /**
- * Web Push for RXS.
+ * Web Push for Corpus.
  * - Subscriptions live in Supabase `push_subscriptions` (one row per device).
  * - Event pushes (spotter requests, coach changes, respect/comments) are fired from routes via `notify()`.
  * - Reminders (check-in, meals, streak) run on an in-process timer; each user's `plan` (timezone,

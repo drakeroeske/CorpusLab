@@ -84,7 +84,51 @@ export const EXERCISES: Exercise[] = [
   E("shrug", "Dumbbell Shrug", ["upper_back"], ["forearms"], "dumbbell", "isolation", 1),
 ];
 
-export const EX: Record<string, Exercise> = Object.fromEntries(EXERCISES.map((e) => [e.id, e]));
+const BUILT_IN: Record<string, Exercise> = Object.fromEntries(EXERCISES.map((e) => [e.id, e]));
+const REGISTRY: Record<string, Exercise> = { ...BUILT_IN };
+let CUSTOM: Exercise[] = [];
+
+/** Stand-in for an id we don't know (e.g. a custom exercise from a program that wasn't imported). Never crashes a lookup. */
+const unknownExercise = (id: string): Exercise => ({ id, name: "Unknown exercise", primary: [], secondary: [], equipment: "machine", pattern: "isolation", ratio: 1, custom: true });
+
+/** Every exercise by id: the built-in catalog plus the user's own. Unknown ids return a harmless placeholder. */
+export const EX: Record<string, Exercise> = new Proxy(REGISTRY, {
+  get: (t, k) => (typeof k === "string" ? t[k] ?? unknownExercise(k) : undefined),
+});
+
+/** Swap the user's custom exercises into the lookup. Called by the store whenever they change. Idempotent. */
+export function registerCustomExercises(list: Exercise[] | undefined) {
+  const next = list ?? [];
+  if (next === CUSTOM) return;
+  for (const e of CUSTOM) if (!BUILT_IN[e.id]) delete REGISTRY[e.id];
+  for (const e of next) if (!BUILT_IN[e.id]) REGISTRY[e.id] = { ...e, custom: true };
+  CUSTOM = next;
+}
+
+/** Built-in catalog plus the user's live (not deleted) custom exercises. */
+export const allExercises = (): Exercise[] => [...CUSTOM.filter((e) => !e.archived).map((e) => REGISTRY[e.id]), ...EXERCISES];
+export const customExercises = (): Exercise[] => CUSTOM.filter((e) => !e.archived).map((e) => REGISTRY[e.id]);
+export const isKnownExercise = (id: string) => id in REGISTRY;
+
+/** Best guess at the movement pattern from the main muscles (the user can change it). */
+export function guessPattern(primary: Muscle[]): Exercise["pattern"] {
+  const small: Muscle[] = ["biceps", "triceps", "forearms", "calves", "abs", "rear_delts"];
+  if (primary.length === 1 && small.includes(primary[0])) return "isolation";
+  const has = (m: Muscle) => primary.includes(m);
+  if (has("quads")) return "squat";
+  if (has("hamstrings") || has("glutes") || has("lower_back")) return "hinge";
+  if (has("chest")) return "horizontal_push";
+  if (has("shoulders")) return "vertical_push";
+  if (has("lats")) return "vertical_pull";
+  if (has("upper_back")) return "horizontal_pull";
+  return "isolation";
+}
+
+/** Custom exercises a program uses, so a shared copy can carry them. */
+export function customExercisesIn(p: Program): Exercise[] {
+  const ids = new Set(p.days.flatMap((d) => d.exercises.map((e) => e.exId)));
+  return CUSTOM.filter((e) => ids.has(e.id));
+}
 
 export const MUSCLES: Muscle[] = [
   "chest", "shoulders", "rear_delts", "triceps", "biceps", "forearms", "abs",

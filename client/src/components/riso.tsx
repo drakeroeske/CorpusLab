@@ -1,7 +1,7 @@
 // Riso Lab building blocks: Surface, Grain, PageHeader, Tag, NoteLine, FigCaption, LabTable, Rings, diagrams.
 import { useEffect, useId, useState, type ReactNode } from "react";
+import { useUI } from "@/App";
 import { useStore } from "@/lib/store";
-import { dateKey } from "@/lib/engine";
 
 export type SurfaceStyle = "lab" | "riso";
 
@@ -18,8 +18,7 @@ export type GrainSetting = "off" | "subtle" | "full";
 const GRAIN_KEY = "rxs.grain";
 export function getGrain(): GrainSetting {
   try { const v = localStorage.getItem(GRAIN_KEY); if (v === "off" || v === "subtle" || v === "full") return v; } catch { /* ignore */ }
-  const mq = (q: string) => typeof matchMedia === "function" && matchMedia(q).matches;
-  return mq("(prefers-contrast: more)") || mq("(prefers-reduced-transparency: reduce)") ? "off" : "subtle";
+  return "off"; // calm by default; users can turn grain on in Profile → App
 }
 export function setGrain(v: GrainSetting) {
   try { localStorage.setItem(GRAIN_KEY, v); } catch { /* ignore */ }
@@ -66,72 +65,60 @@ export function GrainOverlay() {
 }
 
 // ---------- tags & labels ----------
-/** Bracket tag: [PR], [DELOAD], [HOLD]. `signal` puts it on pink (PRs / social only). */
+/** Small tag: PR, Deload, Hold. `signal` puts it on pink (PRs / alerts / social only). */
 export function Tag({ children, signal, className = "", testId }: { children: ReactNode; signal?: boolean; className?: string; testId?: string }) {
   return <span className={`chip ${signal ? "chip-signal" : ""} ${className}`} data-testid={testId}>{children}</span>;
 }
 
-export function CornerLabels({ left, center, right }: { left: ReactNode; center?: ReactNode; right?: ReactNode }) {
+/** Header avatar: opens Profile & settings (replaces the old "Me" tab). */
+function MeButton() {
+  const ui = useUI();
+  const { state } = useStore();
+  if (!ui || ui.tab === "profile") return null;
+  const name = state.profile?.name ?? "";
+  const ini = name.split(/\s+/).map((p) => p[0]).join("").slice(0, 2).toUpperCase() || "ME";
   return (
-    <div className="corner">
-      <span>{left}</span>
-      {center !== undefined && <span className="text-center">{center}</span>}
-      <span className="text-right">{right}</span>
-    </div>
+    <button className="avatar" style={{ width: 40, height: 40 }} onClick={() => ui.setTab("profile")} aria-label="Profile and settings" data-testid="button-open-profile">{ini}</button>
   );
 }
 
-/** Real header metadata: completed session count + date, and today's program day. */
-export function useHeaderMeta() {
-  const { state } = useStore();
-  const today = dateKey();
-  const count = state.sessions.filter((s) => s.end).length;
-  const day = state.program ? state.program.days.find((d) => d.weekdays?.includes(new Date(today + "T12:00:00").getDay())) : null;
-  const live = state.activeSession ? `${state.activeSession.dayName.toUpperCase()} [LIVE]` : null;
-  return { center: `SESSION ${pad3(count)} · ${shortDate(today)}`, status: live ?? (day ? `${day.name.toUpperCase()} [TODAY]` : "REST DAY") };
-}
-
-/** Screen header: corner metadata, huge display title with a full stop, optional sub line. */
-export function PageHeader({ title, section = "ENGINE", brand = "RXS", status, center, sub, right, back, testId }: {
-  title: string; section?: string; brand?: string; status?: string; center?: string; sub?: ReactNode; right?: ReactNode; back?: () => void; testId?: string;
+/** Screen header: title, optional one-line subtitle, optional right-hand action, and the profile avatar. */
+export function PageHeader({ title, sub, right, back, me = true, testId }: {
+  title: string; sub?: ReactNode; right?: ReactNode; back?: () => void; me?: boolean; testId?: string;
 }) {
-  const t = title.toUpperCase().replace(/[.!?]$/, "");
+  const t = title.replace(/[.!?]$/, "");
   return (
     <div className="pagehead" data-testid={testId}>
-      <CornerLabels left={`${brand} // ${section}`} center={center} right={status} />
-      {back && <button className="btn btn-sm mt-3" onClick={back} data-testid="button-back">← Back</button>}
-      <div className="flex items-end justify-between gap-3">
-        <h1 className={`display min0 ${t.length > 12 ? "xlong" : t.length > (right ? 5 : 7) ? "long" : ""}`}>{t}.</h1>
-        {right && <div className="shrink-0 pb-2">{right}</div>}
+      {back && <button className="btn btn-sm btn-outline mb-3" onClick={back} data-testid="button-back">← Back</button>}
+      <div className="flex items-center justify-between gap-3">
+        <h1 className={`display min0 ${t.length > (right ? 10 : 12) ? "xlong" : t.length > (right ? 5 : 7) ? "long" : ""}`}>{t}</h1>
+        <div className="shrink-0 flex items-center gap-2">{right}{me && <MeButton />}</div>
       </div>
-      {sub && <div className="mt-2 mono text-xs uppercase">{sub}</div>}
+      {sub && <div className="mt-2 text-sm">{sub}</div>}
     </div>
   );
 }
 
-/** Header that fills in session/date/status from the store. */
-export function EngineHeader(p: Omit<Parameters<typeof PageHeader>[0], "center" | "status"> & { status?: string }) {
-  const m = useHeaderMeta();
-  return <PageHeader {...p} center={m.center} status={p.status ?? m.status} />;
-}
+/** Kept as an alias so existing screens don't need renaming. */
+export const EngineHeader = PageHeader;
 
-export function FigCaption({ n, title, stat }: { n: number; title: string; stat?: ReactNode }) {
+export function FigCaption({ title, stat }: { title: string; stat?: ReactNode }) {
   return (
     <div className="fig">
-      <span>FIG. {String(n).padStart(2, "0")} — {title}</span>
+      <span>{title}</span>
       {stat !== undefined && <span className="text-right">{stat}</span>}
     </div>
   );
 }
 
-/** [NOTE] line: engine reasoning in one mono line. */
-export function NoteLine({ children, tag = "NOTE", testId }: { children: ReactNode; tag?: string; testId?: string }) {
-  return <p className="note" data-testid={testId}><b>[{tag}]</b> {children}</p>;
+/** One short line of engine reasoning. */
+export function NoteLine({ children, testId }: { children: ReactNode; testId?: string }) {
+  return <p className="note" data-testid={testId}>{children}</p>;
 }
 
 // ---------- lab table ----------
 export interface LabRow { key: string; cells: ReactNode[]; onClick?: () => void; testId?: string }
-/** 3px top rule, mono column headers, dashed row dividers. */
+/** Light rules; right-aligned cells use mono numbers. */
 export function LabTable({ head, rows, align = [], bold = [], className = "" }: { head: string[]; rows: LabRow[]; align?: ("l" | "r" | "c")[]; bold?: number[]; className?: string }) {
   const cls = (i: number) => `${align[i] === "r" ? "r" : align[i] === "c" ? "c" : ""} ${bold.includes(i) ? "font-bold" : ""}`;
   return (

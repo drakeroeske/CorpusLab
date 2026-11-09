@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Plus, Search, Trash2 } from "lucide-react";
-import type { Pattern, Program, ProgramDay, ProgramExercise, Units } from "@/lib/types";
-import { EX, EXERCISES, MUSCLE_LABEL, PATTERN_LABEL, isCompound, newId } from "@/lib/exercises";
+import { ArrowDown, ArrowUp, BookmarkPlus, ChevronDown, ChevronRight, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import type { Exercise, Pattern, Program, ProgramDay, ProgramExercise, Units } from "@/lib/types";
+import { EX, EXERCISES, MUSCLE_LABEL, PATTERN_LABEL, customExercises, isCompound, newId } from "@/lib/exercises";
+import { useStore } from "@/lib/store";
+import { CustomExerciseSheet } from "./CustomExercise";
 import { NumInput, Seg, Sheet } from "./ui";
 import { DEFAULT_INC_PCT, fmtW, jumpFor } from "@/lib/engine";
 
@@ -9,9 +11,36 @@ const WD = ["S", "M", "T", "W", "T", "F", "S"];
 const WD_LONG = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export function ExercisePicker({ onPick, onClose, title = "Exercise library" }: { onPick: (id: string) => void; onClose: () => void; title?: string }) {
+  useStore(); // re-render when custom exercises change
   const [q, setQ] = useState("");
   const [pat, setPat] = useState<Pattern | "all">("all");
-  const list = useMemo(() => EXERCISES.filter((e) => (pat === "all" || e.pattern === pat) && (q === "" || e.name.toLowerCase().includes(q.toLowerCase()) || e.primary.some((m) => MUSCLE_LABEL[m].toLowerCase().includes(q.toLowerCase())))), [q, pat]);
+  // null = browsing; "new" = creating; an Exercise = editing that one.
+  const [editing, setEditing] = useState<Exercise | "new" | null>(null);
+  const match = (e: Exercise) => (pat === "all" || e.pattern === pat) && (q === "" || e.name.toLowerCase().includes(q.toLowerCase()) || e.primary.some((m) => MUSCLE_LABEL[m].toLowerCase().includes(q.toLowerCase())));
+  const mine = customExercises().filter(match);
+  const list = EXERCISES.filter(match);
+
+  if (editing) return (
+    <CustomExerciseSheet exercise={editing === "new" ? undefined : editing} initialName={editing === "new" ? q.trim() : ""}
+      onClose={() => setEditing(null)} onSaved={(id) => { if (editing === "new") onPick(id); }} />
+  );
+
+  const row = (e: Exercise) => (
+    <div key={e.id} className="flex items-center">
+      <button className="rowline w-full text-left min0 flex-1" onClick={() => onPick(e.id)} data-testid={`pick-exercise-${e.id}`}>
+        <div className="min0">
+          <div className="font-semibold text-[15px]">{e.name}</div>
+          <div className="text-xs muted mt-0.5">{e.primary.map((m) => MUSCLE_LABEL[m]).join(", ")}{e.secondary.length ? <span className="faint"> · {e.secondary.map((m) => MUSCLE_LABEL[m]).join(", ")}</span> : null}</div>
+        </div>
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <span className="chip">{e.custom ? "Custom" : PATTERN_LABEL[e.pattern]}</span>
+          <span className="label">{e.equipment}</span>
+        </div>
+      </button>
+      {e.custom && <button className="icon-btn shrink-0 ml-1" aria-label={`Edit ${e.name}`} onClick={() => setEditing(e)} data-testid={`button-edit-custom-${e.id}`}><Pencil size={15} /></button>}
+    </div>
+  );
+
   return (
     <Sheet title={title} onClose={onClose} full testId="sheet-exercise-picker">
       <div className="relative mb-3">
@@ -23,20 +52,23 @@ export function ExercisePicker({ onPick, onClose, title = "Exercise library" }: 
           <button key={p} className={`chip ${pat === p ? "chip-lime" : ""}`} style={{ height: 32 }} onClick={() => setPat(p)} data-testid={`filter-pattern-${p}`}>{p === "all" ? "All" : PATTERN_LABEL[p]}</button>
         ))}
       </div>
-      <div className="label mb-2">{list.length} exercises</div>
-      <div>
-        {list.map((e) => (
-          <button key={e.id} className="rowline w-full text-left" onClick={() => onPick(e.id)} data-testid={`pick-exercise-${e.id}`}>
-            <div className="min0">
-              <div className="font-semibold text-[15px]">{e.name}</div>
-              <div className="text-xs muted mt-0.5">{e.primary.map((m) => MUSCLE_LABEL[m]).join(", ")}{e.secondary.length ? <span className="faint"> · {e.secondary.map((m) => MUSCLE_LABEL[m]).join(", ")}</span> : null}</div>
-            </div>
-            <div className="flex flex-col items-end gap-1 shrink-0">
-              <span className="chip">{PATTERN_LABEL[e.pattern]}</span>
-              <span className="label">{e.equipment}</span>
-            </div>
-          </button>
-        ))}
+      {mine.length + list.length === 0 && (
+        <div className="empty mb-3" data-testid="text-no-exercise-match">
+          <p className="text-sm">No exercise matches “{q}”.</p>
+          <button className="btn btn-primary btn-sm mt-3" onClick={() => setEditing("new")} data-testid="button-create-from-search"><Plus size={14} /> Create “{q.trim()}”</button>
+        </div>
+      )}
+      {mine.length > 0 && (
+        <div className="mb-4" data-testid="group-your-exercises">
+          <div className="label mb-2">Your exercises</div>
+          {mine.map(row)}
+        </div>
+      )}
+      {list.length > 0 && <div className="label mb-2">{mine.length ? "Library · " : ""}{list.length} exercises</div>}
+      <div>{list.map(row)}</div>
+      <div className="mt-4 mb-2 text-center">
+        <p className="text-xs muted mb-2">Can't find it?</p>
+        <button className="btn btn-outline btn-block" onClick={() => setEditing("new")} data-testid="button-create-exercise"><Plus size={16} /> Create exercise</button>
       </div>
     </Sheet>
   );
@@ -93,23 +125,37 @@ function ExerciseRow({ pe, units, onChange, onRemove, onMove, idx, total }: { pe
   );
 }
 
-export function ProgramEditor({ program, units, onChange }: { program: Program; units: Units; onChange: (p: Program) => void }) {
-  const [picking, setPicking] = useState<string | null>(null);
+/** Default settings for an exercise newly added to a program day or saved workout. */
+export function newProgramExercise(exId: string, units: Units): ProgramExercise {
+  const comp = isCompound(EX[exId]);
+  return {
+    id: newId("pe"), exId, sets: 3, repMin: comp ? 6 : 10, repMax: comp ? 10 : 15, startWeight: 0,
+    increment: units === "lb" ? (["back_squat", "deadlift", "leg_press", "hip_thrust"].includes(exId) ? 10 : 5) : (comp ? 2.5 : 1.25),
+    style: "double", technique: null,
+  };
+}
+
+/** The exercises of one program day or saved workout: edit, reorder, remove, add from the library. */
+export function DayExercises({ exercises, units, onChange, addTestId }: { exercises: ProgramExercise[]; units: Units; onChange: (x: ProgramExercise[]) => void; addTestId: string }) {
+  const [picking, setPicking] = useState(false);
+  return (
+    <div className="stack">
+      {exercises.map((pe, i) => (
+        <ExerciseRow key={pe.id} pe={pe} units={units} idx={i} total={exercises.length}
+          onChange={(np) => onChange(exercises.map((e) => (e.id === pe.id ? np : e)))}
+          onRemove={() => onChange(exercises.filter((e) => e.id !== pe.id))}
+          onMove={(dir) => { const a = [...exercises]; const j = i + dir; [a[i], a[j]] = [a[j], a[i]]; onChange(a); }} />
+      ))}
+      <button className="btn btn-outline btn-block" onClick={() => setPicking(true)} data-testid={addTestId}><Plus size={16} /> Add exercise</button>
+      {picking && <ExercisePicker onClose={() => setPicking(false)} onPick={(id) => { onChange([...exercises, newProgramExercise(id, units)]); setPicking(false); }} />}
+    </div>
+  );
+}
+
+export function ProgramEditor({ program, units, onChange, onSaveDay }: { program: Program; units: Units; onChange: (p: Program) => void; onSaveDay?: (d: ProgramDay) => void }) {
   const [openDay, setOpenDay] = useState<string | null>(program.days[0]?.id ?? null);
   const setDay = (id: string, fn: (d: ProgramDay) => ProgramDay) => onChange({ ...program, days: program.days.map((d) => (d.id === id ? fn(d) : d)) });
   const usedWeekdays = (except: string) => new Set(program.days.filter((d) => d.id !== except).flatMap((d) => d.weekdays));
-
-  const addExercise = (dayId: string, exId: string) => {
-    const ex = EX[exId];
-    const comp = isCompound(ex);
-    const pe: ProgramExercise = {
-      id: newId("pe"), exId, sets: 3, repMin: comp ? 6 : 10, repMax: comp ? 10 : 15, startWeight: 0,
-      increment: units === "lb" ? (["back_squat", "deadlift", "leg_press", "hip_thrust"].includes(exId) ? 10 : 5) : (comp ? 2.5 : 1.25),
-      style: "double", technique: null,
-    };
-    setDay(dayId, (d) => ({ ...d, exercises: [...d.exercises, pe] }));
-    setPicking(null);
-  };
 
   return (
     <div>
@@ -126,6 +172,7 @@ export function ProgramEditor({ program, units, onChange }: { program: Program; 
               <div className="flex items-center gap-2">
                 <button className="icon-btn" onClick={() => setOpenDay(open ? null : d.id)} aria-label="Toggle day" data-testid={`toggle-day-${d.id}`}>{open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</button>
                 <input className="input font-semibold" value={d.name} onChange={(e) => setDay(d.id, (x) => ({ ...x, name: e.target.value }))} data-testid={`input-day-name-${d.id}`} />
+                {onSaveDay && <button className="icon-btn" aria-label={`Save ${d.name} as a workout`} title="Save as workout" disabled={!d.exercises.length} onClick={() => onSaveDay(d)} data-testid={`button-save-day-${d.id}`}><BookmarkPlus size={16} /></button>}
                 <button className="icon-btn" aria-label="Delete day" onClick={() => onChange({ ...program, days: program.days.filter((x) => x.id !== d.id) })} data-testid={`button-delete-day-${d.id}`}><Trash2 size={16} /></button>
               </div>
               <div className="grid grid-cols-7 gap-1 mt-3">
@@ -142,22 +189,13 @@ export function ProgramEditor({ program, units, onChange }: { program: Program; 
               </div>
               {!open && <div className="text-xs muted mt-2">{d.exercises.length} exercises · {d.exercises.reduce((a, e) => a + e.sets, 0)} sets</div>}
               {open && (
-                <div className="stack mt-3">
-                  {d.exercises.map((pe, i) => (
-                    <ExerciseRow key={pe.id} pe={pe} units={units} idx={i} total={d.exercises.length}
-                      onChange={(np) => setDay(d.id, (x) => ({ ...x, exercises: x.exercises.map((e) => (e.id === pe.id ? np : e)) }))}
-                      onRemove={() => setDay(d.id, (x) => ({ ...x, exercises: x.exercises.filter((e) => e.id !== pe.id) }))}
-                      onMove={(dir) => setDay(d.id, (x) => { const a = [...x.exercises]; const j = i + dir; [a[i], a[j]] = [a[j], a[i]]; return { ...x, exercises: a }; })} />
-                  ))}
-                  <button className="btn btn-outline btn-block" onClick={() => setPicking(d.id)} data-testid={`button-add-exercise-${d.id}`}><Plus size={16} /> Add exercise</button>
-                </div>
+                <div className="mt-3"><DayExercises exercises={d.exercises} units={units} onChange={(x) => setDay(d.id, (dd) => ({ ...dd, exercises: x }))} addTestId={`button-add-exercise-${d.id}`} /></div>
               )}
             </div>
           );
         })}
       </div>
       <button className="btn btn-block mt-3" onClick={() => { const id = newId("day"); onChange({ ...program, days: [...program.days, { id, name: `Day ${program.days.length + 1}`, weekdays: [], exercises: [] }] }); setOpenDay(id); }} data-testid="button-add-day"><Plus size={16} /> Add training day</button>
-      {picking && <ExercisePicker onClose={() => setPicking(null)} onPick={(id) => addExercise(picking, id)} />}
     </div>
   );
 }

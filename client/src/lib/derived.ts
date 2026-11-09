@@ -3,10 +3,10 @@ import { useStore } from "./store";
 import {
   computeReadiness, dateKey, dayForDate, dayMuscles, deloadCheck, hrvBaseline, logsForPe, muscleFatigue,
   phaseInfo, plateauFlags, prescribe, setProteinTarget, fatiguePct, sessionPRs, e1rmSeries, avgSleep, proteinHitRate,
-  addDays, daysBetween, mean, r1, proteinByDate,
+  addDays, daysBetween, mean, r1, proteinByDate, fmtDate, fmtW, readinessEffect, roundTo, type Prescription,
 } from "./engine";
-import type { AppState, Muscle, ProgramDay, Session, Units } from "./types";
-import { EX, newId } from "./exercises";
+import type { AppState, ExerciseLog, Muscle, ProgramDay, ProgramExercise, SavedWorkout, Session, Units } from "./types";
+import { EX, isCompound, newId } from "./exercises";
 
 export function useToday() {
   const { state, targets, profile } = useStore();
@@ -23,7 +23,8 @@ export function useToday() {
     const deload = deloadCheck(state, today);
     const inDeload = !!(state.program?.deloadUntil && today <= state.program.deloadUntil);
     const phase = phaseInfo(state.program, today, deload.recommend);
-    const doneToday = state.sessions.find((s) => s.date === today && s.end);
+    // On a planned day only that day counts as done (a freestyle workout doesn't hide it); on rest days any workout does.
+    const doneToday = state.sessions.find((s) => s.date === today && s.end && (!day || s.dayId === day.id));
     return { today, day, checkin, readiness, fatigue, flags, deload, inDeload, phase, doneToday, muscles };
   }, [state, targets.protein, today, profile]);
 }
@@ -42,7 +43,9 @@ export function newSession(state: AppState, day: ProgramDay, readiness: number |
 
 /** True when the program day has changed since this session was built (exercises added, removed, or swapped). */
 export function sessionStale(session: Session, day: ProgramDay | undefined): boolean {
+  if (isFreeSession(session)) return false;
   if (!day) return true;
+  session = { ...session, exercises: session.exercises.filter((l) => !l.extra) };
   const want = day.exercises.map((pe) => pe.id);
   const inDay = new Set(want);
   // Exercises removed from the program but already logged stay in the session on purpose; empty leftovers mean "stale".
@@ -62,7 +65,8 @@ export function syncSession(state: AppState, session: Session, day: ProgramDay, 
     if (old && (old.sets.length > 0 || old.originalExId === pe.exId)) return old.sets.length > 0 ? old : { ...old, targetWeight: rx.weight };
     return { peId: pe.id, exId: pe.exId, originalExId: pe.exId, equivFactor: 1, targetWeight: rx.weight, sets: [] };
   });
-  const orphans = session.exercises.filter((l) => !kept.has(l.peId) && l.sets.length > 0);
+  // Removed-from-program exercises with sets stay; so do exercises added during this workout.
+  const orphans = session.exercises.filter((l) => !kept.has(l.peId) && (l.sets.length > 0 || l.extra));
   return { ...session, dayName: day.name, exercises: [...exercises, ...orphans] };
 }
 
@@ -96,3 +100,80 @@ export function sessionSummary(state: AppState, s: Session) {
 }
 
 export { e1rmSeries };
+
+/* ---------- freestyle & saved workouts ---------- */
+
+/** dayId for a workout started empty. Saved workouts use `saved:<id>`. Neither is a program day. */
+export const FREE_DAY = "free";
+export const isFreeSession = (s: Pick<Session, "dayId">) => s.dayId === FREE_DAY || s.dayId.startsWith("saved:");
+
+/** Heaviest-by-e1RM set of the most recent finished session that did this exercise. */
+export function lastTopSet(sessions: Session[], exId: string): { weight: number; reps: number; date: string } | null {
+  for (let i = sessions.length - 1; i >= 0; i--) {
+    const s = sessions[i];
+    if (!s.end) continue;
+    const sets = s.exercises.filter((l) => l.exId === exId).flatMap((l) => l.sets);
+    if (!sets.length) continue;
+    const top = sets.reduce((a, b) => (e1rmOf(b) > e1rmOf(a) ? b : a), sets[0]);
+    return { weight: top.weight, reps: top.reps, date: s.date };
+  }
+  return null;
+}
+const e1rmOf = (x: { weight: number; reps: number }) => x.weight * (1 + x.reps / 30);
+
+const defaultPlan = (exId: string) => (isCompound(EX[exId]) ? { sets: 3, repMin: 6, repMax: 10 } : { sets: 3, repMin: 10, repMax: 15 });
+
+/** Targets for an exercise outside the program: last time's top set, adjusted for today's readiness. New exercises start blank. */
+export function freeRx(sessions: Session[], log: ExerciseLog, readiness: number | null, units: Units): { pe: ProgramExercise; rx: Prescription } {
+  const plan = log.plan ?? defaultPlan(log.originalExId);
+  const inc = units === "lb" ? 5 : 2.5;
+  const pe: ProgramExercise = { id: log.peId, exId: log.originalExId, sets: plan.sets, repMin: plan.repMin, repMax: plan.repMax, startWeight: log.targetWeight, increment: inc, style: "double", technique: null };
+  const last = lastTopSet(sessions, log.exId);
+  const effect = readinessEffect(readiness);
+  const rir = isCompound(EX[log.exId]) ? 2 : 1;
+  let weight = log.targetWeight;
+  let why = last ? `Last time: ${fmtW(last.weight)} × ${last.reps} (${fmtDate(last.date, { month: "short", day: "numeric" })})` : "First time: pick a weight you could do for a few more reps.";
+  if (last && effect === "hold") why += ` · readiness ${Math.round(readiness!)}: same weight`;
+  if (last && effect === "reduce") why += ` · readiness ${Math.round(readiness!)}: −10% today`;
+  if (!last) weight = 0;
+  return { pe, rx: { weight, sets: plan.sets, repMin: plan.repMin, repMax: plan.repMax, repGoal: last ? last.reps : plan.repMin, rir, why, decision: last ? "add_rep" : "start", effect, deload: false } };
+}
+
+/** A log for an exercise outside the program, pre-filled from history (−10% when readiness says reduce). */
+export function freeLog(sessions: Session[], exId: string, readiness: number | null, units: Units, opts: { extra?: boolean; plan?: ExerciseLog["plan"] } = {}): ExerciseLog {
+  const last = lastTopSet(sessions, exId);
+  const inc = units === "lb" ? 5 : 2.5;
+  let w = last?.weight ?? 0;
+  if (last && readinessEffect(readiness) === "reduce") w = Math.max(0, roundTo(w * 0.9, inc));
+  return { peId: newId("pe"), exId, originalExId: exId, equivFactor: 1, targetWeight: w, sets: [], extra: opts.extra, plan: opts.plan ?? defaultPlan(exId) };
+}
+
+/** Start a workout that isn't a program day: empty ("Freestyle") or from a saved workout. */
+export function newFreeSession(name = "Freestyle", dayId = FREE_DAY, exercises: ExerciseLog[] = []): Session {
+  return { id: newId("ses"), dayId, dayName: name, date: dateKey(), start: Date.now(), end: null, exercises };
+}
+
+/** Start a saved workout. Exercises that are also in the program use the program's progression; the rest use last time's weight. */
+export function sessionFromSaved(state: AppState, w: SavedWorkout, readiness: number | null, inDeload: boolean, units: Units): Session {
+  const programPe = (exId: string) => state.program?.days.flatMap((d) => d.exercises).find((pe) => pe.exId === exId);
+  const exercises = w.exercises.map((sp) => {
+    const plan = { sets: sp.sets, repMin: sp.repMin, repMax: sp.repMax };
+    const log = freeLog(state.sessions, sp.exId, readiness, units, { plan });
+    const pe = programPe(sp.exId);
+    if (pe) log.targetWeight = prescribe(pe, logsForPe(state.sessions, pe.id), readiness, inDeload, units).weight;
+    else if (!log.targetWeight && sp.startWeight) log.targetWeight = sp.startWeight;
+    return log;
+  });
+  return newFreeSession(w.name, `saved:${w.id}`, exercises);
+}
+
+/** Turn a finished workout into a saved one: same exercises, sets as logged, rep range from the reps you did. */
+export function savedFromSession(s: Session, name: string, units: Units): SavedWorkout {
+  return {
+    id: newId("sw"), name,
+    exercises: s.exercises.filter((l) => l.sets.length).map((l) => {
+      const reps = l.sets.map((x) => x.reps);
+      return { id: newId("pe"), exId: l.exId, sets: l.sets.length, repMin: Math.max(1, Math.min(...reps)), repMax: Math.max(...reps), startWeight: Math.max(...l.sets.map((x) => x.weight)), increment: units === "lb" ? 5 : 2.5, style: "double" as const, technique: null };
+    }),
+  };
+}

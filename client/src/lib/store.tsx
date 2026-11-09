@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { AppState, Profile } from "./types";
 import { getLocalStore } from "./persist-local";
 import { emptyState, upgradeState } from "./empty";
+import { registerCustomExercises } from "./exercises";
 import { api, ApiError } from "./api";
 import { computePublicStats } from "./social";
 import { nutritionTargets, trainingDaysPerWeek, type NutritionTargets } from "./engine";
@@ -54,6 +55,8 @@ export type StoreMode = "offline" | "remote" | "readonly";
 
 export function StoreProvider({ children, mode = "offline", initial, onAuthLost }: { children: ReactNode; mode?: StoreMode; initial?: AppState; onAuthLost?: () => void }) {
   const [state, setState] = useState<AppState>(() => (initial ? upgradeState(initial) : mode === "offline" ? load() : emptyState()));
+  // Custom exercises live in state; keep the global EX lookup in step before any child renders.
+  registerCustomExercises(state.customExercises);
   const [saveError, setSaveError] = useState(false);
   const [ready, setReady] = useState(mode !== "remote");
   const skipNext = useRef(true);

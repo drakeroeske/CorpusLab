@@ -1,7 +1,13 @@
-// Onboarding pledge (Riso): a four-line manifesto signed by holding a button for 1.5 s.
+// Optional pledge (Riso): a four-line manifesto signed by holding a button for 1.5 s.
 import { useEffect, useRef, useState } from "react";
 import { Rings, Tag, shortDate } from "@/components/riso";
-import { dateKey } from "@/lib/engine";
+import { dateKey, fmtDate } from "@/lib/engine";
+import { useStore } from "@/lib/store";
+import { useUI } from "@/App";
+import { Sheet } from "@/components/ui";
+
+/** The pledge is hidden for now (2026-11-09). Set to true to bring back the Profile card and the end-of-tour offer. */
+export const PLEDGE_ENABLED = false;
 
 export const PLEDGE = ["I will log every session.", "I will not skip legs.", "I will sleep like it's training.", "I will trust the data."];
 const HOLD_MS = 1500;
@@ -33,20 +39,17 @@ export function HoldToSign({ onSigned, label = "Hold to sign" }: { onSigned: () 
   );
 }
 
-export function PledgeStep({ name, onSigned }: { name: string; onSigned: () => void }) {
+export function PledgeStep({ name, onSigned, hint = "Hold the button for 1.5 seconds to sign." }: { name: string; onSigned: () => void; hint?: string }) {
   const today = dateKey();
   return (
     <div data-testid="view-pledge">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="label">Spotter // Pledge</div>
-          <h1 className="display mt-1" style={{ fontSize: "clamp(48px, 18vw, 76px)" }}>Pledge.</h1>
-        </div>
-        <Rings value={100} size={92} />
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm muted">Four promises to yourself. Signing is optional.</p>
+        <Rings value={100} size={72} />
       </div>
-      <ol className="mt-5" style={{ borderTop: "3px solid var(--ink)" }}>
+      <ol className="mt-4" style={{ borderTop: "1px solid var(--line)" }}>
         {PLEDGE.map((line, i) => (
-          <li key={i} className="py-3" style={{ borderBottom: "1px dashed var(--ink)" }}>
+          <li key={i} className="py-3" style={{ borderBottom: "1px solid var(--line)" }}>
             <div className="label">0{i + 1} /</div>
             <div className="display mt-1" style={{ fontSize: 28 }}>{line}</div>
           </li>
@@ -57,7 +60,21 @@ export function PledgeStep({ name, onSigned }: { name: string; onSigned: () => v
         <Tag>{shortDate(today)}</Tag>
       </div>
       <div className="mt-4"><HoldToSign onSigned={onSigned} /></div>
-      <p className="text-[11px] mt-3 text-center uppercase">Hold the button for 1.5 seconds to sign and start training.</p>
+      <p className="text-[12px] muted mt-3 text-center">{hint}</p>
     </div>
+  );
+}
+
+/** The pledge in a sheet: sign it (saves the date on the profile), or read it back once signed. */
+export function PledgeSheet({ onClose }: { onClose: () => void }) {
+  const { profile, set } = useStore();
+  const ui = useUI();
+  const signed = profile.pledgedAt;
+  return (
+    <Sheet title="The pledge" onClose={onClose} testId="sheet-pledge">
+      {signed
+        ? <><ol className="stack" style={{ gap: 8 }}>{PLEDGE.map((l) => <li key={l} className="display" style={{ fontSize: 24 }}>{l}</li>)}</ol><p className="text-sm muted mt-4">Signed {fmtDate(signed, { month: "long", day: "numeric", year: "numeric" })}.</p></>
+        : <PledgeStep name={profile.name} onSigned={() => { set((s) => ({ ...s, profile: { ...(s.profile ?? profile), pledgedAt: dateKey() } })); onClose(); ui.toast("Pledge signed"); }} />}
+    </Sheet>
   );
 }
