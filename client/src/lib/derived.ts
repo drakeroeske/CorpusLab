@@ -4,6 +4,7 @@ import {
   computeReadiness, trainingLoad, dateKey, dayForDate, dayMuscles, deloadCheck, hrvBaseline, logsForPe, muscleFatigue,
   phaseInfo, plateauFlags, prescribe, setProteinTarget, fatiguePct, sessionPRs, e1rmSeries, avgSleep, proteinHitRate,
   addDays, daysBetween, mean, r1, proteinByDate, fmtDate, fmtW, readinessEffect, roundTo, type Prescription,
+  setVolume,
 } from "./engine";
 import type { AppState, ExerciseLog, Muscle, ProgramDay, ProgramExercise, SavedWorkout, Session, Units } from "./types";
 import { EX, isCompound, newId } from "./exercises";
@@ -90,7 +91,7 @@ export function prWhyStat(state: AppState, date: string, proteinTarget: number):
 }
 
 export function sessionSummary(state: AppState, s: Session) {
-  const volume = s.exercises.reduce((a, l) => a + l.sets.reduce((b, x) => b + x.weight * x.reps, 0), 0);
+  const volume = s.exercises.reduce((a, l) => a + l.sets.reduce((b, x) => b + setVolume(x), 0), 0);
   const sets: Partial<Record<Muscle, number>> = {};
   s.exercises.forEach((l) => EX[l.exId]?.primary.forEach((m) => (sets[m] = (sets[m] ?? 0) + l.sets.length)));
   const prs = sessionPRs([...state.sessions.filter((x) => x.id !== s.id), s], s);

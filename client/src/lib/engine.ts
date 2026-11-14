@@ -4,7 +4,7 @@
  */
 import type {
   AppState, CheckIn, Exercise, ExerciseLog, Goal, Meal, Muscle, Profile, Program, ProgramDay,
-  ProgramExercise, Session, Sex, Spotter, Units, Experiment,
+  ProgramExercise, Session, SetLog, Sex, Spotter, Units, Experiment,
 } from "./types";
 import { EX, EXERCISES, MUSCLES, MUSCLE_LABEL, MAIN_LIFTS, allExercises, isCompound } from "./exercises";
 import { loadScore, readinessBand, trainingLoadInputs } from "./readiness";
@@ -362,7 +362,9 @@ export function weeklySets(sessions: Session[], from: string, to: string): Recor
   );
   return out;
 }
-export const sessionVolume = (s: Session) => s.exercises.reduce((a, l) => a + l.sets.reduce((b, x) => b + x.weight * x.reps, 0), 0);
+/** Weight × reps for a whole set, including any drops or rest-pause mini-sets. */
+export const setVolume = (x: SetLog) => x.weight * x.reps + (x.parts ?? []).reduce((a, p) => a + p.weight * p.reps, 0);
+export const sessionVolume = (s: Session) => s.exercises.reduce((a, l) => a + l.sets.reduce((b, x) => b + setVolume(x), 0), 0);
 export const VOLUME_RANGE = { min: 10, max: 20 };
 
 /* =========================== plateau & deload =========================== */
