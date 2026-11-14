@@ -86,9 +86,19 @@ export interface Profile {
   tourDone?: boolean;
 }
 
+/** A drop set strips weight and keeps going; a rest-pause set rests ~15s and squeezes out mini-sets at the same weight. */
+export type SetKind = "drop" | "restpause";
+/** One drop (drop set) or one mini-set (rest-pause) after the main part of a set. */
+export interface SetPart { weight: number; reps: number }
+
 export interface SetLog {
+  /** The main (first) part of the set. Progression, e1RM and PRs only look at this. */
   weight: number;
   reps: number;
+  /** Missing or null = a normal straight set. */
+  kind?: SetKind | null;
+  /** Drops or mini-sets done right after the main part. Counted in volume, not in progression. */
+  parts?: SetPart[];
   rir?: number | null;
   /** Set quality 1–5: 1 grind / form broke down … 5 crisp, bar speed held. Optional. */
   quality?: number | null;
@@ -107,6 +117,8 @@ export interface ExerciseLog {
   extra?: boolean;
   /** Planned sets/reps for exercises outside the program (freestyle, saved workouts, added mid-workout). */
   plan?: { sets: number; repMin: number; repMax: number };
+  /** Exercises in the same workout sharing this id are a superset: do one set of each back to back, then rest. */
+  superset?: string | null;
 }
 
 export interface Session {
