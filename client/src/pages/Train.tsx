@@ -1,6 +1,7 @@
 import { Info } from "@/components/Term";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, FlaskConical, Lightbulb, Target } from "lucide-react";
+import { ChevronLeft, ChevronRight, FlaskConical, Lightbulb, Pencil, Target } from "lucide-react";
+import { EditWorkoutSheet, fmtSet } from "@/components/SetEditor";
 import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
 import Logger from "./Logger";
@@ -295,6 +296,7 @@ function ExperimentReportSheet({ exp, onClose }: { exp: Experiment; onClose: () 
 export function History() {
   const { state, profile } = useStore();
   const [open, setOpen] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Session | null>(null);
   const [editAct, setEditAct] = useState<Activity | null>(null);
   const [kind, setKind] = useState<"all" | "lifting" | "other">("all");
   const acts = state.activities ?? [];
@@ -329,15 +331,17 @@ export function History() {
                 {s.exercises.map((l, i) => (
                   <div key={i} className="rowline" style={{ alignItems: "flex-start" }}>
                     <span className="text-[13px] min0">{EX[l.exId].name}</span>
-                    <span className="mono text-xs text-right muted">{l.sets.map((x) => `${fmtW(x.weight)}×${x.reps}`).join("  ")}</span>
+                    <span className="mono text-xs text-right muted">{l.sets.map((x) => fmtSet(x, "×")).join("  ")}</span>
                   </div>
                 ))}
                 {s.coachNote && <p className="text-xs blue mt-2">Coach: {s.coachNote}</p>}
+                <button className="btn btn-sm btn-outline mt-3" onClick={() => setEditing(s)} data-testid={`button-edit-workout-${s.id}`}><Pencil size={14} /> Edit workout</button>
               </div>
             )}
           </div>
         );
       })}
+      {editing && <EditWorkoutSheet session={editing} onClose={() => setEditing(null)} />}
     </div>
   );
 }
