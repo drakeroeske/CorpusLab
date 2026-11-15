@@ -1,0 +1,36 @@
+# Push reminders (morning check-in, meals, streak) on Vercel.
+# Vercel's Hobby plan runs its own cron at most once a day and the server doesn't stay running,
+# so this calls POST /api/push/cron every 10 minutes instead. The server decides what's due and
+# records what it sent, so a late or repeated run never sends a reminder twice.
+#
+# Needs one repository secret: CORPUS_DB_KEY (same value as in Vercel).
+# Optional repository variable APP_URL to point at another deployment.
+name: Push reminders
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: push-reminders
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Run due reminders
+        env:
+          KEY: ${{ secrets.CORPUS_DB_KEY }}
+          URL: ${{ vars.APP_URL || 'https://corpus-lab-navy.vercel.app' }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::warning::CORPUS_DB_KEY secret isn't set, so no reminders were sent. Add it under Settings → Secrets and variables → Actions."
+            exit 0
+          fi
+          curl -fsS --max-time 90 --retry 2 --retry-delay 10 -X POST -H "x-corpus-key: $KEY" "$URL/api/push/cron"
+          echo
