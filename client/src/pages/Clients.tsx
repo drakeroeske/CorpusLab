@@ -15,6 +15,7 @@ import { MessageThread } from "@/components/MessageThread";
 import {
   addDays, avgReadiness, bodyWeightSeries, dateKey, daysBetween, e1rmSeries, fmtDate, mean, phaseInfo, plateauFlags, projection,
   r1, readinessSeries, userStreak, weeklySets,
+  setVolume,
 } from "@/lib/engine";
 import { EX, MAIN_LIFTS, MUSCLE_LABEL, MUSCLES, customExercisesIn, newId } from "@/lib/exercises";
 import type { AppState, Client, Program } from "@/lib/types";
@@ -318,7 +319,7 @@ function ClientProgress({ cs, units }: { cs: AppState; units: string }) {
   // Weekly volume (sets x reps x weight) over the last 8 weeks.
   const weeks = Array.from({ length: 8 }, (_, i) => {
     const from = addDays(today, -6 - (7 - i) * 7), to = addDays(from, 6);
-    const vol = cs.sessions.filter((s) => s.end && s.date >= from && s.date <= to).reduce((a, s) => a + s.exercises.reduce((b, l) => b + l.sets.reduce((c, x) => c + x.weight * x.reps, 0), 0), 0);
+    const vol = cs.sessions.filter((s) => s.end && s.date >= from && s.date <= to).reduce((a, s) => a + s.exercises.reduce((b, l) => b + l.sets.reduce((c, x) => c + setVolume(x), 0), 0), 0);
     const n = cs.sessions.filter((s) => s.end && s.date >= from && s.date <= to).length;
     return { from, vol, n };
   });

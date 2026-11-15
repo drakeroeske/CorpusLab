@@ -1,3 +1,4 @@
+import "./env.js";
 import { createApp, log } from "./app.js";
 import { serveStatic } from "./static.js";
 

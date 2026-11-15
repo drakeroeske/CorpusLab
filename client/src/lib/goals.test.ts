@@ -108,3 +108,15 @@ describe("unit switch", () => {
     expect(k[2]).toEqual(s.goals[2]);
   });
 });
+
+describe("unit switch with drop sets", () => {
+  it("converts the weights of drop-set parts", async () => {
+    const { convertUnits } = await import("./actions");
+    const s = base();
+    s.sessions = [sess(today, "lateral_raise", [[30, 12]])];
+    s.sessions[0].exercises[0].sets[0] = { ...s.sessions[0].exercises[0].sets[0], kind: "drop", parts: [{ weight: 20, reps: 10 }, { weight: 10, reps: 12 }] };
+    const st = convertUnits(s, "kg").sessions[0].exercises[0].sets[0];
+    expect(st.weight).toBeCloseTo(13.6, 0);
+    expect(st.parts!.map((p) => Math.round(p.weight))).toEqual([9, 5]);
+  });
+});

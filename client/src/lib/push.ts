@@ -60,6 +60,31 @@ export async function enablePush(prefs: NotifPrefs): Promise<{ ok: true } | { ok
   return { ok: true };
 }
 
+/**
+ * If this device subscribed with an older server key (the server's push keys were replaced),
+ * quietly subscribe again with the current key and keep the same notification settings.
+ * Only runs when permission is already granted, so it never shows a prompt.
+ */
+export async function refreshPushKey(): Promise<boolean> {
+  if (pushSupport() !== "ok" || permissionState() !== "granted") return false;
+  const sub = await currentSubscription();
+  const have = sub?.options?.applicationServerKey;
+  if (!sub || !have) return false;
+  const cfg = await api<{ enabled: boolean; publicKey: string }>("GET", "/api/push/config").catch(() => null);
+  if (!cfg?.enabled || !cfg.publicKey) return false;
+  const want = b64ToBytes(cfg.publicKey);
+  const h = new Uint8Array(have);
+  if (h.length === want.length && h.every((b, i) => b === want[i])) return false;
+  const mine = await api<{ prefs: NotifPrefs | null }>("GET", "/api/push/subscriptions").catch(() => null);
+  const oldEndpoint = sub.endpoint;
+  try { await sub.unsubscribe(); } catch { /* already gone */ }
+  const reg = await registration();
+  const fresh = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: want as BufferSource });
+  await api("DELETE", "/api/push/subscribe", { endpoint: oldEndpoint }).catch(() => undefined);
+  await api("POST", "/api/push/subscribe", { subscription: fresh.toJSON(), prefs: mine?.prefs ?? DEFAULT_PREFS });
+  return true;
+}
+
 /** Unsubscribe this device and forget it on the server. */
 export async function disablePush(): Promise<void> {
   const sub = await currentSubscription();
