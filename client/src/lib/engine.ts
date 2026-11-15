@@ -6,7 +6,7 @@ import type {
   AppState, CheckIn, Exercise, ExerciseLog, Goal, Meal, Muscle, Profile, Program, ProgramDay,
   ProgramExercise, Session, Sex, Spotter, Units, Experiment,
 } from "./types";
-import { EX, EXERCISES, MUSCLES, MUSCLE_LABEL, MAIN_LIFTS, allExercises, isCompound } from "./exercises";
+import { EX, EXERCISES, MUSCLES, MUSCLE_LABEL, MAIN_LIFTS, allExercises, isCompound, muscleShares } from "./exercises";
 import { loadScore, readinessBand, trainingLoadInputs } from "./readiness";
 
 /* =========================== dates =========================== */
@@ -318,7 +318,7 @@ export function halfLifeHours(sleepAfter: number | null | undefined, proteinMiss
 }
 
 /**
- * Each working set adds 1.0 to primaries, 0.5 to secondaries; exponential decay.
+ * Each working set adds 1.0 to primaries, 0.5 to secondaries, 0.25 to stabilizers; exponential decay.
  * Half-life 48h (36h if sleep ≥ 7.5h, 60h if sleep < 6h or protein target missed).
  */
 export function muscleFatigue(sessions: Session[], checkins: CheckIn[], meals: Meal[], proteinTarget: number, now: number): Record<Muscle, number> {
@@ -336,11 +336,11 @@ export function muscleFatigue(sessions: Session[], checkins: CheckIn[], meals: M
     for (const log of s.exercises) {
       const ex = EX[log.exId];
       if (!ex) continue;
+      const shares = muscleShares(ex);
       for (const set of log.sets) {
         const age = Math.max(0, (now - set.ts) / 3600000);
         const decay = Math.pow(0.5, age / hl);
-        ex.primary.forEach((m) => (out[m] += 1 * decay));
-        ex.secondary.forEach((m) => (out[m] += 0.5 * decay));
+        for (const [m, w] of shares) out[m] += w * decay;
       }
     }
   }
@@ -356,8 +356,7 @@ export function weeklySets(sessions: Session[], from: string, to: string): Recor
       const ex = EX[log.exId];
       if (!ex) return;
       const n = log.sets.length;
-      ex.primary.forEach((m) => (out[m] += n));
-      ex.secondary.forEach((m) => (out[m] += n * 0.5));
+      for (const [m, w] of muscleShares(ex)) out[m] += n * w;
     }),
   );
   return out;
@@ -679,7 +678,7 @@ export function weeklyReport(state: AppState, from: string, targets: NutritionTa
     if (Math.abs(diff) >= 0.8) insights.push({ tone: diff > 0 ? "info" : "warn", text: `Sessions with 40g+ carbs in the 3h before ran ${diff > 0 ? "+" : ""}${r1(diff)}% e1RM vs sessions without.` });
   }
   // volume
-  const keyMuscles: Muscle[] = ["chest", "lats", "upper_back", "quads", "hamstrings", "shoulders", "glutes"];
+  const keyMuscles: Muscle[] = ["chest_mid", "lats", "mid_back", "vasti", "hamstrings", "side_delts", "glute_max"];
   const low = keyMuscles.filter((m) => sets[m] < VOLUME_RANGE.min).sort((a, b) => sets[a] - sets[b]);
   if (low.length && inWeek.length) insights.push({ tone: "warn", text: `${MUSCLE_LABEL[low[0]]} volume ${r1(sets[low[0]])} sets/week — below the 10-set floor.` });
   const high = MUSCLES.filter((m) => sets[m] > VOLUME_RANGE.max);

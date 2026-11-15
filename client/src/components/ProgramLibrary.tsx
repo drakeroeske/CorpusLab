@@ -7,7 +7,7 @@ import { useUI } from "@/App";
 import { api } from "@/lib/api";
 import { Seg, Sheet } from "./ui";
 import { Tag, shortDate } from "./riso";
-import { EX, allExercises, customExercisesIn, isKnownExercise, newId, registerCustomExercises } from "@/lib/exercises";
+import { EX, allExercises, customExercisesIn, isKnownExercise, newId, registerCustomExercises, upgradeExerciseMuscles } from "@/lib/exercises";
 import { dateKey } from "@/lib/engine";
 import { daysToProgram, ocrImage, parseProgramText, toProgramDays, type ParsedDay } from "@/lib/programImport";
 import type { Exercise, Program, SavedProgram } from "@/lib/types";
@@ -302,7 +302,7 @@ export function adoptCarriedExercises(incoming: Program, mine: Exercise[] | unde
   const have = new Map((mine ?? []).map((e) => [e.id, e]));
   const list: Exercise[] = [
     ...(mine ?? []).map((e) => (e.archived && valid.some((v) => v.id === e.id) ? { ...e, archived: false } : e)),
-    ...valid.filter((e) => !have.has(e.id)).map((e) => ({ ...e, name: e.name.slice(0, 60), secondary: Array.isArray(e.secondary) ? e.secondary : [], ratio: 1, custom: true, archived: false })),
+    ...valid.filter((e) => !have.has(e.id)).map((e) => upgradeExerciseMuscles({ ...e, name: e.name.slice(0, 60), secondary: Array.isArray(e.secondary) ? e.secondary : [], ratio: 1, custom: true, archived: false })),
   ];
   registerCustomExercises(list);
   set((s) => ({ ...s, customExercises: list }));

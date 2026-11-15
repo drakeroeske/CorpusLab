@@ -160,7 +160,7 @@ export function LabReport() {
 
       <div className="section-title"><h2>Hard sets per muscle</h2><span className="label">target 10–20</span></div>
       <div className="card">
-        {MUSCLES.filter((m) => rep.sets[m] > 0 || ["chest", "lats", "quads", "hamstrings", "shoulders"].includes(m)).map((m) => (
+        {MUSCLES.filter((m) => rep.sets[m] > 0 || ["chest_mid", "lats", "vasti", "hamstrings", "side_delts"].includes(m)).map((m) => (
           <div key={m} className="grid items-center gap-3" style={{ gridTemplateColumns: "92px 1fr 34px", minHeight: 26 }}>
             <span className="text-[13px]">{MUSCLE_LABEL[m]}</span>
             <Bar pct={(rep.sets[m] / 24) * 100} color={rep.sets[m] < VOLUME_RANGE.min ? "var(--orange)" : rep.sets[m] > VOLUME_RANGE.max ? "var(--blue)" : "var(--lime)"} />

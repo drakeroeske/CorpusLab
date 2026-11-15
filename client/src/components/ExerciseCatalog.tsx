@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Pencil, Plus, Search } from "lucide-react";
 import type { Equipment, Exercise, Muscle } from "@/lib/types";
-import { EQUIPMENT_LABEL, EQUIPMENT_LIST, EXERCISES, MUSCLE_LABEL, MUSCLES, PATTERN_LABEL, customExercises, isCompound } from "@/lib/exercises";
+import { EQUIPMENT_LABEL, EQUIPMENT_LIST, EXERCISES, MUSCLE_GROUPS, MUSCLE_LABEL, PATTERN_LABEL, customExercises, isCompound, muscleSearchText } from "@/lib/exercises";
 import { e1rmSeries, fmtDate } from "@/lib/engine";
 import { lastTopSet } from "@/lib/derived";
 import { useStore } from "@/lib/store";
@@ -39,13 +39,13 @@ export function ExerciseCatalog({ onPick, embedded, initialQuery = "", onCreated
   const pickGroup = (g: GroupBy) => { setGroupBy(g); setFilter("all"); localStorage.setItem(STORE_KEY, g); };
 
   const ql = q.trim().toLowerCase();
-  const match = (e: Exercise) => ql === "" || e.name.toLowerCase().includes(ql) || e.primary.some((m) => MUSCLE_LABEL[m].toLowerCase().includes(ql)) || EQUIPMENT_LABEL[e.equipment].toLowerCase().includes(ql);
+  const match = (e: Exercise) => ql === "" || e.name.toLowerCase().includes(ql) || e.primary.some((m) => muscleSearchText(m).includes(ql)) || EQUIPMENT_LABEL[e.equipment].toLowerCase().includes(ql);
   const mine = customExercises().filter(match);
   const lib = EXERCISES.filter(match);
   const all = [...mine, ...lib];
 
   // Chips under the Seg narrow the list to one group; "All" shows every group with a heading.
-  const chips: { v: string; l: string }[] = groupBy === "muscle" ? MUSCLES.map((m) => ({ v: m, l: MUSCLE_LABEL[m] }))
+  const chips: { v: string; l: string }[] = groupBy === "muscle" ? MUSCLE_GROUPS.map((g) => ({ v: g.id, l: g.label }))
     : groupBy === "equipment" ? EQUIPMENT_LIST.map((x) => ({ v: x, l: EQUIPMENT_LABEL[x] }))
     : [{ v: "compound", l: "Compound" }, { v: "isolation", l: "Isolation" }];
 
@@ -53,11 +53,12 @@ export function ExerciseCatalog({ onPick, embedded, initialQuery = "", onCreated
     const out: { id: string; label: string; items: Exercise[] }[] = [];
     const push = (id: string, label: string, items: Exercise[]) => { if (items.length && (filter === "all" || filter === id)) out.push({ id, label, items }); };
     if (groupBy === "muscle") {
-      // An exercise appears under each main muscle it trains; secondary muscles only when filtering to that muscle.
-      for (const m of MUSCLES) {
-        const prim = all.filter((e) => e.primary.includes(m));
-        const sec = filter === m ? all.filter((e) => !e.primary.includes(m) && e.secondary.includes(m)) : [];
-        push(m, MUSCLE_LABEL[m], [...prim, ...sec]);
+      // An exercise appears under each body region where it has a main muscle; secondary muscles only when filtering to that region.
+      for (const g of MUSCLE_GROUPS) {
+        const inG = (list: Muscle[] | undefined) => !!list?.some((m) => g.muscles.includes(m));
+        const prim = all.filter((e) => inG(e.primary));
+        const sec = filter === g.id ? all.filter((e) => !inG(e.primary) && inG(e.secondary)) : [];
+        push(g.id, g.label, [...prim, ...sec]);
       }
     } else if (groupBy === "equipment") {
       for (const x of EQUIPMENT_LIST) push(x, EQUIPMENT_LABEL[x], all.filter((e) => e.equipment === x));
@@ -73,15 +74,15 @@ export function ExerciseCatalog({ onPick, embedded, initialQuery = "", onCreated
       onClose={() => setEditing(null)} onSaved={(id) => { if (editing === "new") { onCreated?.(id); onPick?.(id); } }} />
   );
 
-  const row = (e: Exercise, m?: Muscle) => (
+  const row = (e: Exercise, g?: Muscle[]) => (
     <div key={e.id} className="flex items-center">
       <button className="rowline w-full text-left min0 flex-1" onClick={() => (onPick ? onPick(e.id) : setDetail(e))} data-testid={`pick-exercise-${e.id}`}>
         <div className="min0">
           <div className="font-semibold text-[15px]">{e.name}</div>
           <div className="text-xs muted mt-0.5">
             {e.primary.map((x) => MUSCLE_LABEL[x]).join(", ")}
-            {e.secondary.length ? <span className="faint"> · {e.secondary.map((x) => MUSCLE_LABEL[x]).join(", ")}</span> : null}
-            {m && !e.primary.includes(m) ? <span className="faint"> · secondary</span> : null}
+            {e.secondary.length + (e.stabilizers?.length ?? 0) ? <span className="faint"> · +{e.secondary.length + (e.stabilizers?.length ?? 0)} supporting</span> : null}
+            {g && !e.primary.some((x) => g.includes(x)) ? <span className="faint"> · secondary</span> : null}
           </div>
         </div>
         <ExerciseChips e={e} />
@@ -96,6 +97,9 @@ export function ExerciseCatalog({ onPick, embedded, initialQuery = "", onCreated
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 faint" />
         <input className="input" style={{ paddingLeft: 36 }} placeholder="Search name, muscle or equipment" value={q} onChange={(e) => setQ(e.target.value)} data-testid="input-exercise-search" autoFocus={!embedded} />
       </div>
+      {onPick && (
+        <button className="btn btn-outline btn-block mb-3" onClick={() => setEditing("new")} data-testid="button-create-exercise-top"><Plus size={16} /> Create a custom exercise</button>
+      )}
       <Seg value={groupBy} onChange={pickGroup} options={[{ v: "muscle", l: "By muscle" }, { v: "equipment", l: "By equipment" }, { v: "type", l: "By type" }]} testId="seg-catalog-group" />
       <div className="scroll-x flex gap-2 mt-3 mb-3">
         <button className="chip chip-pick" aria-pressed={filter === "all"} onClick={() => setFilter("all")} data-testid="filter-all">All</button>
@@ -117,7 +121,7 @@ export function ExerciseCatalog({ onPick, embedded, initialQuery = "", onCreated
       {groups.map((g) => (
         <div key={g.id} className="mb-4" data-testid={`group-${g.id}`}>
           <div className="label mb-2 flex justify-between"><span>{g.label}</span><span>{g.items.length}</span></div>
-          {g.items.map((e) => row(e, groupBy === "muscle" ? (g.id as Muscle) : undefined))}
+          {g.items.map((e) => row(e, groupBy === "muscle" ? MUSCLE_GROUPS.find((x) => x.id === g.id)?.muscles : undefined))}
         </div>
       ))}
       <div className="mt-4 mb-2 text-center">
@@ -144,6 +148,8 @@ function ExerciseDetail({ e, onClose, onEdit, sessions, units }: { e: Exercise; 
       </div>
       <div className="rowline"><span className="text-sm muted">Main muscles</span><span className="text-sm text-right">{e.primary.map((m) => MUSCLE_LABEL[m]).join(", ")}</span></div>
       <div className="rowline"><span className="text-sm muted">Also works</span><span className="text-sm text-right">{e.secondary.length ? e.secondary.map((m) => MUSCLE_LABEL[m]).join(", ") : "—"}</span></div>
+      <div className="rowline"><span className="text-sm muted">Stabilizers</span><span className="text-sm text-right" data-testid="text-exercise-stabilizers">{e.stabilizers?.length ? e.stabilizers.map((m) => MUSCLE_LABEL[m]).join(", ") : "—"}</span></div>
+      <p className="text-xs faint mt-2">Each set counts 1 for main muscles, 0.5 for secondary and 0.25 for stabilizers.</p>
       {e.notes && <div className="card-flat mt-3"><div className="label mb-1">Notes</div><p className="text-sm" style={{ whiteSpace: "pre-wrap" }} data-testid="text-exercise-notes">{e.notes}</p></div>}
       <div className="section-title"><h2>Your history</h2></div>
       <div className="stat-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>

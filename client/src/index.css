@@ -375,3 +375,4 @@ button.rr:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
 .chip-pick[aria-pressed="true"] { background: var(--ink); color: var(--page); border-color: var(--ink); }
 .chip-pick.alt[aria-pressed="true"] { background: var(--signal-soft); color: var(--ink); border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
 .chip-pick:disabled { opacity: .45; text-decoration: line-through; }
+.chip-pick.stab[aria-pressed="true"] { background: var(--page); color: var(--ink); border: 1.5px dashed var(--ink); }
