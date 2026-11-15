@@ -3,14 +3,15 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronRight, Pencil, Plus, Target, Trophy } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
-import type { PersonalGoal, GoalKind, HabitMetric, Units } from "@/lib/types";
+import type { ActivityType, PersonalGoal, GoalKind, HabitMetric, Units } from "@/lib/types";
 import { EX, newId } from "@/lib/exercises";
 import { addDays, dateKey, daysBetween, fmtDate, fmtW, roundTo } from "@/lib/engine";
-import { HABIT_LABEL, activeGoals, bestSetAtReps, currentBodyweight, finishedGoals, goalProgress, goalTitle, newlyAchieved, recentBestE1rm, type GoalCtx, type GoalProgress } from "@/lib/goals";
+import { HABIT_LABEL, RACES, activeGoals, bestSetAtReps, currentBodyweight, finishedGoals, goalProgress, goalTitle, newlyAchieved, recentBestE1rm, type GoalCtx, type GoalProgress } from "@/lib/goals";
 import { Bar, Empty, NumInput, Seg, Sheet, Stepper } from "./ui";
 import { ExercisePicker } from "./ProgramEditor";
+import { ACTIVITY, DISTANCE_TYPES, distUnit, fmtDuration, fromKm, kmToSwim, parseDuration, predictedTimes, swimToKm, swimUnit, toKm } from "@/lib/activities";
 
-const KIND_LABEL: Record<GoalKind, string> = { bodyweight: "Bodyweight", lift: "Lift", habit: "Habit" };
+const KIND_LABEL: Record<GoalKind, string> = { bodyweight: "Bodyweight", lift: "Lift", cardio: "Cardio", habit: "Habit" };
 const STATUS_TEXT: Record<GoalProgress["status"], string> = { achieved: "Done", on_track: "On track", behind: "Behind", in_progress: "In progress", no_data: "No data yet" };
 
 function useGoalCtx(): GoalCtx {
@@ -159,6 +160,13 @@ export function GoalEditorSheet({ goal, onClose }: { goal?: PersonalGoal; onClos
   const [weight, setWeight] = useState<number | null>(goal?.kind === "lift" ? goal.weight : null);
   const [reps, setReps] = useState<number>(goal?.kind === "lift" ? goal.reps : 1);
   const [picking, setPicking] = useState(false);
+  // cardio
+  const cg = goal?.kind === "cardio" ? goal : null;
+  const [activity, setActivity] = useState<ActivityType>(cg?.activity ?? "run");
+  const [cMetric, setCMetric] = useState<"time" | "weekly" | "longest">(cg?.metric ?? "time");
+  const [cDistKm, setCDistKm] = useState<number | null>(cg?.distanceKm ?? 5);
+  const [cTime, setCTime] = useState(cg?.timeSec ? fmtDuration(cg.timeSec) : "");
+  const [cWeeks, setCWeeks] = useState<number | null>(cg?.weeks ?? null);
   // habit
   const [metric, setMetric] = useState<HabitMetric>(goal?.kind === "habit" ? goal.metric : "workouts");
   const [perWeek, setPerWeek] = useState<number>(goal?.kind === "habit" ? goal.perWeek : 4);
@@ -167,6 +175,8 @@ export function GoalEditorSheet({ goal, onClose }: { goal?: PersonalGoal; onClos
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [tried, setTried] = useState(false);
 
+  const preds = kind === "cardio" && cMetric === "time" && cDistKm ? predictedTimes(state.activities, activity, cDistKm).filter((p) => daysBetween(p.date, today) <= 42) : [];
+  const predNow = preds.length ? Math.round(Math.min(...preds.slice(-3).map((p) => p.sec))) : null;
   const bestE1 = exId ? recentBestE1rm(state.sessions, exId, today) : 0;
   const prevBest = exId && !goal ? bestSetAtReps(state.sessions, exId, reps) : null;
   const beaten = prevBest && weight && prevBest.weight >= weight ? prevBest : null;
@@ -181,6 +191,7 @@ export function GoalEditorSheet({ goal, onClose }: { goal?: PersonalGoal; onClos
 
   const missing = kind === "bodyweight" ? (bwTarget == null || bwTarget <= 0 ? "Enter a target weight." : null)
     : kind === "lift" ? (!exId ? "Pick the lift." : !weight || weight <= 0 ? "Enter the target weight." : null)
+    : kind === "cardio" ? (!cDistKm || cDistKm <= 0 ? "Enter the distance." : cMetric === "time" && !parseDuration(cTime) ? "Enter a target time, like 25:00." : null)
     : null;
   const deadlineBad = deadline && deadline <= today && !goal ? "Pick a deadline in the future." : null;
 
@@ -190,6 +201,11 @@ export function GoalEditorSheet({ goal, onClose }: { goal?: PersonalGoal; onClos
     if (kind === "lift" && exId && weight) {
       const keepStart = goal?.kind === "lift" && goal.exId === exId;
       return { ...base, kind, exId, weight, reps, startE1rm: keepStart ? (goal as Extract<PersonalGoal, { kind: "lift" }>).startE1rm : bestE1 };
+    }
+    if (kind === "cardio" && cDistKm) {
+      const timeSec = cMetric === "time" ? parseDuration(cTime) : null;
+      const keep = cg && cg.activity === activity && cg.metric === cMetric && Math.abs(cg.distanceKm - cDistKm) < 1e-6;
+      return { ...base, kind, activity, metric: cMetric, distanceKm: cDistKm, ...(timeSec ? { timeSec, startSec: keep ? cg!.startSec ?? predNow : predNow } : {}), ...(cMetric === "weekly" ? { weeks: cWeeks || null } : {}) };
     }
     if (kind === "habit") return { ...base, kind, metric, perWeek, weeks: weeks || null, ...(metric === "sleep" ? { sleepHours } : {}) };
     return null;
@@ -223,6 +239,8 @@ export function GoalEditorSheet({ goal, onClose }: { goal?: PersonalGoal; onClos
   };
 
   const preview = build();
+  const gctx = useGoalCtx();
+  const alreadyMet = !goal && preview && !missing && kind !== "lift" && goalProgress(preview, gctx).achieved;
   const deadlineWeeks = deadline ? Math.round(daysBetween(today, deadline) / 7) : 0;
 
   if (picking) return <ExercisePicker title="Pick the lift" onClose={() => setPicking(false)} onPick={pickLift} />;
@@ -269,6 +287,44 @@ export function GoalEditorSheet({ goal, onClose }: { goal?: PersonalGoal; onClos
         </div>
       )}
 
+      {kind === "cardio" && (
+        <div className="mt-4">
+          <div className="label mb-2">Activity</div>
+          <div className="flex flex-wrap gap-2">
+            {DISTANCE_TYPES.map((t) => <button key={t} type="button" className="chip chip-pick" aria-pressed={activity === t} onClick={() => setActivity(t)} data-testid={`chip-goal-activity-${t}`}>{ACTIVITY[t].label}</button>)}
+          </div>
+          <div className="label mt-4 mb-2">Goal</div>
+          <Seg value={cMetric} onChange={setCMetric} options={[{ v: "time", l: "Time" }, { v: "weekly", l: "Weekly distance" }, { v: "longest", l: "Distance" }]} testId="seg-goal-cardio-metric" />
+          <p className="text-xs faint mt-2">{cMetric === "time" ? "Cover a distance in a target time." : cMetric === "weekly" ? "Hit a total distance every week." : "Go this far in one session."}</p>
+          {(activity === "run" || activity === "walk") && cMetric !== "weekly" && (
+            <div className="flex flex-wrap gap-2 mt-3">
+              {RACES.map((r) => <button key={r.name} type="button" className="chip chip-pick" style={{ minHeight: 36 }} aria-pressed={cDistKm != null && Math.abs(cDistKm - r.km) < 0.001} onClick={() => setCDistKm(r.km)} data-testid={`chip-goal-race-${r.name.replace(/\s+/g, "-")}`}>{r.name === "half marathon" ? "Half" : r.name === "marathon" ? "Marathon" : r.name}</button>)}
+            </div>
+          )}
+          <div className={`grid ${cMetric === "time" ? "grid-cols-2" : "grid-cols-1"} gap-3 mt-3`}>
+            <label className="field">
+              <span className="label">{cMetric === "weekly" ? "Per week" : "Distance"} ({activity === "swim" ? swimUnit(u) : distUnit(u)})</span>
+              <NumInput value={cDistKm == null ? null : activity === "swim" ? Math.round(kmToSwim(cDistKm, u)) : Math.round(fromKm(cDistKm, u) * 100) / 100}
+                onChange={(v) => setCDistKm(v == null ? null : activity === "swim" ? swimToKm(v, u) : toKm(v, u))} min={0} max={activity === "swim" ? 100000 : 2000} decimals={activity === "swim" ? 0 : 2} allowEmpty data-testid="input-goal-cardio-distance" />
+            </label>
+            {cMetric === "time" && (
+              <label className="field">
+                <span className="label">Target time</span>
+                <input className="input mono" inputMode="numeric" value={cTime} onChange={(e) => setCTime(e.target.value.replace(/[^0-9:]/g, ""))} placeholder="mm:ss or h:mm:ss" data-testid="input-goal-cardio-time" />
+              </label>
+            )}
+          </div>
+          {cMetric === "time" && <p className="text-xs muted mt-1.5" data-testid="text-goal-cardio-predicted">{predNow ? `Predicted from your recent ${ACTIVITY[activity].label.toLowerCase()}s: ${fmtDuration(predNow)}` : `Log a ${ACTIVITY[activity].label.toLowerCase()} of at least half the distance and we'll predict your time.`}</p>}
+          {cMetric === "weekly" && (
+            <>
+              <div className="label mt-4 mb-2">How long</div>
+              <Seg value={cWeeks ? "weeks" : "ongoing"} onChange={(v) => setCWeeks(v === "weeks" ? cWeeks || 8 : null)} options={[{ v: "weeks", l: "Weeks in a row" }, { v: "ongoing", l: "Ongoing" }]} testId="seg-goal-cardio-duration" />
+              {cWeeks ? <div className="mt-3"><Stepper value={cWeeks} onChange={(v) => setCWeeks(Math.min(52, Math.max(1, Math.round(v))))} min={1} max={52} decimals={0} unit="weeks" testId="stepper-goal-cardio-weeks" /></div> : null}
+            </>
+          )}
+        </div>
+      )}
+
       {kind === "habit" && (
         <div className="mt-4">
           <div className="label mb-2">What</div>
@@ -284,7 +340,7 @@ export function GoalEditorSheet({ goal, onClose }: { goal?: PersonalGoal; onClos
         </div>
       )}
 
-      {!(kind === "habit" && !weeks) && (
+      {!(kind === "habit" && !weeks) && !(kind === "cardio" && cMetric === "weekly" && !cWeeks) && (
         <>
           <div className="label mt-5 mb-2">Deadline <span className="faint" style={{ textTransform: "none", letterSpacing: 0 }}>(optional)</span></div>
           <div className="flex flex-wrap gap-2">
@@ -308,6 +364,7 @@ export function GoalEditorSheet({ goal, onClose }: { goal?: PersonalGoal; onClos
           <GoalPreview goal={preview} />
         </div>
       )}
+      {alreadyMet && <p className="text-sm mt-3" role="status" data-testid="text-goal-already-met">What you've already logged meets this target, so it would count as reached right away. Aim higher?</p>}
       {tried && (missing || deadlineBad) && <p className="text-sm mt-4" role="alert" style={{ color: "var(--ink-deep)" }} data-testid="text-goal-error">{missing ?? deadlineBad}</p>}
       <button className="btn btn-primary btn-block btn-lg mt-5" onClick={save} data-testid="button-save-goal">{goal ? "Save changes" : "Set goal"}</button>
 

@@ -17,7 +17,8 @@ import {
 import { EX, MUSCLE_LABEL, MUSCLES, TEMPLATES, buildTemplate, newId } from "@/lib/exercises";
 import { convertProgram } from "@/lib/actions";
 import { ExerciseCatalog } from "@/components/ExerciseCatalog";
-import type { Experiment, Program, ProgramDay } from "@/lib/types";
+import type { Activity, Experiment, Program, ProgramDay, Session } from "@/lib/types";
+import { ActivityRow, ActivitySheet } from "@/components/Activity";
 
 export default function Train() {
   const ui = useUI();
@@ -294,11 +295,23 @@ function ExperimentReportSheet({ exp, onClose }: { exp: Experiment; onClose: () 
 export function History() {
   const { state, profile } = useStore();
   const [open, setOpen] = useState<string | null>(null);
+  const [editAct, setEditAct] = useState<Activity | null>(null);
+  const [kind, setKind] = useState<"all" | "lifting" | "other">("all");
+  const acts = state.activities ?? [];
   const list = [...state.sessions].filter((s) => s.end).sort((a, b) => b.start - a.start);
-  if (!list.length) return <Empty>No sessions yet. Finish a workout and it shows here.</Empty>;
+  // Lifting sessions and other activities in one timeline, newest first.
+  const items: ({ k: "s"; s: Session; t: number } | { k: "a"; a: Activity; t: number })[] = [
+    ...(kind !== "other" ? list.map((s) => ({ k: "s" as const, s, t: s.start })) : []),
+    ...(kind !== "lifting" ? acts.map((a) => ({ k: "a" as const, a, t: a.start })) : []),
+  ].sort((a, b) => b.t - a.t);
+  if (!list.length && !acts.length) return <Empty>No workouts yet. Finish a workout or log a run, class or WOD and it shows here.</Empty>;
   return (
     <div className="stack" data-testid="view-history">
-      {list.slice(0, 40).map((s) => {
+      {acts.length > 0 && list.length > 0 && <Seg value={kind} onChange={setKind} options={[{ v: "all", l: "All" }, { v: "lifting", l: "Lifting" }, { v: "other", l: "Cardio & more" }]} testId="seg-history-kind" />}
+      {editAct && <ActivitySheet activity={editAct} onClose={() => setEditAct(null)} />}
+      {items.slice(0, 60).map((it) => {
+        if (it.k === "a") return <ActivityRow key={it.a.id} a={it.a} onOpen={() => setEditAct(it.a)} />;
+        const s = it.s;
         const prs = sessionPRs(state.sessions, s);
         const isOpen = open === s.id;
         return (

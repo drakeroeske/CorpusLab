@@ -93,6 +93,17 @@ export const EXERCISES: Exercise[] = [
   E("hanging_leg_raise", "Hanging Leg Raise", ["abs", "hip_flexors"], ["obliques"], ["forearms", "lats"], "bodyweight", "isolation", 1),
   E("cable_crunch", "Cable Crunch", ["abs"], ["obliques"], ["lats"], "cable", "isolation", 1),
   E("cable_woodchop", "Cable Woodchop", ["obliques"], ["abs"], ["front_delts", "glute_max"], "cable", "isolation", 0.5),
+  // CrossFit / Olympic lifting
+  E("power_clean", "Power Clean", ["glute_max", "hamstrings", "traps_upper"], ["vasti", "lower_back", "side_delts", "mid_back", "forearms"], ["abs", "obliques", "gastrocnemius", "biceps_long"], "barbell", "hinge", 0.6),
+  E("clean_and_jerk", "Clean & Jerk", ["glute_max", "vasti", "front_delts"], ["hamstrings", "traps_upper", "triceps_lateral", "lower_back", "side_delts", "adductors"], [...BRACE, "mid_back", "forearms", "gastrocnemius"], "barbell", "hinge", 0.55),
+  E("snatch", "Snatch", ["glute_max", "hamstrings", "traps_upper"], ["vasti", "side_delts", "mid_back", "lower_back", "adductors"], [...BRACE, "front_delts", "triceps_long", "forearms", "gastrocnemius"], "barbell", "hinge", 0.45),
+  E("thruster", "Thruster", ["vasti", "glute_max", "front_delts"], ["adductors", "triceps_lateral", "triceps_long", "side_delts", "rectus_femoris"], [...BRACE, "lower_back", "mid_back", "traps_upper"], "barbell", "squat", 0.45),
+  E("wall_ball", "Wall Ball", ["vasti", "glute_max", "front_delts"], ["adductors", "triceps_lateral", "rectus_femoris"], [...BRACE, "lower_back", "side_delts"], "bodyweight", "squat", 0.08),
+  E("air_squat", "Air Squat", ["vasti", "glute_max"], ["adductors", "rectus_femoris"], [...BRACE, "lower_back"], "bodyweight", "squat", 0.05),
+  E("box_jump", "Box Jump", ["vasti", "glute_max"], ["gastrocnemius", "soleus", "hamstrings", "rectus_femoris"], [...BRACE, "adductors"], "bodyweight", "squat", 0.05),
+  E("burpee", "Burpee", ["chest_mid", "vasti"], ["front_delts", "triceps_lateral", "glute_max", "abs", "hip_flexors"], ["obliques", "gastrocnemius", "triceps_long"], "bodyweight", "isolation", 1),
+  E("toes_to_bar", "Toes-to-Bar", ["abs", "hip_flexors"], ["obliques", "lats", "forearms"], ["triceps_long", "mid_back"], "bodyweight", "isolation", 1),
+  E("double_under", "Double-Under", ["gastrocnemius", "soleus"], ["front_delts", "forearms"], [...BRACE, "vasti"], "bodyweight", "isolation", 1),
   E("shrug", "Dumbbell Shrug", ["traps_upper"], ["forearms"], ["mid_back"], "dumbbell", "isolation", 1),
 ];
 

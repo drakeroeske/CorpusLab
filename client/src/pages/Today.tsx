@@ -14,7 +14,8 @@ import { EngineHeader, Tag } from "@/components/riso";
 import { ReadinessRing } from "@/components/ReadinessRing";
 import { Info, Term } from "@/components/Term";
 import { InboxButton } from "@/components/Inbox";
-import type { Meal } from "@/lib/types";
+import type { Activity, Meal } from "@/lib/types";
+import { ActivityRow, ActivitySheet } from "@/components/Activity";
 
 export function readinessColor(score: number | null) {
   if (score == null) return "var(--muted)";
@@ -38,6 +39,8 @@ export default function Today() {
   const [why, setWhy] = useState(false);
   const [showList, setShowList] = useState(false);
   const [startOpen, setStartOpen] = useState(false);
+  const [actOpen, setActOpen] = useState(false);
+  const [editAct, setEditAct] = useState<Activity | null>(null);
   const u = profile.units;
   const r = t.readiness;
   const day = t.day;
@@ -48,6 +51,7 @@ export default function Today() {
   const cal = caloriesByDate(state.meals)[t.today] ?? 0;
   const prot = proteinByDate(state.meals)[t.today] ?? 0;
   const doneSum = t.doneToday ? sessionSummary(state, t.doneToday) : null;
+  const todayActs = (state.activities ?? []).filter((a) => a.date === t.today).sort((a, b) => a.start - b.start);
 
   const start = () => {
     if (!state.activeSession) {
@@ -199,7 +203,10 @@ export default function Today() {
             <button className="btn btn-outline btn-block mt-3" onClick={() => (state.activeSession ? start() : setStartOpen(true))} data-testid="button-train-anyway">{state.activeSession ? "Resume workout" : "Train anyway"}</button>
           </section>
         )}
+        {todayActs.map((a) => <ActivityRow key={a.id} a={a} showDate={false} onOpen={() => setEditAct(a)} />)}
+        <button className="btn btn-sm btn-ghost btn-block" onClick={() => setActOpen(true)} data-testid="button-log-activity-today"><Plus size={14} /> Log a run, ride, class or WOD</button>
         {startOpen && <StartWorkoutSheet onClose={() => setStartOpen(false)} />}
+        {(actOpen || editAct) && <ActivitySheet activity={editAct ?? undefined} onClose={() => { setActOpen(false); setEditAct(null); }} />}
 
         {/* 4. Goals: up to three, with progress. */}
         <TodayGoals />
