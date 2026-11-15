@@ -1,11 +1,13 @@
 import { useUI } from "@/App";
 import { EngineHeader } from "@/components/riso";
 import { Sectioned, type Section } from "@/components/Sections";
+import { GoalsView } from "@/components/Goals";
 import { FatigueView, TrendsView, Vault } from "./Body";
 import { Experiments, History, LabReport } from "./Train";
 
 const SECTIONS: Section[] = [
   { id: "fatigue", label: "Body" },
+  { id: "goals", label: "Goals" },
   { id: "trends", label: "Trends" },
   { id: "history", label: "History" },
   { id: "lab", label: "Lab report", title: "Weekly lab report", more: true, hint: "How sleep, food and lifts connected this week" },
@@ -13,7 +15,7 @@ const SECTIONS: Section[] = [
   { id: "vault", label: "Photos", title: "Photos & measurements", more: true, hint: "Private progress photos and tape measurements" },
 ];
 
-/** Everything about how you're changing over time: recovery, trends, past workouts, plus reports and photos under More. */
+/** Everything about how you're changing over time: recovery, goals, trends, past workouts, plus reports and photos under More. */
 export default function Progress() {
   const ui = useUI();
   return (
@@ -21,7 +23,8 @@ export default function Progress() {
       <EngineHeader title="Progress" />
       <Sectioned name="Progress" sections={SECTIONS} value={ui.sub.progress ?? "fatigue"} onChange={(s) => ui.setSub("progress", s)}
         render={(id) => (
-          id === "trends" ? <TrendsView />
+          id === "goals" ? <GoalsView />
+            : id === "trends" ? <TrendsView />
             : id === "history" ? <History />
             : id === "lab" ? <LabReport />
             : id === "experiments" ? <Experiments />

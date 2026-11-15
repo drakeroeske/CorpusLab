@@ -6,6 +6,7 @@ import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
 import { newSession, prescriptionsFor, sessionSummary, useToday } from "@/lib/derived";
 import { StartWorkoutSheet } from "@/components/StartWorkout";
+import { TodayGoals } from "@/components/Goals";
 import { addDays, fmtDate, fmtW, proteinByDate, caloriesByDate } from "@/lib/engine";
 import { EX, MUSCLE_LABEL, newId } from "@/lib/exercises";
 import { Bar } from "@/components/ui";
@@ -200,7 +201,10 @@ export default function Today() {
         )}
         {startOpen && <StartWorkoutSheet onClose={() => setStartOpen(false)} />}
 
-        {/* 4. Food: one slim row; tap to log. */}
+        {/* 4. Goals: up to three, with progress. */}
+        <TodayGoals />
+
+        {/* 5. Food: one slim row; tap to log. */}
         <div className="section-title"><h2>Food</h2></div>
         <button className="card w-full text-left flex items-center gap-3" onClick={() => ui.open("nutrition")} data-testid="button-open-nutrition" aria-label="Log a meal">
           <div className="min0 flex-1 grid grid-cols-2 gap-4">

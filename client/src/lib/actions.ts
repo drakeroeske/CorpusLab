@@ -38,6 +38,7 @@ export function convertUnits(s: AppState, to: Units): AppState {
     activeSession: s.activeSession ? { ...s.activeSession, exercises: s.activeSession.exercises.map((e) => ({ ...e, targetWeight: w(e.targetWeight), sets: e.sets.map((st) => ({ ...st, weight: w(st.weight) })) })) } : null,
     checkins: s.checkins.map((c) => ({ ...c, bodyWeight: c.bodyWeight != null ? w1(c.bodyWeight) : c.bodyWeight })),
     measurements: s.measurements.map((m) => ({ ...m, waist: l(m.waist), chest: l(m.chest), arms: l(m.arms), thighs: l(m.thighs) })),
+    goals: s.goals?.map((g) => (g.kind === "bodyweight" ? { ...g, start: w1(g.start), target: w1(g.target) } : g.kind === "lift" ? { ...g, weight: w(g.weight), startE1rm: w1(g.startE1rm) } : g)),
     feed: s.feed.map((p) => (p.author === "me" ? { ...p, topSets: p.topSets.map((t) => ({ ...t, weight: w(t.weight), units: to })) } : p)),
   };
 }
