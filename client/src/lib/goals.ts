@@ -1,6 +1,7 @@
 // Personal goals: how far along each one is, when it will likely land, and whether that beats the deadline.
-import type { AppState, PersonalGoal, HabitMetric, Session, Units } from "./types";
+import type { ActivityType, AppState, PersonalGoal, HabitMetric, Session, Units } from "./types";
 import { EX } from "./exercises";
+import { ACTIVITY, fmtDistance, fmtDuration, predictedTimes } from "./activities";
 import { addDays, daysBetween, e1rm, fmtDate, fmtW, linreg, proteinByDate, r1, weekStart } from "./engine";
 
 export type GoalStatus = "achieved" | "on_track" | "behind" | "in_progress" | "no_data";
@@ -29,7 +30,7 @@ export interface GoalCtx {
 }
 
 export const HABIT_LABEL: Record<HabitMetric, { noun: string; unit: string; help: string }> = {
-  workouts: { noun: "Workouts", unit: "workouts", help: "Finished workouts with at least one logged set" },
+  workouts: { noun: "Workouts", unit: "workouts", help: "Finished lifting workouts plus runs, rides, classes and WODs" },
   protein: { noun: "Protein days", unit: "days hitting protein", help: "Days your logged protein reaches 95% of your target" },
   sleep: { noun: "Sleep", unit: "nights", help: "Nights your check-in sleep reaches the hours you set" },
   checkins: { noun: "Check-ins", unit: "check-ins", help: "Days you complete the morning check-in" },
@@ -82,8 +83,8 @@ function habitCounts(g: Extract<PersonalGoal, { kind: "habit" }>, ctx: GoalCtx):
   const out: Record<string, number> = {};
   const add = (date: string) => { const w = weekStart(date); out[w] = (out[w] ?? 0) + 1; };
   if (g.metric === "workouts") {
-    const days = new Set(state.sessions.filter((s) => s.end && s.exercises.some((e) => e.sets.length)).map((s) => s.date + "|" + s.id));
-    days.forEach((k) => add(k.split("|")[0]));
+    for (const s of state.sessions) if (s.end && s.exercises.some((e) => e.sets.length)) add(s.date);
+    for (const a of state.activities ?? []) add(a.date);
   } else if (g.metric === "protein") {
     for (const [d, p] of Object.entries(proteinByDate(state.meals))) if (ctx.proteinTarget && p >= ctx.proteinTarget * 0.95) add(d);
   } else if (g.metric === "sleep") {
@@ -95,12 +96,44 @@ function habitCounts(g: Extract<PersonalGoal, { kind: "habit" }>, ctx: GoalCtx):
   return out;
 }
 
+/** Weekly totals → this week, streak of weeks met since the goal began, last 8 weeks. */
+function weekStreak(totals: Record<string, number>, target: number, createdAt: string, today: string) {
+  const thisWeek = weekStart(today);
+  const weeksHit: boolean[] = [];
+  for (let i = 7; i >= 0; i--) {
+    const w = addDays(thisWeek, -7 * i);
+    weeksHit.push((totals[w] ?? 0) >= target && w >= weekStart(createdAt));
+  }
+  const nowMet = (totals[thisWeek] ?? 0) >= target;
+  let streak = 0;
+  for (let w = nowMet ? thisWeek : addDays(thisWeek, -7); w >= weekStart(createdAt); w = addDays(w, -7)) {
+    if ((totals[w] ?? 0) >= target) streak++; else break;
+  }
+  return { thisWeek, now: totals[thisWeek] ?? 0, nowMet, streak, weeksHit };
+}
+
+/** Standard race names for running distances (1 mile, 5K, 10K, half, marathon). */
+export const RACES: { km: number; name: string }[] = [
+  { km: 1.609344, name: "1 mile" }, { km: 5, name: "5K" }, { km: 10, name: "10K" }, { km: 21.0975, name: "half marathon" }, { km: 42.195, name: "marathon" },
+];
+export function raceName(type: ActivityType, km: number): string | null {
+  if (type !== "run" && type !== "walk") return null;
+  return RACES.find((r) => Math.abs(r.km - km) / r.km < 0.005)?.name ?? null;
+}
+
 /* ---------------- titles ---------------- */
 
 export function goalTitle(g: PersonalGoal, units: Units): string {
   if (g.title?.trim()) return g.title.trim();
   if (g.kind === "bodyweight") return `${g.target < g.start ? "Get down to" : g.target > g.start ? "Get up to" : "Hold"} ${fmtW(g.target)} ${units}`;
   if (g.kind === "lift") return `${EX[g.exId].name}: ${fmtW(g.weight)} ${units} × ${g.reps}`;
+  if (g.kind === "cardio") {
+    const A = ACTIVITY[g.activity].label;
+    const d = raceName(g.activity, g.distanceKm) ?? fmtDistance(g.distanceKm, g.activity, units);
+    if (g.metric === "time") return `${A} ${d} under ${fmtDuration(g.timeSec ?? 0)}`;
+    if (g.metric === "weekly") return `${A} ${d} a week${g.weeks ? ` for ${plural(g.weeks, "week")}` : ""}`;
+    return `${A} ${d} in one go`;
+  }
   const L = HABIT_LABEL[g.metric];
   const what = g.metric === "sleep" ? `${g.sleepHours ?? 7}h+ sleep` : L.noun.toLowerCase();
   return `${what[0].toUpperCase()}${what.slice(1)}: ${g.perWeek}×/week${g.weeks ? ` for ${plural(g.weeks, "week")}` : ""}`;
@@ -182,20 +215,66 @@ export function goalProgress(g: PersonalGoal, ctx: GoalCtx): GoalProgress {
     return { pct, achieved: false, current, target, status: recent.length < 3 && !g.deadline ? "in_progress" : ds.status, note: [gap, ds.text].filter(Boolean).join(" · "), eta };
   }
 
+  if (g.kind === "cardio") {
+    const acts = (state.activities ?? []).filter((a) => a.type === g.activity);
+    const since = acts.filter((a) => a.date >= g.createdAt);
+    const dist = (km: number) => fmtDistance(km, g.activity, units);
+    if (g.metric === "time") {
+      const T = g.timeSec ?? 0;
+      const target = fmtDuration(T);
+      // Done: a logged effort at least this long, at a pace that covers the distance in time.
+      const hit = since.find((a) => a.distanceKm && a.distanceKm >= g.distanceKm * 0.99 && a.durationSec * (g.distanceKm / a.distanceKm) <= T);
+      if (hit || g.achievedAt) return done(hit ? fmtDuration(hit.durationSec * (g.distanceKm / hit.distanceKm!)) : target, target, g.achievedAt ? `Done ${fmtDate(g.achievedAt)}` : `Done ${fmtDate(hit!.date)}`);
+      const preds = predictedTimes(acts, g.activity, g.distanceKm);
+      const recent = preds.filter((p) => daysBetween(p.date, today) <= 42);
+      if (!recent.length) return { pct: 0, achieved: false, current: "—", target, status: "no_data", note: `Log a ${ACTIVITY[g.activity].label.toLowerCase()} of at least ${dist(g.distanceKm * 0.5)} to get a predicted time.` };
+      const cur = Math.min(...recent.slice(-3).map((p) => p.sec));
+      const start = g.startSec ?? preds[0].sec;
+      const pct = start <= T ? (cur <= T ? 0.99 : 0) : clamp01((start - cur) / (start - T));
+      const current = `Predicted ${fmtDuration(cur)}`;
+      if (cur <= T) return { pct: Math.max(pct, 0.95), achieved: false, current, target, status: "on_track", note: `Your recent efforts predict ${fmtDuration(cur)}. Race it to make it count.`, eta: today };
+      const eta = etaFromTrend(recent.map((p) => ({ date: p.date, y: p.sec })), T, cur, today);
+      const ds = deadlineStatus(eta, g.deadline, today);
+      return { pct, achieved: false, current, target, status: recent.length < 3 && !g.deadline ? "in_progress" : ds.status, note: [`${fmtDuration(cur - T)} to cut`, ds.text].filter(Boolean).join(" · "), eta };
+    }
+    if (g.metric === "longest") {
+      const target = dist(g.distanceKm);
+      const best = since.reduce((m, a) => Math.max(m, a.distanceKm ?? 0), 0);
+      if (best >= g.distanceKm * 0.99 || g.achievedAt) return done(dist(Math.max(best, g.distanceKm)), target, g.achievedAt ? `Done ${fmtDate(g.achievedAt)}` : "Goal reached");
+      const allBest = acts.reduce((m, a) => Math.max(m, a.distanceKm ?? 0), 0);
+      const ds = deadlineStatus(null, g.deadline, today);
+      return {
+        pct: clamp01(best / g.distanceKm), achieved: false, current: best ? `Longest ${dist(best)}` : "—", target,
+        status: best ? (g.deadline ? ds.status : "in_progress") : "no_data",
+        note: best ? [`${dist(g.distanceKm - best)} to go`, g.deadline ? ds.text : ""].filter(Boolean).join(" · ") : allBest ? `Longest before this goal: ${dist(allBest)}` : `Log a ${ACTIVITY[g.activity].label.toLowerCase()} to start.`,
+      };
+    }
+    // weekly distance
+    const totals: Record<string, number> = {};
+    for (const a of acts) totals[weekStart(a.date)] = (totals[weekStart(a.date)] ?? 0) + (a.distanceKm ?? 0);
+    const w = weekStreak(totals, g.distanceKm * 0.995, g.createdAt, today);
+    const target = `${dist(g.distanceKm)}/week`;
+    if (g.weeks) {
+      if (w.streak >= g.weeks || g.achievedAt) return done(`${plural(Math.max(w.streak, g.weeks), "week")} in a row`, plural(g.weeks, "week"), g.achievedAt ? `Done ${fmtDate(g.achievedAt)}` : "Goal reached", { weeksHit: w.weeksHit });
+      const left = g.weeks - w.streak;
+      const eta = addDays(w.thisWeek, 7 * (left - (w.nowMet ? 0 : 1)) + 6);
+      const ds = deadlineStatus(eta, g.deadline, today);
+      return {
+        pct: clamp01((w.streak + (w.nowMet ? 0 : Math.min(1, w.now / g.distanceKm) * 0.999)) / g.weeks), achieved: false,
+        current: `${plural(w.streak, "week")} in a row · ${dist(w.now)} this week`, target: plural(g.weeks, "week"), status: g.deadline ? ds.status : "in_progress",
+        note: `${plural(left, "more week")} at ${target}${g.deadline ? ` · ${ds.text}` : ""}`, eta, weeksHit: w.weeksHit,
+      };
+    }
+    return {
+      pct: clamp01(w.now / g.distanceKm), achieved: false, current: `${dist(w.now)} this week`, target, status: w.nowMet ? "on_track" : "in_progress",
+      note: w.nowMet ? `Met this week${w.streak > 1 ? ` · ${w.streak}-week streak` : ""}` : `${dist(g.distanceKm - w.now)} to go this week${w.streak ? ` · ${w.streak}-week streak` : ""}`,
+      weeksHit: w.weeksHit,
+    };
+  }
+
   // habit
   const counts = habitCounts(g, ctx);
-  const thisWeek = weekStart(today);
-  const weeksHit: boolean[] = [];
-  for (let i = 7; i >= 0; i--) {
-    const w = addDays(thisWeek, -7 * i);
-    weeksHit.push((counts[w] ?? 0) >= g.perWeek && w >= weekStart(g.createdAt));
-  }
-  // Streak of full weeks met since the goal began; this week counts once it's met.
-  let streak = 0;
-  const nowMet = (counts[thisWeek] ?? 0) >= g.perWeek;
-  for (let w = nowMet ? thisWeek : addDays(thisWeek, -7); w >= weekStart(g.createdAt); w = addDays(w, -7)) {
-    if ((counts[w] ?? 0) >= g.perWeek) streak++; else break;
-  }
+  const { thisWeek, nowMet, streak, weeksHit } = weekStreak(counts, g.perWeek, g.createdAt, today);
   const n = counts[thisWeek] ?? 0;
   const current = `${n} / ${g.perWeek} this week`;
   const L = HABIT_LABEL[g.metric];

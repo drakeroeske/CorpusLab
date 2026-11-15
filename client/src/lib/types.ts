@@ -318,6 +318,41 @@ export interface SavedWorkout {
   exercises: ProgramExercise[];
 }
 
+/* ---------- non-lifting workouts ---------- */
+export type ActivityType =
+  | "run" | "walk" | "hike" | "cycle" | "row" | "swim" | "elliptical" | "stairs"
+  | "wod" | "hiit" | "yoga" | "pilates" | "sport" | "other";
+export type WodFormat = "for_time" | "amrap" | "emom" | "other";
+
+/** A run, ride, class, sport or CrossFit WOD. Distance is stored in km whatever the display units. */
+export interface Activity {
+  id: string;
+  type: ActivityType;
+  date: string; // YYYY-MM-DD
+  start: number; // ms
+  durationSec: number;
+  distanceKm?: number | null;
+  /** Effort 1–10 (RPE). */
+  rpe?: number | null;
+  avgHr?: number | null;
+  /** e.g. "Morning 5K", "Fran", or the sport for type "sport" ("Basketball"). */
+  name?: string;
+  notes?: string;
+  wod?: {
+    format: WodFormat;
+    /** AMRAP: full rounds + extra reps. */
+    rounds?: number | null;
+    reps?: number | null;
+    /** For time: the time cap, if any. */
+    capSec?: number | null;
+    /** Free-text score for other formats ("5 rounds + 12", "142 lb"). */
+    score?: string;
+    rx: boolean;
+    /** Exercise ids from the catalog, or "act:run" / "act:row" / "act:cycle" for cardio pieces. */
+    movements: string[];
+  };
+}
+
 export type HabitMetric = "workouts" | "protein" | "sleep" | "checkins";
 
 interface GoalBase {
@@ -336,6 +371,14 @@ interface GoalBase {
 export type PersonalGoal = GoalBase & (
   | { kind: "bodyweight"; start: number; target: number }
   | { kind: "lift"; exId: string; weight: number; reps: number; /** best estimated 1RM when the goal was set */ startE1rm: number }
+  | {
+      kind: "cardio"; activity: ActivityType;
+      /** time: cover distanceKm in timeSec or less · weekly: distanceKm per week · longest: one session of distanceKm */
+      metric: "time" | "weekly" | "longest";
+      distanceKm: number; timeSec?: number | null; weeks?: number | null;
+      /** time goals: predicted time for the distance when the goal was set */
+      startSec?: number | null;
+    }
   | { kind: "habit"; metric: HabitMetric; perWeek: number; /** weeks in a row to finish it; none = ongoing */ weeks?: number | null; /** sleep metric only */ sleepHours?: number }
 );
 export type GoalKind = PersonalGoal["kind"];
@@ -361,7 +404,9 @@ export interface AppState {
   activeSession: Session | null;
   /** Reusable workouts outside the weekly schedule (e.g. "Arm day"). */
   savedWorkouts?: SavedWorkout[];
-  /** Personal goals: bodyweight, lift targets, weekly habits. */
+  /** Runs, rides, classes, sports and WODs (lifting lives in sessions). */
+  activities?: Activity[];
+  /** Personal goals: bodyweight, lift targets, cardio, weekly habits. */
   goals?: PersonalGoal[];
   /** Exercises the user made themselves (merged into EX at load). */
   customExercises?: Exercise[];

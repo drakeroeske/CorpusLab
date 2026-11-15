@@ -3,11 +3,12 @@
  * Every function here takes plain data and returns plain data.
  */
 import type {
-  AppState, CheckIn, Exercise, ExerciseLog, Goal, Meal, Muscle, Profile, Program, ProgramDay,
+  Activity, AppState, CheckIn, Exercise, ExerciseLog, Goal, Meal, Muscle, Profile, Program, ProgramDay,
   ProgramExercise, Session, Sex, Spotter, Units, Experiment,
 } from "./types";
 import { EX, EXERCISES, MUSCLES, MUSCLE_LABEL, MAIN_LIFTS, allExercises, isCompound, muscleShares } from "./exercises";
-import { loadScore, readinessBand, trainingLoadInputs } from "./readiness";
+import { loadScore, readinessBand, trainingLoadInputs, type LoadSession } from "./readiness";
+import { activityLoadSessions, activityMuscleLoad, trainedDates } from "./activities";
 
 /* =========================== dates =========================== */
 export const pad = (n: number) => String(n).padStart(2, "0");
@@ -168,7 +169,10 @@ export interface ReadinessResult {
 const BASE_WEIGHTS = { sleepH: 25.5, sleepQ: 8.5, hrv: 17, energy: 12.75, soreness: 12.75, stress: 8.5, load: 15 } as const;
 
 /** Training-load sub-score (0–1) for `date`, from logged workouts; null with under 2 weeks of history. */
-export function trainingLoad(sessions: Session[], date: string): number | null {
+/** Lifting sessions plus activities, in the shape the training-load model reads. */
+export const loadSessionsOf = (state: Pick<AppState, "sessions" | "activities">): LoadSession[] => [...state.sessions, ...activityLoadSessions(state.activities)];
+
+export function trainingLoad(sessions: LoadSession[], date: string): number | null {
   const { recent, usual } = trainingLoadInputs(sessions, date);
   return loadScore(recent, usual);
 }
@@ -321,7 +325,7 @@ export function halfLifeHours(sleepAfter: number | null | undefined, proteinMiss
  * Each working set adds 1.0 to primaries, 0.5 to secondaries, 0.25 to stabilizers; exponential decay.
  * Half-life 48h (36h if sleep ≥ 7.5h, 60h if sleep < 6h or protein target missed).
  */
-export function muscleFatigue(sessions: Session[], checkins: CheckIn[], meals: Meal[], proteinTarget: number, now: number): Record<Muscle, number> {
+export function muscleFatigue(sessions: Session[], checkins: CheckIn[], meals: Meal[], proteinTarget: number, now: number, activities: Activity[] = []): Record<Muscle, number> {
   const out = Object.fromEntries(MUSCLES.map((m) => [m, 0])) as Record<Muscle, number>;
   const ciBy = Object.fromEntries(checkins.map((c) => [c.date, c]));
   const prot = proteinByDate(meals);
@@ -343,6 +347,17 @@ export function muscleFatigue(sessions: Session[], checkins: CheckIn[], meals: M
         for (const [m, w] of shares) out[m] += w * decay;
       }
     }
+  }
+  // Runs, rides, classes and WODs: their muscle load decays from when they ended, on the same half-life rules.
+  for (const a of activities) {
+    const endTs = a.start + a.durationSec * 1000;
+    const age = (now - endTs) / 3600000;
+    if (age < 0 || age > 24 * 12) continue;
+    const sleepAfter = ciBy[addDays(a.date, 1)]?.sleepH ?? ciBy[a.date]?.sleepH;
+    const loggedProtein = prot[a.date];
+    const proteinMissed = loggedProtein != null && loggedProtein < proteinTarget * 0.9 && a.date !== dateKey(new Date(now));
+    const decay = Math.pow(0.5, age / halfLifeHours(sleepAfter, proteinMissed));
+    for (const [m, u] of activityMuscleLoad(a)) out[m] += u * decay;
   }
   return out;
 }
@@ -526,7 +541,7 @@ export function readinessSeries(state: AppState, today: string, days = 56): { da
   for (let i = days - 1; i >= 0; i--) {
     const d = addDays(today, -i);
     const ci = state.checkins.find((c) => c.date === d);
-    const r = computeReadiness(ci, hrvBaseline(state.checkins, d), dayMuscles(dayForDate(state.program, d)), trainingLoad(state.sessions, d));
+    const r = computeReadiness(ci, hrvBaseline(state.checkins, d), dayMuscles(dayForDate(state.program, d)), trainingLoad(loadSessionsOf(state), d));
     out.push({ date: d, score: r.score });
   }
   return out;
@@ -772,7 +787,7 @@ export function matchScore(me: { gym: string; schedule: number[]; split: string;
 export function userStreak(state: AppState, today: string) {
   // consecutive planned days completed, counting back from yesterday (today counts if done)
   let streak = 0;
-  const done = new Set(state.sessions.filter((s) => s.end).map((s) => s.date));
+  const done = trainedDates(state.sessions, state.activities);
   for (let i = 0; i < 120; i++) {
     const d = addDays(today, -i);
     if (!dayForDate(state.program, d)) continue;

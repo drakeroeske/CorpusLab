@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { freeLog, freeRx, isFreeSession, newSession, savedFromSession, prescriptionsFor, prWhyStat, sessionStale, sessionSummary, syncSession, useToday } from "@/lib/derived";
 import { StartWorkoutSheet } from "@/components/StartWorkout";
+import { ActivitySheet } from "@/components/Activity";
 import { SaveAsWorkoutSheet } from "@/components/SavedWorkouts";
 import { ExercisePicker } from "@/components/ProgramEditor";
 import { Tag } from "@/components/riso";
@@ -280,6 +281,7 @@ export default function Logger() {
   const [summary, setSummary] = useState<Session | null>(null);
   const [pr, setPr] = useState<PRData | null>(null);
   const [startOpen, setStartOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const u = profile.units;
@@ -363,7 +365,9 @@ export default function Logger() {
           {t.day && !t.doneToday && <button className="btn btn-primary btn-lg btn-block mt-3" onClick={() => set((st) => ({ ...st, activeSession: newSession(st, t.day!, t.readiness.score, t.inDeload, u) }))} data-testid="button-start-planned">Start {t.day.name}</button>}
           <button className={`btn btn-block mt-3 ${t.day && !t.doneToday ? "btn-ghost" : "btn-primary btn-lg"}`} onClick={() => setStartOpen(true)} data-testid="button-start-different">{t.day && !t.doneToday ? "Start a different workout" : t.doneToday ? "Start another workout" : days.length ? "Start a workout" : "Start an empty workout"}</button>
         </div>
+        <button className="btn btn-outline btn-block" onClick={() => setActivityOpen(true)} data-testid="button-log-activity-train">Log a run, ride, class or WOD</button>
         {startOpen && <StartWorkoutSheet onClose={() => setStartOpen(false)} />}
+        {activityOpen && <ActivitySheet onClose={() => setActivityOpen(false)} />}
         {t.readiness.score == null && <p className="text-xs faint">Tip: do your check-in first — targets adjust to readiness.</p>}
       </div>
     );
