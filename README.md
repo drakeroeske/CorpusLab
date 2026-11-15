@@ -24,11 +24,16 @@ Typecheck: `npx tsc --noEmit -p .`
 `vercel.json` builds the client into `dist/public` and runs the Express API as one
 serverless function (`api/index.ts` → `server/app.ts`). Node is pinned to 22.x.
 In the Vercel project's **Settings → Environment Variables**, add the same values as `.env`:
-`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `CORPUS_DB_KEY`, `USDA_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`.
+`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `CORPUS_DB_KEY`, `USDA_API_KEY`, `GOOGLE_PLACES_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`.
+These live in Vercel (Settings → Environment Variables), not in the repo, so a new deployment needs them
+entered again; redeploy after changing them. If several deployments share one Supabase database they must
+use the same VAPID key pair, or existing notification subscriptions stop working.
 
 Reminders (check-in, meals, streak) run on a 10-minute timer inside the Node process. Vercel functions
-don't stay running, so on Vercel schedule a job that calls `POST /api/push/cron` every 10 minutes with
-header `x-corpus-key: <CORPUS_DB_KEY>` (Vercel Cron or any external scheduler).
+don't stay running, and the Hobby plan's cron runs at most once a day, so `.github/workflows/reminders.yml`
+calls `POST /api/push/cron` (header `x-corpus-key: <CORPUS_DB_KEY>`) every 10 minutes from GitHub Actions.
+It needs the repository secret `CORPUS_DB_KEY` (Settings → Secrets and variables → Actions). GitHub pauses
+scheduled workflows after 60 days without commits; re-enable it from the Actions tab if that happens.
 
 ## Notifications
 
