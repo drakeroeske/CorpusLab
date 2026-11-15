@@ -318,6 +318,28 @@ export interface SavedWorkout {
   exercises: ProgramExercise[];
 }
 
+export type HabitMetric = "workouts" | "protein" | "sleep" | "checkins";
+
+interface GoalBase {
+  id: string;
+  /** Optional name the user gave it; otherwise one is generated from the target. */
+  title?: string;
+  createdAt: string; // YYYY-MM-DD
+  deadline?: string | null;
+  /** Set when the goal is first met (or the user marks it done). */
+  achievedAt?: string | null;
+  /** Hidden from the active list (deleted goals are removed outright). */
+  archived?: boolean;
+}
+
+/** A personal target with a number to hit. Weights are in the profile's units. */
+export type PersonalGoal = GoalBase & (
+  | { kind: "bodyweight"; start: number; target: number }
+  | { kind: "lift"; exId: string; weight: number; reps: number; /** best estimated 1RM when the goal was set */ startE1rm: number }
+  | { kind: "habit"; metric: HabitMetric; perWeek: number; /** weeks in a row to finish it; none = ongoing */ weeks?: number | null; /** sleep metric only */ sleepHours?: number }
+);
+export type GoalKind = PersonalGoal["kind"];
+
 export interface AppState {
   version: number;
   profile: Profile | null;
@@ -339,6 +361,8 @@ export interface AppState {
   activeSession: Session | null;
   /** Reusable workouts outside the weekly schedule (e.g. "Arm day"). */
   savedWorkouts?: SavedWorkout[];
+  /** Personal goals: bodyweight, lift targets, weekly habits. */
+  goals?: PersonalGoal[];
   /** Exercises the user made themselves (merged into EX at load). */
   customExercises?: Exercise[];
   /** Programs saved for later (copies, templates you wrote, ones you imported). */

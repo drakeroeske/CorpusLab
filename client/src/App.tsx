@@ -1,3 +1,4 @@
+import { GoalWatcher } from "@/components/Goals";
 import { createContext, useContext, useEffect, useState } from "react";
 import { Eye } from "lucide-react";
 import { StoreProvider, useStore } from "@/lib/store";
@@ -89,6 +90,7 @@ function Shell() {
       <div className={`app ${surface} ${viewing ? "viewing" : ""}`}>
         <ViewBanner />
         {!viewing && <NotifPlanSync />}
+        {!viewing && <GoalWatcher />}
         {tab === "today" && <Today />}
         {tab === "train" && <Train />}
         {tab === "progress" && <Progress />}
