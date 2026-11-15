@@ -3,9 +3,18 @@ export type Experience = "beginner" | "intermediate" | "advanced";
 export type Goal = "muscle" | "strength" | "fatloss" | "recomp";
 export type Sex = "m" | "f" | null;
 
+/** Tracked individually, down to the head where heads train differently (e.g. front vs side delts). */
 export type Muscle =
-  | "chest" | "shoulders" | "rear_delts" | "triceps" | "biceps" | "forearms" | "abs"
-  | "lats" | "upper_back" | "lower_back" | "glutes" | "quads" | "hamstrings" | "calves";
+  | "chest_upper" | "chest_mid"
+  | "front_delts" | "side_delts" | "rear_delts"
+  | "biceps_long" | "biceps_short" | "brachialis" | "triceps_long" | "triceps_lateral" | "forearms"
+  | "lats" | "traps_upper" | "mid_back" | "lower_back"
+  | "abs" | "obliques"
+  | "glute_max" | "glute_med" | "hip_flexors" | "adductors"
+  | "rectus_femoris" | "vasti" | "hamstrings" | "gastrocnemius" | "soleus";
+
+/** Muscle ids from before the split (v2 data). Only read by the migration. */
+export type LegacyMuscle = "chest" | "shoulders" | "triceps" | "biceps" | "upper_back" | "glutes" | "quads" | "calves";
 
 export type Pattern =
   | "squat" | "hinge" | "horizontal_push" | "vertical_push" | "horizontal_pull" | "vertical_pull" | "isolation";
@@ -15,8 +24,12 @@ export type Equipment = "barbell" | "dumbbell" | "machine" | "cable" | "bodyweig
 export interface Exercise {
   id: string;
   name: string;
+  /** Prime movers: each working set counts as 1 set. */
   primary: Muscle[];
+  /** Assist the movement: 0.5 set. */
   secondary: Muscle[];
+  /** Hold position isometrically (e.g. abs and lower back in a squat): 0.25 set. */
+  stabilizers?: Muscle[];
   equipment: Equipment;
   pattern: Pattern;
   /** Made by the user (id starts with cx_). Never offered as an automatic swap. */

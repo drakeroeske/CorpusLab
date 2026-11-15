@@ -81,7 +81,7 @@ export function buildDemo(o: DemoOpts = {}): AppState {
       yday.exercises.forEach((l) => EX[l.exId].primary.forEach((m) => ms.add(m)));
       ms.forEach((m) => { const v = clamp(Math.round(n(1.6, 0.9)), 0, 4); if (v) soreness[m] = v; });
     }
-    if (isToday) { soreness.quads = 3; soreness.glutes = 2; soreness.hamstrings = 2; }
+    if (isToday) { soreness.vasti = 3; soreness.rectus_femoris = 2; soreness.glute_max = 2; soreness.hamstrings = 2; }
     const skipCheckin = !isToday && R() < 0.07;
     if (!skipCheckin) {
       checkins.push({

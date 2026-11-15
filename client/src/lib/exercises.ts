@@ -1,88 +1,113 @@
-import type { Exercise, Muscle, Program, ProgramDay, ProgramExercise, Units } from "./types";
+import type { Exercise, LegacyMuscle, Muscle, Program, ProgramDay, ProgramExercise, Units } from "./types";
 
 const E = (
-  id: string, name: string, primary: Muscle[], secondary: Muscle[],
+  id: string, name: string, primary: Muscle[], secondary: Muscle[], stabilizers: Muscle[],
   equipment: Exercise["equipment"], pattern: Exercise["pattern"], ratio: number,
-): Exercise => ({ id, name, primary, secondary, equipment, pattern, ratio });
+): Exercise => ({ id, name, primary, secondary, ...(stabilizers.length ? { stabilizers } : {}), equipment, pattern, ratio });
 
-/* ratio = rough working-load relative to the pattern's reference lift (dumbbells are per hand) */
+// Shorthands for muscles that always move together in a lift.
+const BI: Muscle[] = ["biceps_long", "biceps_short"];
+const ELBOW_FLEX: Muscle[] = [...BI, "brachialis"];
+const BRACE: Muscle[] = ["abs", "obliques"];
+
+/*
+ * Every muscle a lift uses, in three tiers:
+ *   primary (1 set) · secondary (0.5) · stabilizers (0.25, isometric bracing/holding)
+ * ratio = rough working-load relative to the pattern's reference lift (dumbbells are per hand)
+ */
 export const EXERCISES: Exercise[] = [
   // squat
-  E("back_squat", "Back Squat", ["quads", "glutes"], ["hamstrings", "lower_back", "abs"], "barbell", "squat", 1),
-  E("front_squat", "Front Squat", ["quads"], ["glutes", "upper_back", "abs"], "barbell", "squat", 0.8),
-  E("hack_squat", "Hack Squat", ["quads"], ["glutes"], "machine", "squat", 1.1),
-  E("leg_press", "Leg Press", ["quads", "glutes"], ["hamstrings"], "machine", "squat", 1.9),
-  E("goblet_squat", "Goblet Squat", ["quads", "glutes"], ["abs"], "dumbbell", "squat", 0.35),
-  E("bulgarian_split", "Bulgarian Split Squat", ["quads", "glutes"], ["hamstrings"], "dumbbell", "squat", 0.25),
-  E("smith_squat", "Smith Machine Squat", ["quads", "glutes"], ["hamstrings"], "smith", "squat", 0.9),
-  E("walking_lunge", "Walking Lunge", ["quads", "glutes"], ["hamstrings", "calves"], "dumbbell", "squat", 0.22),
+  E("back_squat", "Back Squat", ["vasti", "glute_max", "adductors"], ["rectus_femoris"], ["lower_back", ...BRACE, "hamstrings", "glute_med", "mid_back"], "barbell", "squat", 1),
+  E("front_squat", "Front Squat", ["vasti"], ["glute_max", "adductors", "rectus_femoris"], [...BRACE, "lower_back", "mid_back", "traps_upper"], "barbell", "squat", 0.8),
+  E("hack_squat", "Hack Squat", ["vasti"], ["glute_max", "adductors", "rectus_femoris"], [], "machine", "squat", 1.1),
+  E("leg_press", "Leg Press", ["vasti", "glute_max"], ["adductors", "rectus_femoris"], [], "machine", "squat", 1.9),
+  E("goblet_squat", "Goblet Squat", ["vasti", "glute_max"], ["adductors", "rectus_femoris"], [...BRACE, "lower_back", "mid_back", "biceps_short", "front_delts"], "dumbbell", "squat", 0.35),
+  E("bulgarian_split", "Bulgarian Split Squat", ["vasti", "glute_max"], ["adductors", "glute_med", "rectus_femoris"], ["obliques", "hamstrings", "forearms"], "dumbbell", "squat", 0.25),
+  E("smith_squat", "Smith Machine Squat", ["vasti", "glute_max"], ["adductors", "rectus_femoris"], [...BRACE, "lower_back"], "smith", "squat", 0.9),
+  E("walking_lunge", "Walking Lunge", ["vasti", "glute_max"], ["adductors", "glute_med", "rectus_femoris"], ["hamstrings", "gastrocnemius", "soleus", "obliques", "forearms"], "dumbbell", "squat", 0.22),
   // hinge
-  E("deadlift", "Deadlift", ["hamstrings", "glutes", "lower_back"], ["upper_back", "forearms", "quads"], "barbell", "hinge", 1),
-  E("rdl", "Romanian Deadlift", ["hamstrings", "glutes"], ["lower_back", "forearms"], "barbell", "hinge", 0.7),
-  E("db_rdl", "Dumbbell RDL", ["hamstrings", "glutes"], ["lower_back", "forearms"], "dumbbell", "hinge", 0.3),
-  E("trap_bar_dl", "Trap Bar Deadlift", ["quads", "glutes", "hamstrings"], ["upper_back", "forearms"], "barbell", "hinge", 1.05),
-  E("hip_thrust", "Barbell Hip Thrust", ["glutes"], ["hamstrings"], "barbell", "hinge", 1.0),
-  E("good_morning", "Good Morning", ["hamstrings", "lower_back"], ["glutes"], "barbell", "hinge", 0.45),
-  E("kb_swing", "Kettlebell Swing", ["glutes", "hamstrings"], ["lower_back"], "kettlebell", "hinge", 0.2),
-  E("back_extension", "45° Back Extension", ["lower_back", "glutes"], ["hamstrings"], "bodyweight", "hinge", 0.15),
+  E("deadlift", "Deadlift", ["glute_max", "hamstrings", "lower_back"], ["vasti", "adductors", "forearms", "traps_upper"], ["lats", "mid_back", ...BRACE], "barbell", "hinge", 1),
+  E("rdl", "Romanian Deadlift", ["hamstrings", "glute_max"], ["lower_back", "adductors", "forearms"], ["lats", "traps_upper", "mid_back", ...BRACE], "barbell", "hinge", 0.7),
+  E("db_rdl", "Dumbbell RDL", ["hamstrings", "glute_max"], ["lower_back", "adductors", "forearms"], ["lats", "traps_upper", "mid_back", ...BRACE], "dumbbell", "hinge", 0.3),
+  E("trap_bar_dl", "Trap Bar Deadlift", ["vasti", "glute_max", "hamstrings"], ["lower_back", "adductors", "forearms", "traps_upper"], ["lats", "mid_back", ...BRACE], "barbell", "hinge", 1.05),
+  E("hip_thrust", "Barbell Hip Thrust", ["glute_max"], ["hamstrings", "glute_med", "adductors"], ["vasti", "abs"], "barbell", "hinge", 1.0),
+  E("good_morning", "Good Morning", ["hamstrings", "lower_back"], ["glute_max", "adductors"], [...BRACE, "mid_back"], "barbell", "hinge", 0.45),
+  E("kb_swing", "Kettlebell Swing", ["glute_max", "hamstrings"], ["lower_back", "adductors"], [...BRACE, "forearms", "mid_back", "front_delts"], "kettlebell", "hinge", 0.2),
+  E("back_extension", "45° Back Extension", ["lower_back", "glute_max"], ["hamstrings"], ["adductors"], "bodyweight", "hinge", 0.15),
   // horizontal push
-  E("bench_press", "Bench Press", ["chest"], ["triceps", "shoulders"], "barbell", "horizontal_push", 1),
-  E("incline_bench", "Incline Bench Press", ["chest", "shoulders"], ["triceps"], "barbell", "horizontal_push", 0.82),
-  E("db_bench", "Dumbbell Bench Press", ["chest"], ["triceps", "shoulders"], "dumbbell", "horizontal_push", 0.38),
-  E("incline_db_press", "Incline Dumbbell Press", ["chest", "shoulders"], ["triceps"], "dumbbell", "horizontal_push", 0.33),
-  E("machine_chest_press", "Machine Chest Press", ["chest"], ["triceps", "shoulders"], "machine", "horizontal_push", 0.95),
-  E("smith_bench", "Smith Machine Bench", ["chest"], ["triceps", "shoulders"], "smith", "horizontal_push", 0.9),
-  E("dips", "Weighted Dip", ["chest", "triceps"], ["shoulders"], "bodyweight", "horizontal_push", 0.3),
-  E("pushup", "Push-up (weighted)", ["chest"], ["triceps", "shoulders", "abs"], "bodyweight", "horizontal_push", 0.2),
+  E("bench_press", "Bench Press", ["chest_mid"], ["chest_upper", "front_delts", "triceps_lateral"], ["triceps_long", "lats", "mid_back"], "barbell", "horizontal_push", 1),
+  E("incline_bench", "Incline Bench Press", ["chest_upper", "front_delts"], ["chest_mid", "triceps_lateral"], ["triceps_long", "side_delts", "mid_back"], "barbell", "horizontal_push", 0.82),
+  E("db_bench", "Dumbbell Bench Press", ["chest_mid"], ["chest_upper", "front_delts", "triceps_lateral"], ["triceps_long", "side_delts", "biceps_short"], "dumbbell", "horizontal_push", 0.38),
+  E("incline_db_press", "Incline Dumbbell Press", ["chest_upper", "front_delts"], ["chest_mid", "triceps_lateral"], ["triceps_long", "side_delts", "biceps_short"], "dumbbell", "horizontal_push", 0.33),
+  E("machine_chest_press", "Machine Chest Press", ["chest_mid"], ["chest_upper", "front_delts", "triceps_lateral"], ["triceps_long"], "machine", "horizontal_push", 0.95),
+  E("smith_bench", "Smith Machine Bench", ["chest_mid"], ["chest_upper", "front_delts", "triceps_lateral"], ["triceps_long", "mid_back"], "smith", "horizontal_push", 0.9),
+  E("dips", "Weighted Dip", ["chest_mid", "triceps_lateral"], ["triceps_long", "front_delts"], ["abs", "lats"], "bodyweight", "horizontal_push", 0.3),
+  E("pushup", "Push-up (weighted)", ["chest_mid"], ["chest_upper", "front_delts", "triceps_lateral"], [...BRACE, "triceps_long", "glute_max", "vasti"], "bodyweight", "horizontal_push", 0.2),
   // vertical push
-  E("ohp", "Overhead Press", ["shoulders"], ["triceps", "upper_back"], "barbell", "vertical_push", 1),
-  E("db_shoulder_press", "Seated DB Shoulder Press", ["shoulders"], ["triceps"], "dumbbell", "vertical_push", 0.42),
-  E("machine_shoulder_press", "Machine Shoulder Press", ["shoulders"], ["triceps"], "machine", "vertical_push", 1.05),
-  E("landmine_press", "Landmine Press", ["shoulders", "chest"], ["triceps"], "barbell", "vertical_push", 0.55),
-  E("arnold_press", "Arnold Press", ["shoulders"], ["triceps"], "dumbbell", "vertical_push", 0.36),
+  E("ohp", "Overhead Press", ["front_delts"], ["side_delts", "triceps_lateral", "triceps_long", "chest_upper", "traps_upper"], [...BRACE, "lower_back", "glute_max"], "barbell", "vertical_push", 1),
+  E("db_shoulder_press", "Seated DB Shoulder Press", ["front_delts"], ["side_delts", "triceps_lateral", "triceps_long", "chest_upper"], ["traps_upper", "abs"], "dumbbell", "vertical_push", 0.42),
+  E("machine_shoulder_press", "Machine Shoulder Press", ["front_delts"], ["side_delts", "triceps_lateral", "triceps_long"], ["chest_upper", "traps_upper"], "machine", "vertical_push", 1.05),
+  E("landmine_press", "Landmine Press", ["front_delts", "chest_upper"], ["triceps_lateral", "side_delts"], ["triceps_long", ...BRACE, "glute_max"], "barbell", "vertical_push", 0.55),
+  E("arnold_press", "Arnold Press", ["front_delts"], ["side_delts", "triceps_lateral", "triceps_long", "chest_upper"], ["traps_upper", "abs"], "dumbbell", "vertical_push", 0.36),
   // horizontal pull
-  E("barbell_row", "Barbell Row", ["upper_back", "lats"], ["biceps", "rear_delts", "lower_back"], "barbell", "horizontal_pull", 1),
-  E("db_row", "One-Arm Dumbbell Row", ["lats", "upper_back"], ["biceps", "rear_delts"], "dumbbell", "horizontal_pull", 0.45),
-  E("cable_row", "Seated Cable Row", ["upper_back", "lats"], ["biceps", "rear_delts"], "cable", "horizontal_pull", 0.9),
-  E("chest_supported_row", "Chest-Supported Row", ["upper_back", "lats"], ["rear_delts", "biceps"], "machine", "horizontal_pull", 0.85),
-  E("tbar_row", "T-Bar Row", ["upper_back", "lats"], ["biceps", "rear_delts"], "barbell", "horizontal_pull", 0.8),
-  E("pendlay_row", "Pendlay Row", ["upper_back", "lats"], ["biceps", "lower_back"], "barbell", "horizontal_pull", 0.95),
-  E("inverted_row", "Inverted Row", ["upper_back"], ["biceps", "rear_delts"], "bodyweight", "horizontal_pull", 0.2),
+  E("barbell_row", "Barbell Row", ["mid_back", "lats"], ["rear_delts", ...ELBOW_FLEX, "lower_back"], ["hamstrings", "glute_max", "forearms", "traps_upper", ...BRACE], "barbell", "horizontal_pull", 1),
+  E("db_row", "One-Arm Dumbbell Row", ["lats", "mid_back"], ["rear_delts", ...ELBOW_FLEX], ["forearms", "obliques", "traps_upper"], "dumbbell", "horizontal_pull", 0.45),
+  E("cable_row", "Seated Cable Row", ["mid_back", "lats"], ["rear_delts", ...ELBOW_FLEX], ["forearms", "lower_back", "traps_upper"], "cable", "horizontal_pull", 0.9),
+  E("chest_supported_row", "Chest-Supported Row", ["mid_back", "lats"], ["rear_delts", ...ELBOW_FLEX], ["forearms", "traps_upper"], "machine", "horizontal_pull", 0.85),
+  E("tbar_row", "T-Bar Row", ["mid_back", "lats"], ["rear_delts", ...ELBOW_FLEX, "lower_back"], ["hamstrings", "glute_max", "forearms", "traps_upper", ...BRACE], "barbell", "horizontal_pull", 0.8),
+  E("pendlay_row", "Pendlay Row", ["mid_back", "lats"], ["rear_delts", ...ELBOW_FLEX, "lower_back"], ["hamstrings", "glute_max", "forearms", "traps_upper", ...BRACE], "barbell", "horizontal_pull", 0.95),
+  E("inverted_row", "Inverted Row", ["mid_back"], ["lats", "rear_delts", ...ELBOW_FLEX], [...BRACE, "glute_max", "forearms"], "bodyweight", "horizontal_pull", 0.2),
   // vertical pull
-  E("lat_pulldown", "Lat Pulldown", ["lats"], ["biceps", "upper_back"], "cable", "vertical_pull", 1),
-  E("pullup", "Pull-up (weighted)", ["lats"], ["biceps", "upper_back", "forearms"], "bodyweight", "vertical_pull", 0.25),
-  E("chinup", "Chin-up (weighted)", ["lats", "biceps"], ["upper_back"], "bodyweight", "vertical_pull", 0.28),
-  E("neutral_pulldown", "Neutral-Grip Pulldown", ["lats"], ["biceps", "upper_back"], "cable", "vertical_pull", 1.05),
-  E("machine_pulldown", "Machine Pulldown", ["lats"], ["biceps"], "machine", "vertical_pull", 1.1),
-  E("assisted_pullup", "Assisted Pull-up", ["lats"], ["biceps", "upper_back"], "machine", "vertical_pull", 0.6),
+  E("lat_pulldown", "Lat Pulldown", ["lats"], [...ELBOW_FLEX, "mid_back"], ["rear_delts", "triceps_long", "forearms", "abs"], "cable", "vertical_pull", 1),
+  E("pullup", "Pull-up (weighted)", ["lats"], [...ELBOW_FLEX, "mid_back", "forearms"], ["rear_delts", "triceps_long", ...BRACE, "hip_flexors"], "bodyweight", "vertical_pull", 0.25),
+  E("chinup", "Chin-up (weighted)", ["lats", ...BI], ["brachialis", "mid_back", "forearms"], ["rear_delts", "triceps_long", ...BRACE, "hip_flexors"], "bodyweight", "vertical_pull", 0.28),
+  E("neutral_pulldown", "Neutral-Grip Pulldown", ["lats"], [...ELBOW_FLEX, "mid_back"], ["rear_delts", "triceps_long", "forearms", "abs"], "cable", "vertical_pull", 1.05),
+  E("machine_pulldown", "Machine Pulldown", ["lats"], [...ELBOW_FLEX, "mid_back"], ["rear_delts", "forearms"], "machine", "vertical_pull", 1.1),
+  E("assisted_pullup", "Assisted Pull-up", ["lats"], [...ELBOW_FLEX, "mid_back"], ["rear_delts", "forearms", "abs"], "machine", "vertical_pull", 0.6),
   // isolation — chest
-  E("cable_fly", "Cable Fly", ["chest"], ["shoulders"], "cable", "isolation", 1),
-  E("pec_deck", "Pec Deck", ["chest"], ["shoulders"], "machine", "isolation", 1.6),
-  E("db_fly", "Dumbbell Fly", ["chest"], ["shoulders"], "dumbbell", "isolation", 0.5),
+  E("cable_fly", "Cable Fly", ["chest_mid"], ["chest_upper", "front_delts"], ["biceps_short", "abs"], "cable", "isolation", 1),
+  E("pec_deck", "Pec Deck", ["chest_mid"], ["chest_upper", "front_delts"], [], "machine", "isolation", 1.6),
+  E("db_fly", "Dumbbell Fly", ["chest_mid"], ["chest_upper", "front_delts"], [...BI], "dumbbell", "isolation", 0.5),
   // isolation — shoulders
-  E("lateral_raise", "Dumbbell Lateral Raise", ["shoulders"], [], "dumbbell", "isolation", 1),
-  E("cable_lateral", "Cable Lateral Raise", ["shoulders"], [], "cable", "isolation", 0.75),
-  E("machine_lateral", "Machine Lateral Raise", ["shoulders"], [], "machine", "isolation", 2.0),
-  E("face_pull", "Face Pull", ["rear_delts"], ["upper_back"], "cable", "isolation", 1),
-  E("reverse_fly", "Reverse Pec Deck", ["rear_delts"], ["upper_back"], "machine", "isolation", 1.1),
+  E("lateral_raise", "Dumbbell Lateral Raise", ["side_delts"], ["front_delts", "traps_upper"], ["forearms"], "dumbbell", "isolation", 1),
+  E("cable_lateral", "Cable Lateral Raise", ["side_delts"], ["front_delts", "traps_upper"], ["obliques"], "cable", "isolation", 0.75),
+  E("machine_lateral", "Machine Lateral Raise", ["side_delts"], ["front_delts", "traps_upper"], [], "machine", "isolation", 2.0),
+  E("face_pull", "Face Pull", ["rear_delts"], ["mid_back", "side_delts"], ["traps_upper", "forearms"], "cable", "isolation", 1),
+  E("reverse_fly", "Reverse Pec Deck", ["rear_delts"], ["mid_back"], ["side_delts", "traps_upper"], "machine", "isolation", 1.1),
   // isolation — arms
-  E("barbell_curl", "Barbell Curl", ["biceps"], ["forearms"], "barbell", "isolation", 1),
-  E("db_curl", "Dumbbell Curl", ["biceps"], ["forearms"], "dumbbell", "isolation", 0.45),
-  E("hammer_curl", "Hammer Curl", ["biceps", "forearms"], [], "dumbbell", "isolation", 0.5),
-  E("cable_curl", "Cable Curl", ["biceps"], ["forearms"], "cable", "isolation", 0.9),
-  E("pushdown", "Triceps Pushdown", ["triceps"], [], "cable", "isolation", 1),
-  E("skullcrusher", "EZ-Bar Skullcrusher", ["triceps"], [], "barbell", "isolation", 0.8),
-  E("oh_triceps_ext", "Overhead Cable Extension", ["triceps"], [], "cable", "isolation", 0.85),
-  // isolation — legs/core
-  E("leg_extension", "Leg Extension", ["quads"], [], "machine", "isolation", 1),
-  E("leg_curl", "Seated Leg Curl", ["hamstrings"], [], "machine", "isolation", 1),
-  E("lying_leg_curl", "Lying Leg Curl", ["hamstrings"], [], "machine", "isolation", 0.85),
-  E("calf_raise", "Standing Calf Raise", ["calves"], [], "machine", "isolation", 1),
-  E("seated_calf", "Seated Calf Raise", ["calves"], [], "machine", "isolation", 0.7),
-  E("hanging_leg_raise", "Hanging Leg Raise", ["abs"], [], "bodyweight", "isolation", 1),
-  E("cable_crunch", "Cable Crunch", ["abs"], [], "cable", "isolation", 1),
-  E("shrug", "Dumbbell Shrug", ["upper_back"], ["forearms"], "dumbbell", "isolation", 1),
+  E("barbell_curl", "Barbell Curl", [...BI], ["brachialis", "forearms"], ["front_delts", "abs"], "barbell", "isolation", 1),
+  E("db_curl", "Dumbbell Curl", [...BI], ["brachialis", "forearms"], ["front_delts"], "dumbbell", "isolation", 0.45),
+  E("hammer_curl", "Hammer Curl", ["brachialis", "forearms"], [...BI], ["front_delts"], "dumbbell", "isolation", 0.5),
+  E("cable_curl", "Cable Curl", [...BI], ["brachialis", "forearms"], ["front_delts"], "cable", "isolation", 0.9),
+  E("pushdown", "Triceps Pushdown", ["triceps_lateral"], ["triceps_long"], ["forearms", "abs"], "cable", "isolation", 1),
+  E("skullcrusher", "EZ-Bar Skullcrusher", ["triceps_long", "triceps_lateral"], [], ["forearms"], "barbell", "isolation", 0.8),
+  E("oh_triceps_ext", "Overhead Cable Extension", ["triceps_long"], ["triceps_lateral"], [...BRACE], "cable", "isolation", 0.85),
+  // isolation — legs/hips/core
+  E("leg_extension", "Leg Extension", ["vasti", "rectus_femoris"], [], [], "machine", "isolation", 1),
+  E("leg_curl", "Seated Leg Curl", ["hamstrings"], ["gastrocnemius"], [], "machine", "isolation", 1),
+  E("lying_leg_curl", "Lying Leg Curl", ["hamstrings"], ["gastrocnemius"], ["glute_max"], "machine", "isolation", 0.85),
+  E("hip_abduction", "Hip Abduction Machine", ["glute_med"], ["glute_max"], [], "machine", "isolation", 1),
+  E("hip_adduction", "Hip Adduction Machine", ["adductors"], [], [], "machine", "isolation", 1),
+  E("calf_raise", "Standing Calf Raise", ["gastrocnemius"], ["soleus"], [], "machine", "isolation", 1),
+  E("seated_calf", "Seated Calf Raise", ["soleus"], ["gastrocnemius"], [], "machine", "isolation", 0.7),
+  E("hanging_leg_raise", "Hanging Leg Raise", ["abs", "hip_flexors"], ["obliques"], ["forearms", "lats"], "bodyweight", "isolation", 1),
+  E("cable_crunch", "Cable Crunch", ["abs"], ["obliques"], ["lats"], "cable", "isolation", 1),
+  E("cable_woodchop", "Cable Woodchop", ["obliques"], ["abs"], ["front_delts", "glute_max"], "cable", "isolation", 0.5),
+  E("shrug", "Dumbbell Shrug", ["traps_upper"], ["forearms"], ["mid_back"], "dumbbell", "isolation", 1),
 ];
+
+/* ---------- how much each muscle gets from one set ---------- */
+export const TIER_WEIGHT = { primary: 1, secondary: 0.5, stabilizer: 0.25 } as const;
+
+/** Every muscle the exercise trains with its share of one working set. A muscle listed twice keeps its highest tier. */
+export function muscleShares(ex: Exercise): [Muscle, number][] {
+  const out = new Map<Muscle, number>();
+  const add = (list: Muscle[] | undefined, w: number) => list?.forEach((m) => { if (isMuscle(m) && (out.get(m) ?? 0) < w) out.set(m, w); });
+  add(ex.primary, TIER_WEIGHT.primary);
+  add(ex.secondary, TIER_WEIGHT.secondary);
+  add(ex.stabilizers, TIER_WEIGHT.stabilizer);
+  return [...out];
+}
 
 const BUILT_IN: Record<string, Exercise> = Object.fromEntries(EXERCISES.map((e) => [e.id, e]));
 const REGISTRY: Record<string, Exercise> = { ...BUILT_IN };
@@ -101,7 +126,7 @@ export function registerCustomExercises(list: Exercise[] | undefined) {
   const next = list ?? [];
   if (next === CUSTOM) return;
   for (const e of CUSTOM) if (!BUILT_IN[e.id]) delete REGISTRY[e.id];
-  for (const e of next) if (!BUILT_IN[e.id]) REGISTRY[e.id] = { ...e, custom: true };
+  for (const e of next) if (!BUILT_IN[e.id]) REGISTRY[e.id] = { ...upgradeExerciseMuscles(e), custom: true };
   CUSTOM = next;
 }
 
@@ -110,17 +135,22 @@ export const allExercises = (): Exercise[] => [...CUSTOM.filter((e) => !e.archiv
 export const customExercises = (): Exercise[] => CUSTOM.filter((e) => !e.archived).map((e) => REGISTRY[e.id]);
 export const isKnownExercise = (id: string) => id in REGISTRY;
 
+/** Muscles that, trained on their own, mean a single-joint (isolation) exercise. */
+export const SMALL_MUSCLES: Muscle[] = [
+  "biceps_long", "biceps_short", "brachialis", "triceps_long", "triceps_lateral", "forearms",
+  "side_delts", "rear_delts", "traps_upper", "abs", "obliques", "hip_flexors", "glute_med", "adductors", "gastrocnemius", "soleus",
+];
+
 /** Best guess at the movement pattern from the main muscles (the user can change it). */
 export function guessPattern(primary: Muscle[]): Exercise["pattern"] {
-  const small: Muscle[] = ["biceps", "triceps", "forearms", "calves", "abs", "rear_delts"];
-  if (primary.length === 1 && small.includes(primary[0])) return "isolation";
-  const has = (m: Muscle) => primary.includes(m);
-  if (has("quads")) return "squat";
-  if (has("hamstrings") || has("glutes") || has("lower_back")) return "hinge";
-  if (has("chest")) return "horizontal_push";
-  if (has("shoulders")) return "vertical_push";
+  if (primary.length && primary.every((m) => SMALL_MUSCLES.includes(m))) return "isolation";
+  const has = (...ms: Muscle[]) => ms.some((m) => primary.includes(m));
+  if (has("vasti")) return "squat";
+  if (has("hamstrings", "glute_max", "lower_back")) return "hinge";
+  if (has("chest_mid", "chest_upper")) return "horizontal_push";
+  if (has("front_delts")) return "vertical_push";
   if (has("lats")) return "vertical_pull";
-  if (has("upper_back")) return "horizontal_pull";
+  if (has("mid_back")) return "horizontal_pull";
   return "isolation";
 }
 
@@ -130,16 +160,77 @@ export function customExercisesIn(p: Program): Exercise[] {
   return CUSTOM.filter((e) => ids.has(e.id));
 }
 
-export const MUSCLES: Muscle[] = [
-  "chest", "shoulders", "rear_delts", "triceps", "biceps", "forearms", "abs",
-  "lats", "upper_back", "lower_back", "glutes", "quads", "hamstrings", "calves",
+/** Muscles grouped by body region, in display order. */
+export const MUSCLE_GROUPS: { id: string; label: string; muscles: Muscle[] }[] = [
+  { id: "chest", label: "Chest", muscles: ["chest_upper", "chest_mid"] },
+  { id: "shoulders", label: "Shoulders", muscles: ["front_delts", "side_delts", "rear_delts"] },
+  { id: "arms", label: "Arms", muscles: ["biceps_long", "biceps_short", "brachialis", "triceps_long", "triceps_lateral", "forearms"] },
+  { id: "back", label: "Back", muscles: ["lats", "traps_upper", "mid_back", "lower_back"] },
+  { id: "core", label: "Core", muscles: ["abs", "obliques"] },
+  { id: "hips", label: "Hips", muscles: ["glute_max", "glute_med", "hip_flexors", "adductors"] },
+  { id: "legs", label: "Legs", muscles: ["rectus_femoris", "vasti", "hamstrings", "gastrocnemius", "soleus"] },
 ];
 
+export const MUSCLES: Muscle[] = MUSCLE_GROUPS.flatMap((g) => g.muscles);
+const MUSCLE_SET = new Set<string>(MUSCLES);
+export const isMuscle = (m: unknown): m is Muscle => typeof m === "string" && MUSCLE_SET.has(m);
+
 export const MUSCLE_LABEL: Record<Muscle, string> = {
-  chest: "Chest", shoulders: "Shoulders", rear_delts: "Rear delts", triceps: "Triceps", biceps: "Biceps",
-  forearms: "Forearms", abs: "Abs", lats: "Lats", upper_back: "Upper back", lower_back: "Lower back",
-  glutes: "Glutes", quads: "Quads", hamstrings: "Hamstrings", calves: "Calves",
+  chest_upper: "Upper chest", chest_mid: "Mid/lower chest",
+  front_delts: "Front delts", side_delts: "Side delts", rear_delts: "Rear delts",
+  biceps_long: "Biceps long head", biceps_short: "Biceps short head", brachialis: "Brachialis",
+  triceps_long: "Triceps long head", triceps_lateral: "Triceps lat/med head", forearms: "Forearms",
+  lats: "Lats", traps_upper: "Upper traps", mid_back: "Mid traps/rhomboids", lower_back: "Lower back",
+  abs: "Abs", obliques: "Obliques",
+  glute_max: "Glute max", glute_med: "Glute medius", hip_flexors: "Hip flexors", adductors: "Adductors",
+  rectus_femoris: "Rectus femoris", vasti: "Quads (vasti)", hamstrings: "Hamstrings", gastrocnemius: "Calves (gastroc)", soleus: "Soleus",
 };
+
+/** Region name for a muscle, e.g. front_delts → "Shoulders". Lets searches like "shoulders" or "quads" still match. */
+export const MUSCLE_REGION: Record<Muscle, string> = Object.fromEntries(MUSCLE_GROUPS.flatMap((g) => g.muscles.map((m) => [m, g.label]))) as Record<Muscle, string>;
+const SEARCH_ALIASES: Partial<Record<Muscle, string>> = {
+  vasti: "quads quadriceps", rectus_femoris: "quads quadriceps", gastrocnemius: "calves", soleus: "calves",
+  glute_max: "glutes", glute_med: "glutes", biceps_long: "biceps", biceps_short: "biceps", brachialis: "biceps arms",
+  triceps_long: "triceps", triceps_lateral: "triceps", front_delts: "delts", side_delts: "delts", rear_delts: "delts",
+  traps_upper: "upper back", mid_back: "upper back", chest_upper: "pecs", chest_mid: "pecs", obliques: "core", abs: "core",
+};
+/** Text a search box can match for a muscle: its label, region and common names. */
+export const muscleSearchText = (m: Muscle) => `${MUSCLE_LABEL[m]} ${MUSCLE_REGION[m]} ${SEARCH_ALIASES[m] ?? ""}`.toLowerCase();
+
+/** Small or supporting muscles: no "low volume" warning, since few programs train them directly. */
+export const MINOR_MUSCLES = new Set<Muscle>(["brachialis", "forearms", "hip_flexors", "obliques", "soleus", "glute_med", "adductors", "rectus_femoris", "traps_upper"]);
+
+/** Old (v2) muscle ids → the muscles they split into. */
+export const LEGACY_MUSCLE: Record<LegacyMuscle, Muscle[]> = {
+  chest: ["chest_mid", "chest_upper"],
+  shoulders: ["front_delts", "side_delts"],
+  triceps: ["triceps_long", "triceps_lateral"],
+  biceps: ["biceps_long", "biceps_short"],
+  upper_back: ["mid_back", "traps_upper"],
+  glutes: ["glute_max", "glute_med"],
+  quads: ["vasti", "rectus_femoris"],
+  calves: ["gastrocnemius", "soleus"],
+};
+
+/** Map a list of possibly-old muscle ids onto the current ones (duplicates and unknown ids dropped). */
+export function upgradeMuscles(list: unknown): Muscle[] {
+  if (!Array.isArray(list)) return [];
+  const out: Muscle[] = [];
+  for (const m of list) {
+    const next = isMuscle(m) ? [m] : LEGACY_MUSCLE[m as LegacyMuscle] ?? [];
+    for (const x of next) if (!out.includes(x)) out.push(x);
+  }
+  return out;
+}
+
+/** Bring a stored custom exercise up to the current muscle ids. A muscle stays in its highest tier only. */
+export function upgradeExerciseMuscles<T extends Exercise>(e: T): T {
+  const primary = upgradeMuscles(e.primary);
+  const secondary = upgradeMuscles(e.secondary).filter((m) => !primary.includes(m));
+  const stabilizers = upgradeMuscles(e.stabilizers).filter((m) => !primary.includes(m) && !secondary.includes(m));
+  const { stabilizers: _drop, ...rest } = e;
+  return { ...rest, primary, secondary, ...(stabilizers.length ? { stabilizers } : {}) } as T;
+}
 
 export const PATTERN_LABEL: Record<Exercise["pattern"], string> = {
   squat: "Squat", hinge: "Hinge", horizontal_push: "Horizontal push", vertical_push: "Vertical push",
