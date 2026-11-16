@@ -5,8 +5,8 @@ import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
 import type { ActivityType, PersonalGoal, GoalKind, HabitMetric, Units } from "@/lib/types";
 import { EX, newId } from "@/lib/exercises";
-import { addDays, dateKey, daysBetween, fmtDate, fmtW, roundTo } from "@/lib/engine";
-import { HABIT_LABEL, RACES, activeGoals, bestSetAtReps, currentBodyweight, finishedGoals, goalProgress, goalTitle, newlyAchieved, recentBestE1rm, type GoalCtx, type GoalProgress } from "@/lib/goals";
+import { addDays, dateKey, daysBetween, fmtDate, fmtW, nutritionTargets, roundTo, toKg, trainingDaysPerWeek } from "@/lib/engine";
+import { HABIT_LABEL, RACES, activeGoals, bestSetAtReps, weightPlanGoal, currentBodyweight, finishedGoals, goalProgress, goalTitle, newlyAchieved, recentBestE1rm, type GoalCtx, type GoalProgress } from "@/lib/goals";
 import { Bar, Empty, NumInput, Seg, Sheet, Stepper } from "./ui";
 import { ExercisePicker } from "./ProgramEditor";
 import { ACTIVITY, DISTANCE_TYPES, distUnit, fmtDuration, fromKm, kmToSwim, parseDuration, predictedTimes, swimToKm, swimUnit, toKm } from "@/lib/activities";
@@ -362,6 +362,7 @@ export function GoalEditorSheet({ goal, onClose }: { goal?: PersonalGoal; onClos
         <div className="card-flat mt-5" data-testid="card-goal-preview">
           <div className="label mb-1">Preview</div>
           <GoalPreview goal={preview} />
+          {preview.kind === "bodyweight" && <TargetsPreview goal={preview} />}
         </div>
       )}
       {alreadyMet && <p className="text-sm mt-3" role="status" data-testid="text-goal-already-met">What you've already logged meets this target, so it would count as reached right away. Aim higher?</p>}
@@ -398,5 +399,59 @@ function GoalPreview({ goal }: { goal: PersonalGoal }) {
       <div className="mt-2"><Bar pct={p.pct * 100} /></div>
       <p className="text-xs muted mt-1.5">{p.current} → {p.target}{p.note ? ` · ${p.note}` : ""}</p>
     </>
+  );
+}
+
+/* ---------------- goal-driven nutrition ---------------- */
+
+const fmtRate = (kgPerWeek: number, u: Units) => `${fmtW(Math.round((u === "kg" ? kgPerWeek : kgPerWeek * 2.20462) * 10) / 10)} ${u}/week`;
+
+/** One line explaining that (and how) a bodyweight goal is setting the calorie and protein targets. */
+export function WeightPlanNote({ className = "" }: { className?: string }) {
+  const { state, targets, profile } = useStore();
+  const ui = useUI();
+  const plan = targets.weightPlan;
+  const goal = weightPlanGoal(state);
+  if (!plan || !goal || goal.kind !== "bodyweight") return null;
+  const u = profile.units;
+  const title = goalTitle(goal, u);
+  const today = dateKey();
+  const cur = currentBodyweight(state) ?? goal.start;
+  const gap = Math.abs(targets.goalAdj);
+  let text: string;
+  if (plan.dir === "hold") text = `Holding at maintenance: you're at your target.`;
+  else {
+    const verb = plan.dir === "lose" ? "lose" : "gain";
+    text = `Planned to ${verb} about ${fmtRate(plan.kgPerWeek, u)}: ${gap.toLocaleString()} kcal a day ${plan.dir === "lose" ? "under" : "over"} maintenance.`;
+    if (plan.defaultPace) text += " No deadline set, so this uses a steady default pace.";
+    if (plan.capped) {
+      const weeks = Math.abs(goal.target - cur) / (u === "kg" ? plan.kgPerWeek : plan.kgPerWeek * 2.20462);
+      const eta = addDays(today, Math.ceil(weeks * 7));
+      text += ` Your deadline would need a faster rate than is safe, so this is capped. At this pace you'd get there around ${fmtDate(eta)}.`;
+    }
+  }
+  const open = () => { ui.setSub("progress", "goals"); ui.setTab("progress"); };
+  return (
+    <p className={`text-xs muted ${className}`} data-testid="text-weight-plan">
+      <button className="underline" onClick={open} data-testid="button-weight-plan-goal">Set by your goal: {title}{goal.deadline ? ` by ${fmtDate(goal.deadline)}` : ""}</button>. {text}
+    </p>
+  );
+}
+
+/** In the goal editor: what the daily targets become if this bodyweight goal is saved. */
+function TargetsPreview({ goal }: { goal: Extract<PersonalGoal, { kind: "bodyweight" }> }) {
+  const { state, profile, targets } = useStore();
+  const today = dateKey();
+  const cur = currentBodyweight(state) ?? profile.bodyWeight;
+  const left = goal.deadline ? daysBetween(today, goal.deadline) : null;
+  const next = nutritionTargets(profile, trainingDaysPerWeek(state.program), { currentKg: toKg(cur, profile.units), targetKg: toKg(goal.target, profile.units), daysLeft: left != null && left > 0 ? left : null });
+  const same = next.cal === targets.cal && next.protein === targets.protein;
+  return (
+    <div className="mt-3 pt-3" style={{ borderTop: "1px solid var(--line)" }} data-testid="card-goal-targets-preview">
+      <div className="label mb-1">Your daily targets {same ? "stay" : "become"}</div>
+      <p className="text-sm"><b className="mono">{next.cal.toLocaleString()}</b> kcal{!same && next.cal !== targets.cal ? <span className="muted"> (now {targets.cal.toLocaleString()})</span> : null} · <b className="mono">{next.protein}</b> g protein{!same && next.protein !== targets.protein ? <span className="muted"> (now {targets.protein})</span> : null}</p>
+      {next.weightPlan?.capped && <p className="text-xs mt-1" data-testid="text-goal-capped">That deadline needs a faster rate than is safe, so calories are capped at {fmtRate(next.weightPlan.kgPerWeek, profile.units)}{next.weightPlan.dir === "lose" ? " and never below your BMR" : ""}. Consider a later deadline.</p>}
+      <p className="text-xs faint mt-1">Calories follow your goal while it's active: about {profile.units === "kg" ? "7,700 kcal per kg" : "3,500 kcal per lb"} of change, spread over the time left.</p>
+    </div>
   );
 }

@@ -1,3 +1,4 @@
+import { WeightPlanNote } from "@/components/Goals";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Star, Trash2, Search, ScanLine, X, ChevronDown, Check } from "lucide-react";
@@ -143,6 +144,7 @@ export function NutritionSheet({ onClose }: { onClose: () => void }) {
         <div className="flex flex-col items-center gap-1"><Ring value={tot.p} max={targets.protein} size={86} color="var(--blue)"><span className="mono font-semibold">{Math.round(tot.p)}</span><span className="mono text-[10px] muted">/{targets.protein}g</span></Ring><span className="label">protein</span></div>
         <div className="mono text-xs muted leading-6"><div>C {Math.round(tot.c)} g</div><div>F {Math.round(tot.f)} g</div><div>{meals.length} meals</div></div>
       </div>
+      <WeightPlanNote className="mt-3 text-center" />
 
       {/* ---- search ---- */}
       <div className="label mt-5 mb-2">Add food</div>

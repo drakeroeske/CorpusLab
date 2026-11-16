@@ -1,8 +1,9 @@
 // Personal goals: how far along each one is, when it will likely land, and whether that beats the deadline.
 import type { ActivityType, AppState, PersonalGoal, HabitMetric, Session, Units } from "./types";
+import type { WeightPlan } from "./engine";
 import { EX } from "./exercises";
 import { ACTIVITY, fmtDistance, fmtDuration, predictedTimes } from "./activities";
-import { addDays, daysBetween, e1rm, fmtDate, fmtW, linreg, proteinByDate, r1, weekStart } from "./engine";
+import { addDays, toKg, daysBetween, e1rm, fmtDate, fmtW, linreg, proteinByDate, r1, weekStart } from "./engine";
 
 export type GoalStatus = "achieved" | "on_track" | "behind" | "in_progress" | "no_data";
 
@@ -304,3 +305,23 @@ export function newlyAchieved(goals: PersonalGoal[], ctx: GoalCtx): PersonalGoal
 
 export const activeGoals = (state: AppState) => (state.goals ?? []).filter((g) => !g.archived && !g.achievedAt);
 export const finishedGoals = (state: AppState) => (state.goals ?? []).filter((g) => !g.archived && g.achievedAt);
+
+/**
+ * The bodyweight goal that should drive nutrition: the newest active one. Converted to kg for the
+ * calorie math. null when there's no active bodyweight goal (the profile goal sets targets then).
+ */
+export function weightPlanFor(state: AppState, today: string): WeightPlan | null {
+  const units = state.profile?.units ?? "lb";
+  const g = (state.goals ?? []).filter((x): x is Extract<PersonalGoal, { kind: "bodyweight" }> => x.kind === "bodyweight" && !x.archived && !x.achievedAt)
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0];
+  if (!g) return null;
+  const cur = currentBodyweight(state);
+  if (cur == null) return null;
+  const left = g.deadline ? daysBetween(today, g.deadline) : null;
+  return { currentKg: toKg(cur, units), targetKg: toKg(g.target, units), daysLeft: left != null && left > 0 ? left : null };
+}
+
+/** Which goal is driving nutrition, for "why these numbers" text. */
+export function weightPlanGoal(state: AppState): PersonalGoal | null {
+  return (state.goals ?? []).filter((x) => x.kind === "bodyweight" && !x.archived && !x.achievedAt).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0] ?? null;
+}

@@ -5,7 +5,8 @@ import { emptyState, upgradeState } from "./empty";
 import { registerCustomExercises } from "./exercises";
 import { api, ApiError } from "./api";
 import { computePublicStats } from "./social";
-import { nutritionTargets, trainingDaysPerWeek, type NutritionTargets } from "./engine";
+import { dateKey, nutritionTargets, trainingDaysPerWeek, type NutritionTargets } from "./engine";
+import { weightPlanFor } from "./goals";
 
 const KEY = "corpus.v1";
 
@@ -99,7 +100,9 @@ export function StoreProvider({ children, mode = "offline", initial, onAuthLost 
   const set = useCallback((fn: (s: AppState) => AppState) => setState((s) => fn(s)), []);
   const replace = useCallback((s: AppState) => setState(upgradeState(s)), []);
   const profile = state.profile ?? FALLBACK_PROFILE;
-  const targets = useMemo(() => nutritionTargets(profile, trainingDaysPerWeek(state.program)), [profile, state.program]);
+  // An active bodyweight goal (target + deadline) sets the calorie gap; otherwise the profile goal does.
+  const plan = useMemo(() => weightPlanFor(state, dateKey()), [state.goals, state.checkins, state.profile]); // eslint-disable-line react-hooks/exhaustive-deps
+  const targets = useMemo(() => nutritionTargets(profile, trainingDaysPerWeek(state.program), plan), [profile, state.program, plan]);
   if (!ready) return <div style={{ minHeight: "100dvh", display: "grid", placeItems: "center", color: "var(--muted)" }} className="mono text-xs" data-testid="status-loading">Loading</div>;
   return <StoreCtx.Provider value={{ state, set, replace, profile, targets, saveError, mode }}>{children}</StoreCtx.Provider>;
 }
