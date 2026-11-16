@@ -469,23 +469,66 @@ export function strengthTrendPct(sessions: Session[], today: string, days = 14):
 }
 
 /* =========================== nutrition =========================== */
-export interface NutritionTargets { bmr: number; tdee: number; cal: number; trainingCal: number; restCal: number; protein: number; proteinPerKg: number; activity: number; goalAdj: number }
+export interface NutritionTargets {
+  bmr: number; tdee: number; cal: number; trainingCal: number; restCal: number; protein: number; proteinPerKg: number; activity: number; goalAdj: number;
+  /** Set when an active bodyweight goal is driving the numbers instead of the profile goal. */
+  weightPlan?: WeightPlanResult | null;
+}
 
-export function nutritionTargets(p: Profile, daysPerWeek: number): NutritionTargets {
-  const kg = toKg(p.bodyWeight, p.units);
+/** An active bodyweight goal, in kg. daysLeft null = no deadline (use a default pace). */
+export interface WeightPlan { currentKg: number; targetKg: number; daysLeft: number | null }
+export interface WeightPlanResult {
+  dir: "lose" | "gain" | "hold";
+  /** Planned change per week, kg (positive number). */
+  kgPerWeek: number;
+  /** The deadline would need a faster rate than is safe, or calories below BMR; the plan uses the safe limit instead. */
+  capped: boolean;
+  /** The pace came from a default because the goal has no (future) deadline. */
+  defaultPace: boolean;
+}
+
+/** About 7,700 kcal per kg (3,500 per lb) of bodyweight change. */
+export const KCAL_PER_KG = 7700;
+
+export function nutritionTargets(p: Profile, daysPerWeek: number, plan?: WeightPlan | null): NutritionTargets {
+  const kg = plan?.currentKg ?? toKg(p.bodyWeight, p.units);
   const sexAdj = p.sex === "m" ? 5 : p.sex === "f" ? -161 : -78;
   const bmr = 10 * kg + 6.25 * p.heightCm - 5 * p.age + sexAdj;
   const activity = daysPerWeek <= 3 ? 1.375 : daysPerWeek <= 5 ? 1.55 : 1.725;
   const tdee = bmr * activity;
-  const goalAdj: Record<Goal, number> = { muscle: p.experience === "beginner" ? 350 : 250, strength: 200, fatloss: -500, recomp: -150 };
-  const cal = Math.round((tdee + goalAdj[p.goal]) / 10) * 10;
-  const perKg: Record<Goal, number> = { muscle: 1.8, strength: 1.6, fatloss: 2.2, recomp: 2.0 };
-  const protein = Math.round(kg * perKg[p.goal]);
   // training-day bump, rest-day trim, weekly average preserved
   const bump = 150;
   const restDays = 7 - daysPerWeek;
   const restTrim = restDays > 0 ? Math.round((bump * daysPerWeek) / restDays / 10) * 10 : 0;
-  return { bmr: Math.round(bmr), tdee: Math.round(tdee), cal, trainingCal: cal + bump, restCal: cal - restTrim, protein, proteinPerKg: perKg[p.goal], activity, goalAdj: goalAdj[p.goal] };
+  const pack = (calRaw: number, goalAdj: number, protein: number, weightPlan: WeightPlanResult | null = null): NutritionTargets => {
+    const cal = Math.round(calRaw / 10) * 10;
+    return { bmr: Math.round(bmr), tdee: Math.round(tdee), cal, trainingCal: cal + bump, restCal: cal - restTrim, protein, proteinPerKg: Math.round((protein / kg) * 10) / 10, activity, goalAdj: Math.round(goalAdj), weightPlan };
+  };
+
+  if (plan) {
+    // A bodyweight goal sets the calorie gap: (kg to change × 7,700 kcal) spread over the days left.
+    const diff = plan.targetKg - kg;
+    const dir: WeightPlanResult["dir"] = Math.abs(diff) < 0.5 ? "hold" : diff < 0 ? "lose" : "gain";
+    if (dir === "hold") return pack(tdee, 0, Math.round(kg * 2.0), { dir, kgPerWeek: 0, capped: false, defaultPace: false });
+    // Safe limits: lose ≤ 1% of bodyweight a week, gain ≤ 0.5% (faster gain is mostly fat). Defaults are half that.
+    const maxRate = dir === "lose" ? kg * 0.01 : kg * 0.005;
+    const defaultPace = !plan.daysLeft || plan.daysLeft <= 0;
+    let rate = defaultPace ? maxRate / 2 : Math.abs(diff) / (plan.daysLeft! / 7);
+    let capped = rate > maxRate;
+    rate = Math.min(rate, maxRate);
+    let adj = (dir === "lose" ? -1 : 1) * (rate * KCAL_PER_KG) / 7;
+    // Never plan to eat below BMR (and never under 1,200 / 1,500 kcal).
+    const floor = Math.max(bmr, p.sex === "m" ? 1500 : 1200);
+    if (tdee + adj < floor) { adj = floor - tdee; rate = (Math.abs(adj) * 7) / KCAL_PER_KG; capped = true; }
+    // Protein: high in a cut to keep muscle, based on goal weight so a big cut doesn't inflate it.
+    const protein = dir === "lose" ? Math.round(Math.max(2.2 * plan.targetKg, 1.6 * kg)) : Math.round(1.8 * kg);
+    return pack(tdee + adj, adj, protein, { dir, kgPerWeek: Math.round(rate * 100) / 100, capped, defaultPace });
+  }
+
+  const goalAdj: Record<Goal, number> = { muscle: p.experience === "beginner" ? 350 : 250, strength: 200, fatloss: -500, recomp: -150 };
+  const perKg: Record<Goal, number> = { muscle: 1.8, strength: 1.6, fatloss: 2.2, recomp: 2.0 };
+  const t = pack(tdee + goalAdj[p.goal], goalAdj[p.goal], Math.round(kg * perKg[p.goal]));
+  return { ...t, proteinPerKg: perKg[p.goal] };
 }
 
 /* =========================== DOTS =========================== */

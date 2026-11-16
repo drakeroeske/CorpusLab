@@ -1,3 +1,4 @@
+import { WeightPlanNote } from "@/components/Goals";
 import { Info } from "@/components/Term";
 import { EngineHeader, setGrain, setInk, useGrain, useInk } from "@/components/riso";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -105,7 +106,7 @@ export default function Profile() {
           }} />}
         </div>
 
-        <div className="section-title"><h2>Nutrition targets</h2><span className="label">auto</span></div>
+        <div className="section-title"><h2>Nutrition targets</h2><span className="label">{targets.weightPlan ? "from your goal" : "auto"}</span></div>
         <div className="card">
           <div className="stat-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
             <div className="stat"><div className="label">Training day</div><div className="v">{targets.trainingCal}</div><div className="s">kcal</div></div>
@@ -113,6 +114,7 @@ export default function Profile() {
             <div className="stat"><div className="label">Protein</div><div className="v">{targets.protein}g</div><div className="s">{targets.proteinPerKg} g/kg</div></div>
           </div>
           <p className="mono text-[11px] muted mt-3">Mifflin–St Jeor BMR {targets.bmr} × activity {targets.activity} = TDEE {targets.tdee} {targets.goalAdj >= 0 ? "+" : ""}{targets.goalAdj} goal <Info k="tdee" size={13} /></p>
+          <WeightPlanNote className="mt-2" />
         </div>
 
         <div className="section-title"><h2>Rest timer defaults</h2></div>
