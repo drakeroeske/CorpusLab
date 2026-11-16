@@ -134,6 +134,14 @@ export interface ExerciseLog {
   superset?: string | null;
 }
 
+/** What the user did to warm up before lifting (or that they skipped it). */
+export interface SessionWarmup {
+  status: "done" | "skipped";
+  /** Warm-up ids from the library; cardio items carry minutes. */
+  items: { id: string; min?: number }[];
+  ts: number;
+}
+
 export interface Session {
   id: string;
   dayId: string;
@@ -146,6 +154,7 @@ export interface Session {
   deload?: boolean;
   restEnd?: number | null;
   restTotal?: number;
+  warmup?: SessionWarmup;
 }
 
 export interface CheckIn {
@@ -416,6 +425,8 @@ export interface AppState {
   activeSession: Session | null;
   /** Reusable workouts outside the weekly schedule (e.g. "Arm day"). */
   savedWorkouts?: SavedWorkout[];
+  /** Show the warm-up step before each workout (default on). */
+  warmupPrompt?: boolean;
   /** Runs, rides, classes, sports and WODs (lifting lives in sessions). */
   activities?: Activity[];
   /** Personal goals: bodyweight, lift targets, cardio, weekly habits. */

@@ -9,6 +9,7 @@ import type {
 import { EX, EXERCISES, MUSCLES, MUSCLE_LABEL, MAIN_LIFTS, allExercises, isCompound, muscleShares } from "./exercises";
 import { loadScore, readinessBand, trainingLoadInputs, type LoadSession } from "./readiness";
 import { activityLoadSessions, activityMuscleLoad, trainedDates } from "./activities";
+import { warmupRate } from "./warmups";
 
 /* =========================== dates =========================== */
 export const pad = (n: number) => String(n).padStart(2, "0");
@@ -726,6 +727,12 @@ export function weeklyReport(state: AppState, from: string, targets: NutritionTa
     const rest = sorted.slice(Math.ceil(sorted.length / 3));
     const ts = mean(top.map((x) => x.sleep)), rsl = mean(rest.map((x) => x.sleep));
     if (ts - rsl >= 0.3) insights.push({ tone: "info", text: `Your best sessions followed ${r1(Math.min(...top.map((x) => x.sleep)) >= 7 ? Math.floor(ts * 2) / 2 : ts)}h+ sleep (avg ${r1(ts)}h vs ${r1(rsl)}h for the rest).` });
+  }
+  // warm-ups
+  const wu = warmupRate(state.sessions, from, end);
+  if (wu.total >= 2) {
+    if (wu.warmed / wu.total < 0.5) insights.push({ tone: "warn", text: `Warmed up before ${wu.warmed} of ${wu.total} workouts. Five minutes of easy cardio and a couple of band moves is enough.` });
+    else if (wu.warmed === wu.total) insights.push({ tone: "good", text: `Warmed up before all ${wu.total} workouts.` });
   }
   // pre-workout carbs
   const withCarbs: number[] = [], without: number[] = [];

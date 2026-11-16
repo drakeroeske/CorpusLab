@@ -117,6 +117,14 @@ export default function Profile() {
           <WeightPlanNote className="mt-2" />
         </div>
 
+        <div className="section-title"><h2>Warm-up</h2></div>
+        <div className="card">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min0"><div className="text-sm">Warm-up step before workouts</div><div className="text-xs muted">Suggests cardio, band and stretch moves for the day's muscles. You can always skip it.</div></div>
+            <Seg value={state.warmupPrompt === false ? "off" : "on"} onChange={(v) => set((s) => ({ ...s, warmupPrompt: v === "on" }))} options={[{ v: "on", l: "On" }, { v: "off", l: "Off" }]} testId="seg-warmup-prompt" />
+          </div>
+        </div>
+
         <div className="section-title"><h2>Rest timer defaults</h2></div>
         <div className="card stack">
           <div className="flex items-center justify-between gap-3"><span className="text-sm">Compounds</span><Stepper value={state.restDefaults.compound} step={15} min={30} max={600} decimals={0} unit="s" onChange={(v) => set((s) => ({ ...s, restDefaults: { ...s.restDefaults, compound: v } }))} testId="stepper-rest-compound" /></div>

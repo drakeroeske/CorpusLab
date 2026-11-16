@@ -20,6 +20,7 @@ import { convertProgram } from "@/lib/actions";
 import { ExerciseCatalog } from "@/components/ExerciseCatalog";
 import type { Activity, Experiment, Program, ProgramDay, Session } from "@/lib/types";
 import { ActivityRow, ActivitySheet } from "@/components/Activity";
+import { warmupSummary } from "@/lib/warmups";
 
 export default function Train() {
   const ui = useUI();
@@ -328,6 +329,7 @@ export function History() {
             </button>
             {isOpen && (
               <div style={{ padding: "0 14px 12px" }}>
+                {s.warmup && <p className="text-xs muted mb-1" data-testid={`text-history-warmup-${s.id}`}>{s.warmup.status === "done" ? `Warm-up: ${warmupSummary(s.warmup.items)}` : "Warm-up skipped"}</p>}
                 {s.exercises.map((l, i) => (
                   <div key={i} className="rowline" style={{ alignItems: "flex-start" }}>
                     <span className="text-[13px] min0">{EX[l.exId].name}</span>
