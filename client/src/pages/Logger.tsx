@@ -7,6 +7,8 @@ import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { freeLog, freeRx, isFreeSession, newSession, savedFromSession, prescriptionsFor, prWhyStat, sessionStale, sessionSummary, syncSession, useToday } from "@/lib/derived";
 import { StartWorkoutSheet } from "@/components/StartWorkout";
+import { WarmupChip, WarmupStep } from "@/components/Warmup";
+import { warmupSummary } from "@/lib/warmups";
 import { ActivitySheet } from "@/components/Activity";
 import { SaveAsWorkoutSheet } from "@/components/SavedWorkouts";
 import { ExercisePicker } from "@/components/ProgramEditor";
@@ -302,6 +304,7 @@ export default function Logger() {
   const [saveOpen, setSaveOpen] = useState(false);
   const [ssOpen, setSsOpen] = useState(false);
   const [ssAdding, setSsAdding] = useState(false);
+  const [warmOpen, setWarmOpen] = useState(false);
   const u = profile.units;
 
   const day = s ? state.program?.days.find((d) => d.id === s.dayId) : null;
@@ -346,6 +349,7 @@ export default function Logger() {
             <div className="stat"><div className="label">Working sets</div><div className="v">{sum.totalSets}</div></div>
             <div className="stat"><div className="label">PRs</div><div className="v lime" data-testid="text-summary-prs">{sum.prs.length}</div></div>
           </div>
+          {summary.warmup && <p className="text-xs muted mt-3" data-testid="text-summary-warmup">{summary.warmup.status === "done" ? `Warm-up: ${warmupSummary(summary.warmup.items)}` : "Warm-up skipped"}</p>}
         </div>
         <div className="card">
           <div className="label mb-2">Sets per muscle</div>
@@ -469,6 +473,11 @@ export default function Logger() {
           </>
         )}
       </div>
+      {/* Warm-up comes first: shown until it's logged or skipped (unless turned off in Profile), and reopenable from the chip. */}
+      {warmOpen || (!s.warmup && totalSets === 0 && state.warmupPrompt !== false) ? (
+        <WarmupStep session={s} onClose={warmOpen ? () => setWarmOpen(false) : undefined} />
+      ) : (<>
+      <WarmupChip session={s} onOpen={() => setWarmOpen(true)} />
       {!day && !free && (
         <div className="warn mb-3" data-testid="card-day-missing"><div className="inner">
           <div className="font-bold">Program changed</div>
@@ -524,6 +533,7 @@ export default function Logger() {
           )}
         </>
       )}
+      </>)}
       <div style={{ height: 70 }} />
       <RestBar session={s} />
       {adding && <ExercisePicker title="Add exercise" onClose={() => setAdding(false)} onPick={addExercise} />}
