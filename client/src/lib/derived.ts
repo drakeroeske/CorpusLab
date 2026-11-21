@@ -7,7 +7,7 @@ import {
   setVolume,
 } from "./engine";
 import type { AppState, ExerciseLog, Muscle, ProgramDay, ProgramExercise, SavedWorkout, Session, Units } from "./types";
-import { EX, isCompound, newId } from "./exercises";
+import { EX, isCompound, newId, fmtReps, isTimed } from "./exercises";
 
 export function useToday() {
   const { state, targets, profile } = useStore();
@@ -115,14 +115,16 @@ export function lastTopSet(sessions: Session[], exId: string): { weight: number;
     if (!s.end) continue;
     const sets = s.exercises.filter((l) => l.exId === exId).flatMap((l) => l.sets);
     if (!sets.length) continue;
-    const top = sets.reduce((a, b) => (e1rmOf(b) > e1rmOf(a) ? b : a), sets[0]);
+    const timed = isTimed(exId);
+    const top = sets.reduce((a, b) => (e1rmOf(b, timed) > e1rmOf(a, timed) ? b : a), sets[0]);
     return { weight: top.weight, reps: top.reps, date: s.date };
   }
   return null;
 }
-const e1rmOf = (x: { weight: number; reps: number }) => x.weight * (1 + x.reps / 30);
+// Picks "last time's top set". For timed sets reps is seconds, so the heaviest (then longest) wins instead.
+const e1rmOf = (x: { weight: number; reps: number }, timed = false) => (timed ? x.weight * 1000 + x.reps : x.weight * (1 + x.reps / 30));
 
-const defaultPlan = (exId: string) => (isCompound(EX[exId]) ? { sets: 3, repMin: 6, repMax: 10 } : { sets: 3, repMin: 10, repMax: 15 });
+const defaultPlan = (exId: string) => (isTimed(exId) ? { sets: 3, repMin: 30, repMax: 60 } : isCompound(EX[exId]) ? { sets: 3, repMin: 6, repMax: 10 } : { sets: 3, repMin: 10, repMax: 15 });
 
 /** Targets for an exercise outside the program: last time's top set, adjusted for today's readiness. New exercises start blank. */
 export function freeRx(sessions: Session[], log: ExerciseLog, readiness: number | null, units: Units): { pe: ProgramExercise; rx: Prescription } {
@@ -133,7 +135,7 @@ export function freeRx(sessions: Session[], log: ExerciseLog, readiness: number 
   const effect = readinessEffect(readiness);
   const rir = isCompound(EX[log.exId]) ? 2 : 1;
   let weight = log.targetWeight;
-  let why = last ? `Last time: ${fmtW(last.weight)} × ${last.reps} (${fmtDate(last.date, { month: "short", day: "numeric" })})` : "First time: pick a weight you could do for a few more reps.";
+  let why = last ? `Last time: ${fmtW(last.weight)} × ${fmtReps(log.exId, last.reps)} (${fmtDate(last.date, { month: "short", day: "numeric" })})` : isTimed(log.exId) ? "First time: pick a weight you can hold for the whole time with good posture." : "First time: pick a weight you could do for a few more reps.";
   if (last && effect === "hold") why += ` · readiness ${Math.round(readiness!)}: same weight`;
   if (last && effect === "reduce") why += ` · readiness ${Math.round(readiness!)}: −10% today`;
   if (!last) weight = 0;

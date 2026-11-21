@@ -333,7 +333,7 @@ export function History() {
                 {s.exercises.map((l, i) => (
                   <div key={i} className="rowline" style={{ alignItems: "flex-start" }}>
                     <span className="text-[13px] min0">{EX[l.exId].name}</span>
-                    <span className="mono text-xs text-right muted">{l.sets.map((x) => fmtSet(x, "×")).join("  ")}</span>
+                    <span className="mono text-xs text-right muted">{l.sets.map((x) => fmtSet(x, "×", l.exId)).join("  ")}</span>
                   </div>
                 ))}
                 {s.coachNote && <p className="text-xs blue mt-2">Coach: {s.coachNote}</p>}

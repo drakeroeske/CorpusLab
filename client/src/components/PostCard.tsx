@@ -4,7 +4,9 @@ import { Trash2 } from "lucide-react";
 import { Silhouette, Tag, pad3 } from "@/components/riso";
 import { fmtW } from "@/lib/engine";
 
-export interface PostSet { name: string; weight: number; reps: number; units: string; pr?: boolean }
+export interface PostSet { name: string; weight: number; reps: number; units: string; pr?: boolean; timed?: boolean }
+
+const repsText = (t: PostSet) => (t.timed ? (t.reps >= 90 ? `${Math.floor(t.reps / 60)}:${String(t.reps % 60).padStart(2, "0")}` : `${t.reps} s`) : String(t.reps));
 export interface PostComment { id: string; who: string; text: string }
 
 export const handle = (name: string) => "@" + name.toUpperCase().replace(/[^A-Z0-9]+/g, "");
@@ -45,7 +47,7 @@ export function PostCard({ id, author, mine, ts, title, durationMin, prNo, sets,
             </>
           ) : (
             <>
-              {top && <div className="num-big mt-1" style={{ fontSize: 44 }} data-testid={`text-headline-${id}`}>{top.weight > 0 ? `${fmtW(top.weight)} ${top.units.toUpperCase()}` : `BW × ${top.reps}`}</div>}
+              {top && <div className="num-big mt-1" style={{ fontSize: 44 }} data-testid={`text-headline-${id}`}>{top.weight > 0 ? `${fmtW(top.weight)} ${top.units.toUpperCase()}` : `BW × ${repsText(top).toUpperCase()}`}</div>}
               {top && <div className="text-xs">{top.name}</div>}
             </>
           )}
@@ -55,7 +57,7 @@ export function PostCard({ id, author, mine, ts, title, durationMin, prNo, sets,
         {sets.map((t, i) => (
           <div key={i} className={`flex justify-between gap-2 ${t.pr ? "font-bold" : ""}`}>
             <span className="truncate">{t.name}{t.pr ? " · VERIFIED BY CORPUS" : ""}</span>
-            <span className="shrink-0">{t.weight > 0 ? `${fmtW(t.weight)} ${t.units} × ${t.reps}` : `BW × ${t.reps}`}</span>
+            <span className="shrink-0">{t.weight > 0 ? `${fmtW(t.weight)} ${t.units} × ${repsText(t)}` : `BW × ${repsText(t)}`}</span>
           </div>
         ))}
         {extra}

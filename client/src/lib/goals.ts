@@ -1,7 +1,7 @@
 // Personal goals: how far along each one is, when it will likely land, and whether that beats the deadline.
 import type { ActivityType, AppState, PersonalGoal, HabitMetric, Session, Units } from "./types";
 import type { WeightPlan } from "./engine";
-import { EX } from "./exercises";
+import { EX, fmtReps, isTimed } from "./exercises";
 import { ACTIVITY, fmtDistance, fmtDuration, predictedTimes } from "./activities";
 import { addDays, toKg, daysBetween, e1rm, fmtDate, fmtW, linreg, proteinByDate, r1, weekStart } from "./engine";
 
@@ -127,7 +127,7 @@ export function raceName(type: ActivityType, km: number): string | null {
 export function goalTitle(g: PersonalGoal, units: Units): string {
   if (g.title?.trim()) return g.title.trim();
   if (g.kind === "bodyweight") return `${g.target < g.start ? "Get down to" : g.target > g.start ? "Get up to" : "Hold"} ${fmtW(g.target)} ${units}`;
-  if (g.kind === "lift") return `${EX[g.exId].name}: ${fmtW(g.weight)} ${units} × ${g.reps}`;
+  if (g.kind === "lift") return `${EX[g.exId].name}: ${g.weight > 0 || !isTimed(g.exId) ? `${fmtW(g.weight)} ${units} × ` : ""}${fmtReps(g.exId, g.reps)}`;
   if (g.kind === "cardio") {
     const A = ACTIVITY[g.activity].label;
     const d = raceName(g.activity, g.distanceKm) ?? fmtDistance(g.distanceKm, g.activity, units);
@@ -191,6 +191,26 @@ export function goalProgress(g: PersonalGoal, ctx: GoalCtx): GoalProgress {
       if (perWeek > cap) note += ` · needs ${fmtW(r1(perWeek))} ${units}/week, faster than recommended`;
     }
     return { pct, achieved: false, current: curS, target, status: pts.length < 3 && !g.deadline ? "in_progress" : ds.status, note, eta };
+  }
+
+  if (g.kind === "lift" && isTimed(g.exId)) {
+    // Carries and holds: hold at least this weight for at least this long. Progress = longest time at that weight or more.
+    const fmt = (w: number, t: number) => `${w > 0 || g.weight > 0 ? `${fmtW(w)} × ` : ""}${fmtReps(g.exId, t)}`;
+    const target = fmt(g.weight, g.reps);
+    let longest = 0, longestDate = "";
+    for (const s of state.sessions) {
+      if (!s.end || s.date < g.createdAt) continue;
+      for (const l of s.exercises) if (l.exId === g.exId) for (const st of l.sets) if (st.weight >= g.weight && st.reps > longest) { longest = st.reps; longestDate = s.date; }
+    }
+    if (longest >= g.reps || g.achievedAt) return done(fmt(g.weight, Math.max(longest, g.reps)), target, g.achievedAt ? `Hit ${fmtDate(g.achievedAt)}` : `Hit ${fmtDate(longestDate)}`);
+    const any = state.sessions.some((s) => s.end && s.exercises.some((l) => l.exId === g.exId && l.sets.length));
+    if (!any) return { pct: 0, achieved: false, current: "—", target, status: "no_data", note: `Log ${EX[g.exId].name} to start tracking this.` };
+    const ds = deadlineStatus(null, g.deadline, today);
+    return {
+      pct: clamp01(longest / g.reps), achieved: false, current: longest ? `Longest ${fmt(g.weight, longest)}` : "—", target,
+      status: g.deadline ? ds.status : "in_progress",
+      note: longest ? `${fmtReps(g.exId, g.reps - longest)} to go at ${fmtW(g.weight)} ${units}${g.deadline ? ` · ${ds.text}` : ""}` : `No set at ${fmtW(g.weight)} ${units} or more yet.`,
+    };
   }
 
   if (g.kind === "lift") {

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Pencil, Plus, Search } from "lucide-react";
 import type { Equipment, Exercise, Muscle } from "@/lib/types";
-import { EQUIPMENT_LABEL, EQUIPMENT_LIST, EXERCISES, MUSCLE_GROUPS, MUSCLE_LABEL, PATTERN_LABEL, customExercises, isCompound, muscleSearchText } from "@/lib/exercises";
+import { EQUIPMENT_LABEL, EQUIPMENT_LIST, EXERCISES, MUSCLE_GROUPS, MUSCLE_LABEL, PATTERN_LABEL, customExercises, fmtReps, isCompound, isTimed, muscleSearchText } from "@/lib/exercises";
 import { e1rmSeries, fmtDate } from "@/lib/engine";
 import { lastTopSet } from "@/lib/derived";
 import { useStore } from "@/lib/store";
@@ -16,7 +16,7 @@ const STORE_KEY = "corpus.catalog.groupBy";
 function ExerciseChips({ e }: { e: Exercise }) {
   return (
     <div className="flex flex-col items-end gap-1 shrink-0">
-      <span className={`chip ${isCompound(e) ? "chip-blue" : ""}`}>{isCompound(e) ? "Compound" : "Isolation"}</span>
+      {isTimed(e) ? <span className="chip chip-blue" data-testid={`chip-timed-${e.id}`}>Weight × time</span> : <span className={`chip ${isCompound(e) ? "chip-blue" : ""}`}>{isCompound(e) ? "Compound" : "Isolation"}</span>}
       <span className="label">{EQUIPMENT_LABEL[e.equipment]}{e.custom ? " · custom" : ""}</span>
     </div>
   );
@@ -47,7 +47,7 @@ export function ExerciseCatalog({ onPick, embedded, initialQuery = "", onCreated
   // Chips under the Seg narrow the list to one group; "All" shows every group with a heading.
   const chips: { v: string; l: string }[] = groupBy === "muscle" ? MUSCLE_GROUPS.map((g) => ({ v: g.id, l: g.label }))
     : groupBy === "equipment" ? EQUIPMENT_LIST.map((x) => ({ v: x, l: EQUIPMENT_LABEL[x] }))
-    : [{ v: "compound", l: "Compound" }, { v: "isolation", l: "Isolation" }];
+    : [{ v: "compound", l: "Compound" }, { v: "isolation", l: "Isolation" }, { v: "timed", l: "Carries & holds" }];
 
   const groups = useMemo(() => {
     const out: { id: string; label: string; items: Exercise[] }[] = [];
@@ -64,7 +64,8 @@ export function ExerciseCatalog({ onPick, embedded, initialQuery = "", onCreated
       for (const x of EQUIPMENT_LIST) push(x, EQUIPMENT_LABEL[x], all.filter((e) => e.equipment === x));
     } else {
       push("compound", "Compound", all.filter(isCompound));
-      push("isolation", "Isolation", all.filter((e) => !isCompound(e)));
+      push("isolation", "Isolation", all.filter((e) => !isCompound(e) && !isTimed(e)));
+      push("timed", "Carries & holds", all.filter((e) => isTimed(e)));
     }
     return out;
   }, [all.length, ql, groupBy, filter]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -138,10 +139,11 @@ function ExerciseDetail({ e, onClose, onEdit, sessions, units }: { e: Exercise; 
   const ser = e1rmSeries(sessions, e.id);
   const times = sessions.filter((s) => s.end && s.exercises.some((l) => l.exId === e.id && l.sets.length)).length;
   const best = ser.length ? Math.max(...ser.map((x) => x.e1rm)) : null;
+  const longest = Math.max(0, ...sessions.filter((s) => s.end).flatMap((s) => s.exercises.filter((l) => l.exId === e.id).flatMap((l) => l.sets.map((x) => x.reps))));
   return (
     <Sheet title={e.name} onClose={onClose} testId="sheet-exercise-detail" right={e.custom ? <button className="btn btn-sm" onClick={onEdit} data-testid="button-detail-edit"><Pencil size={14} /> Edit</button> : undefined}>
       <div className="flex flex-wrap gap-2 mb-3">
-        <span className={`chip ${isCompound(e) ? "chip-blue" : ""}`}>{isCompound(e) ? "Compound" : "Isolation"}</span>
+        {isTimed(e) ? <span className="chip chip-blue" data-testid="chip-exercise-timed">Weight × time</span> : <span className={`chip ${isCompound(e) ? "chip-blue" : ""}`}>{isCompound(e) ? "Compound" : "Isolation"}</span>}
         <span className="chip">{EQUIPMENT_LABEL[e.equipment]}</span>
         {isCompound(e) && <span className="chip">{PATTERN_LABEL[e.pattern]}</span>}
         {e.custom && <span className="chip chip-signal">Custom</span>}
@@ -154,8 +156,10 @@ function ExerciseDetail({ e, onClose, onEdit, sessions, units }: { e: Exercise; 
       <div className="section-title"><h2>Your history</h2></div>
       <div className="stat-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
         <div className="stat"><div className="label">Sessions</div><div className="v">{times}</div><div className="s">logged</div></div>
-        <div className="stat"><div className="label">Last top set</div><div className="v" style={{ fontSize: 22, whiteSpace: "nowrap" }}>{last ? `${last.weight} × ${last.reps}` : "—"}</div><div className="s">{last ? fmtDate(last.date) : units}</div></div>
-        <div className="stat"><div className="label">Best e1RM</div><div className="v">{best ? Math.round(best) : "—"}</div><div className="s">{units}</div></div>
+        <div className="stat"><div className="label">Last top set</div><div className="v" style={{ fontSize: 22, whiteSpace: "nowrap" }}>{last ? `${last.weight} × ${fmtReps(e, last.reps)}` : "—"}</div><div className="s">{last ? fmtDate(last.date) : units}</div></div>
+        {isTimed(e)
+          ? <div className="stat"><div className="label">Longest</div><div className="v">{longest ? fmtReps(e, longest) : "—"}</div><div className="s">any weight</div></div>
+          : <div className="stat"><div className="label">Best e1RM</div><div className="v">{best ? Math.round(best) : "—"}</div><div className="s">{units}</div></div>}
       </div>
     </Sheet>
   );

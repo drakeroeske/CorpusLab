@@ -22,7 +22,7 @@ import type { PublicStats } from "@/lib/social";
 
 interface LivePost {
   id: string; kind: "session" | "checkin"; ts: number; author: PubUser; mine: boolean; likes: number; liked: boolean;
-  body: { sessionName?: string; topSets?: { name: string; weight: number; reps: number; units: string }[]; prs?: string[]; durationMin?: number; sessionId?: string; gym?: string;
+  body: { sessionName?: string; topSets?: { name: string; weight: number; reps: number; units: string; timed?: boolean }[]; prs?: string[]; durationMin?: number; sessionId?: string; gym?: string;
     type?: "activity" | "goal"; headline?: string; detail?: string; badge?: string };
   comments: { id: string; text: string; ts: number; author: PubUser }[];
 }
