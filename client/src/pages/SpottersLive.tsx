@@ -22,7 +22,8 @@ import type { PublicStats } from "@/lib/social";
 
 interface LivePost {
   id: string; kind: "session" | "checkin"; ts: number; author: PubUser; mine: boolean; likes: number; liked: boolean;
-  body: { sessionName?: string; topSets?: { name: string; weight: number; reps: number; units: string }[]; prs?: string[]; durationMin?: number; sessionId?: string; gym?: string };
+  body: { sessionName?: string; topSets?: { name: string; weight: number; reps: number; units: string }[]; prs?: string[]; durationMin?: number; sessionId?: string; gym?: string;
+    type?: "activity" | "goal"; headline?: string; detail?: string; badge?: string };
   comments: { id: string; text: string; ts: number; author: PubUser }[];
 }
 interface FriendRow extends PubUser { stats: Partial<PublicStats> }
@@ -131,7 +132,7 @@ function Feed({ goFriends }: { goFriends: () => void }) {
       {!me?.shareFeed && <p className="text-xs orange">Your workouts aren't being shared. Turn on "Share workouts" in Profile to post them.</p>}
       {posts.length === 0 && (
         <>
-          <Empty>No posts yet. Finished workouts post here automatically. Add friends to see theirs.</Empty>
+          <Empty>No posts yet. Finished workouts, runs, classes and reached goals post here automatically. Add friends to see theirs.</Empty>
           <button className="btn btn-primary btn-block" onClick={goFriends} data-testid="button-feed-add-friends"><UserPlus size={16} /> Add friends</button>
         </>
       )}
@@ -141,10 +142,11 @@ function Feed({ goFriends }: { goFriends: () => void }) {
         const title = p.kind === "checkin" ? `Checked in · ${p.body.gym ?? ""}` : p.body.sessionName ?? "Session";
         return (
           <PostCard key={p.id} id={p.id} author={p.author?.displayName ?? "?"} mine={p.mine} ts={p.ts} title={title} durationMin={p.kind === "session" ? p.body.durationMin : undefined}
+            badge={p.body.type ? p.body.badge : undefined} headline={p.body.type ? p.body.headline : undefined} detail={p.body.type ? p.body.detail : undefined}
             prNo={prNos.get(p.id)} sets={sets} prCount={prs.length} liked={p.liked} likes={p.likes}
             comments={p.comments.map((c) => ({ id: c.id, who: c.author?.id === me?.id ? "You" : c.author?.displayName.split(" ")[0] ?? "?", text: c.text }))}
             onLike={() => like(p)} onComment={(t) => send(p, t)}
-            onChallenge={() => send(p, `[CHALLENGE] Coming for that ${prs[0] ?? sets[0]?.name ?? title}.`)}
+            onChallenge={p.body.type === "goal" ? undefined : () => send(p, `[CHALLENGE] Coming for that ${prs[0] ?? sets[0]?.name ?? title}.`)}
             onPrCard={prs.length > 0 && p.body.sessionId && state.sessions.some((s) => s.id === p.body.sessionId) ? () => prCard(p) : undefined}
             onDelete={() => remove(p)} />
         );

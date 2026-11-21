@@ -9,6 +9,8 @@ import { addDays, dateKey, daysBetween, fmtDate, fmtW, nutritionTargets, roundTo
 import { HABIT_LABEL, RACES, activeGoals, bestSetAtReps, weightPlanGoal, currentBodyweight, finishedGoals, goalProgress, goalTitle, newlyAchieved, recentBestE1rm, type GoalCtx, type GoalProgress } from "@/lib/goals";
 import { Bar, Empty, NumInput, Seg, Sheet, Stepper } from "./ui";
 import { ExercisePicker } from "./ProgramEditor";
+import { useFeedShare } from "./FeedShare";
+import { goalPost } from "@/lib/feedPosts";
 import { ACTIVITY, DISTANCE_TYPES, distUnit, fmtDuration, fromKm, kmToSwim, parseDuration, predictedTimes, swimToKm, swimUnit, toKm } from "@/lib/activities";
 
 const KIND_LABEL: Record<GoalKind, string> = { bodyweight: "Bodyweight", lift: "Lift", cardio: "Cardio", habit: "Habit" };
@@ -26,6 +28,7 @@ export function GoalWatcher() { useGoalAchievements(); return null; }
 function useGoalAchievements() {
   const { set } = useStore();
   const ui = useUI();
+  const share = useFeedShare();
   const ctx = useGoalCtx();
   const goals = ctx.state.goals ?? [];
   useEffect(() => {
@@ -34,6 +37,7 @@ function useGoalAchievements() {
     const ids = new Set(hit.map((g) => g.id));
     set((s) => ({ ...s, goals: (s.goals ?? []).map((g) => (ids.has(g.id) && !g.achievedAt ? { ...g, achievedAt: ctx.today } : g)) }));
     ui.toast(hit.length === 1 ? `Goal reached: ${goalTitle(hit[0], ctx.units)}` : `${hit.length} goals reached`);
+    for (const g of hit) share(goalPost(g, ctx.units));
   }, [ctx]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
@@ -147,6 +151,7 @@ const liftStep = (u: Units) => (u === "lb" ? 5 : 2.5);
 export function GoalEditorSheet({ goal, onClose }: { goal?: PersonalGoal; onClose: () => void }) {
   const { state, set, profile } = useStore();
   const ui = useUI();
+  const share = useFeedShare();
   const u = profile.units;
   const today = dateKey();
   const bw = currentBodyweight(state) ?? profile.bodyWeight;
@@ -229,6 +234,7 @@ export function GoalEditorSheet({ goal, onClose }: { goal?: PersonalGoal; onClos
   const markDone = () => {
     if (!goal) return;
     set((s) => ({ ...s, goals: (s.goals ?? []).map((x) => (x.id === goal.id ? { ...x, achievedAt: today } : x)) }));
+    share(goalPost(goal, u));
     ui.toast(`Goal reached: ${goalTitle(goal, u)}`);
     onClose();
   };

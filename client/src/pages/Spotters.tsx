@@ -89,11 +89,12 @@ function Feed() {
         const n = name(p.author);
         return (
           <PostCard key={p.id} id={p.id} author={n} mine={p.author === "me"} ts={p.ts} title={p.sessionName} durationMin={p.durationMin} prNo={prNos.get(p.id)}
+            badge={p.badge} headline={p.headline} detail={p.detail}
             sets={p.topSets.map((t) => ({ ...t, pr: p.prs.includes(t.name) }))} prCount={p.prs.length}
             liked={p.likes.includes("me")} likes={p.likes.length}
             comments={p.comments.map((c) => ({ id: c.id, who: c.author === "me" ? "You" : name(c.author).split(" ")[0], text: c.text }))}
             onLike={() => like(p)} onComment={(t) => send(p, t)}
-            onChallenge={() => send(p, `[CHALLENGE] Coming for that ${p.prs[0] ?? p.topSets[0]?.name ?? p.sessionName}.`)}
+            onChallenge={p.type === "goal" ? undefined : () => send(p, `[CHALLENGE] Coming for that ${p.prs[0] ?? p.topSets[0]?.name ?? p.sessionName}.`)}
             onPrCard={p.prs.length > 0 && p.sessionId ? () => prCard(p) : undefined} />
         );
       })}

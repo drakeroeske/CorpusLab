@@ -7,7 +7,7 @@ export const GLOSSARY = {
   deload: { term: "Deload", text: "A lighter week (about 60% of your usual sets, same weights) that lets built-up fatigue clear so you come back stronger." },
   plateau: { term: "Plateau", text: "A lift trained in the last 2 weeks whose estimated max hasn't gone up in 3 sessions. The app suggests one change to get it moving again. During a fat-loss phase, holding strength is the goal, so only a lift that's clearly dropping (about 5% off its recent best) is flagged." },
   fatigue: { term: "Fatigue %", text: "How much recent training a muscle is still recovering from. Above 60% means it's still worked; it roughly halves every 48 hours." },
-  halfLife: { term: "T½ 48 h", text: "Half-life: fatigue in a muscle drops by about half every 48 hours of rest." },
+  halfLife: { term: "48 h", aria: "recovery half-life", text: "Recovery half-life: fatigue in a muscle drops by about half every 48 hours of rest. Poor sleep or missed protein slows it down." },
   workingSets: { term: "Working sets", text: "The hard sets that count toward progress. Warm-up sets aren't included." },
   dots: { term: "DOTS", text: "A score that adjusts strength for body weight and sex, so lifters of different sizes can be compared fairly." },
   tdee: { term: "Maintenance (TDEE)", text: "About how many calories you burn in a day, including training: the intake that keeps your weight steady. Estimated as resting burn (BMR, Mifflin–St Jeor) × an activity factor for your lifting days, plus calories from runs, rides, classes and WODs you log (4-week average). You can enter your own number in Profile instead." },

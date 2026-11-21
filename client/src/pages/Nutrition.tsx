@@ -140,7 +140,7 @@ export function NutritionSheet({ onClose }: { onClose: () => void }) {
   return (
     <Sheet title="Fuel" onClose={onClose} testId="sheet-nutrition">
       <div className="flex items-center justify-around">
-        <div className="flex flex-col items-center gap-1"><Ring value={tot.cal} max={calT} size={86} over={tot.cal > calT * 1.08}><span className="mono font-semibold">{Math.round(tot.cal)}</span><span className="mono text-[10px] muted">/{calT}</span></Ring><span className="label">kcal</span></div>
+        <div className="flex flex-col items-center gap-1"><Ring value={tot.cal} max={calT} size={86} over={tot.cal > calT * 1.08}><span className="mono font-semibold">{Math.round(tot.cal).toLocaleString()}</span><span className="mono text-[10px] muted">/{calT.toLocaleString()}</span></Ring><span className="label">kcal</span></div>
         <div className="flex flex-col items-center gap-1"><Ring value={tot.p} max={targets.protein} size={86} color="var(--blue)"><span className="mono font-semibold">{Math.round(tot.p)}</span><span className="mono text-[10px] muted">/{targets.protein}g</span></Ring><span className="label">protein</span></div>
         <div className="mono text-xs muted leading-6"><div>C {Math.round(tot.c)} g</div><div>F {Math.round(tot.f)} g</div><div>{meals.length} meals</div></div>
       </div>
@@ -178,12 +178,16 @@ export function NutritionSheet({ onClose }: { onClose: () => void }) {
             <span className="label">Favorites · one tap</span>
             <button className="btn btn-sm btn-ghost" style={{ paddingRight: 0 }} aria-pressed={editFav ? "true" : "false"} onClick={() => setEditFav(!editFav)} data-testid="button-edit-favorites">{editFav ? "Done" : "Edit"}</button>
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+          <div className="grid grid-cols-2 gap-2" data-testid="list-favorites">
             {state.favorites.map((f) => (
-              <button key={f.id} className={`btn btn-sm shrink-0 ${editFav ? "btn-outline" : ""}`} style={{ minHeight: 44, background: editFav ? undefined : "var(--bone-dark)" }}
+              <button key={f.id} className={`btn btn-sm min0 ${editFav ? "btn-outline" : ""}`} style={{ minHeight: 52, justifyContent: "flex-start", textAlign: "left", background: editFav ? undefined : "var(--bone-dark)" }}
                 onClick={() => { if (editFav) { set((s) => ({ ...s, favorites: s.favorites.filter((x) => x.id !== f.id) })); return; } set((s) => ({ ...s, meals: [...s.meals, logFavorite(f, today)] })); ui.toast(`Logged ${f.name}`); }}
                 aria-label={editFav ? `Remove ${f.name} from favorites` : `Log ${f.name}`} data-testid={`button-fav-${f.id}`}>
-                {editFav ? <X size={14} /> : <Star size={14} />} <span className="truncate" style={{ maxWidth: 150 }}>{f.name}</span> <span className="muted">· {f.cal} kcal</span>
+                {editFav ? <X size={14} className="shrink-0" /> : <Star size={14} className="shrink-0" />}
+                <span className="min0 flex flex-col">
+                  <span className="truncate">{f.name}</span>
+                  <span className="muted text-[11px] font-normal">{Math.round(f.cal).toLocaleString()} kcal</span>
+                </span>
               </button>
             ))}
           </div>
@@ -206,14 +210,14 @@ export function NutritionSheet({ onClose }: { onClose: () => void }) {
       {/* ---- basket ---- */}
       {basket.length > 0 && (
         <div className="card-flat mt-4" data-testid="card-basket">
-          <div className="flex items-center justify-between mb-1"><span className="label">This meal</span><span className="mono text-xs muted">{Math.round(bsum.cal)} kcal · {Math.round(bsum.p)}p {Math.round(bsum.c)}c {Math.round(bsum.f)}f</span></div>
+          <div className="flex items-center justify-between mb-1"><span className="label">This meal</span><span className="mono text-xs muted">{Math.round(bsum.cal).toLocaleString()} kcal · {Math.round(bsum.p)}p {Math.round(bsum.c)}c {Math.round(bsum.f)}f</span></div>
           {basket.map((it, i) => (
             <div key={i} className="rowline" data-testid={`row-basket-${i}`}>
               <div className="min0">
                 <div className="text-sm font-semibold truncate">{it.name}</div>
                 <div className="mono text-[11px] muted">{qtyLabel(it.qty, it.unit)}{it.unit !== "g" ? ` · ${Math.round(it.grams)} g` : ""} · {Math.round(it.p)}p</div>
               </div>
-              <div className="flex items-center gap-1"><span className="mono text-sm">{it.cal}</span>
+              <div className="flex items-center gap-1"><span className="mono text-sm">{Math.round(it.cal).toLocaleString()}</span>
                 <button className="faint" style={{ padding: 10 }} aria-label={`Remove ${it.name}`} onClick={() => { setBasket((b) => b.filter((_, j) => j !== i)); setBasketFoods((b) => b.filter((_, j) => j !== i)); }}><X size={14} /></button></div>
             </div>
           ))}
@@ -239,7 +243,7 @@ export function NutritionSheet({ onClose }: { onClose: () => void }) {
               {x.items?.length ? <div className="text-[12px] muted truncate">{x.items.map((i) => i.name.split(",")[0]).join(", ")}</div> : null}
               <div className="mono text-[11px] muted">{new Date(x.time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · {Math.round(x.p)}p {Math.round(x.c)}c {Math.round(x.f)}f {pre ? <span className="lime"> · pre-workout</span> : null}</div>
             </div>
-            <div className="flex items-center gap-2"><span className="mono text-sm">{x.cal}</span>
+            <div className="flex items-center gap-2"><span className="mono text-sm">{Math.round(x.cal).toLocaleString()}</span>
               <button className="faint" aria-label="Delete meal" style={{ padding: 14, margin: -14 }} onClick={() => set((s) => ({ ...s, meals: s.meals.filter((y) => y.id !== x.id) }))}><Trash2 size={14} /></button></div>
           </div>
         );
@@ -302,7 +306,7 @@ function PortionPicker({ init, onCancel, onAdd }: { init: { food: FoodDef; qty: 
       </div>
       <div className="grid grid-cols-4 gap-2 mt-3 text-center" data-testid="text-portion-macros">
         {([["kcal", item?.cal], ["Protein", item?.p], ["Carbs", item?.c], ["Fat", item?.f]] as const).map(([l, v]) => (
-          <div key={l}><div className="mono font-semibold">{v === undefined ? "-" : l === "kcal" ? v : Math.round(v as number)}</div><div className="label">{l}</div></div>
+          <div key={l}><div className="mono font-semibold">{v === undefined ? "-" : l === "kcal" ? Math.round(v as number).toLocaleString() : Math.round(v as number)}</div><div className="label">{l}</div></div>
         ))}
       </div>
       <button className="btn btn-primary btn-block mt-3" disabled={!item} onClick={() => item && onAdd(food, item)} data-testid="button-add-to-meal"><Plus size={16} /> Add to meal</button>

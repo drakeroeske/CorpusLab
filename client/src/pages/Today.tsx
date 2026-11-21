@@ -213,8 +213,8 @@ export default function Today() {
         {/* 4. Goals: up to three, with progress. */}
         <TodayGoals />
 
-        {/* 5. Food: one slim row; tap to log. */}
-        <div className="section-title"><h2>Food</h2></div>
+        {/* 5. Fuel: one slim row; tap to log. */}
+        <div className="section-title"><h2>Fuel</h2></div>
         <button className="card w-full text-left flex items-center gap-3" onClick={() => ui.open("nutrition")} data-testid="button-open-nutrition" aria-label="Log a meal">
           <div className="min0 flex-1 grid grid-cols-2 gap-4">
             <div data-testid="text-cal-today">

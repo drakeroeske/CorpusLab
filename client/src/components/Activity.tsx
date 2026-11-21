@@ -5,7 +5,9 @@ import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
 import type { Activity, ActivityType, WodFormat } from "@/lib/types";
 import { newId } from "@/lib/exercises";
-import { dateKey, fmtDate } from "@/lib/engine";
+import { addDays, dateKey, fmtDate } from "@/lib/engine";
+import { activityPost } from "@/lib/feedPosts";
+import { useFeedShare } from "./FeedShare";
 import {
   ACTIVITY, ACTIVITY_GROUPS, EFFORT, WOD_CARDIO, WOD_FORMAT_LABEL, WOD_QUICK, activitySummary, activityTitle, distUnit, effortLabel,
   fmtDistance, fmtDuration, fmtPace, fromKm, kmToSwim, movementName, parseDuration, swimToKm, swimUnit, toKm,
@@ -19,6 +21,7 @@ const startFor = (date: string, durationSec: number) => (date === dateKey() ? Da
 export function ActivitySheet({ activity, initialType, onClose }: { activity?: Activity; initialType?: ActivityType; onClose: () => void }) {
   const { set, profile } = useStore();
   const ui = useUI();
+  const share = useFeedShare();
   const u = profile.units;
   const today = dateKey();
   const [type, setType] = useState<ActivityType | null>(activity?.type ?? initialType ?? null);
@@ -69,12 +72,14 @@ export function ActivitySheet({ activity, initialType, onClose }: { activity?: A
     const a = build();
     if (missing || !a) return;
     set((s) => ({ ...s, activities: activity ? (s.activities ?? []).map((x) => (x.id === a.id ? a : x)) : [...(s.activities ?? []), a] }));
+    // New and recent (today or yesterday) goes to the Spotters feed; backfilled older logs don't.
+    if (!activity && a.date >= addDays(today, -1)) share(activityPost(a, u));
     ui.toast(activity ? "Updated" : `${activityTitle(a)} logged`);
     onClose();
   };
   const remove = () => {
     if (!activity) return;
-    set((s) => ({ ...s, activities: (s.activities ?? []).filter((x) => x.id !== activity.id) }));
+    set((s) => ({ ...s, activities: (s.activities ?? []).filter((x) => x.id !== activity.id), feed: s.feed.filter((p) => p.sessionId !== activity.id) }));
     ui.toast("Deleted");
     onClose();
   };

@@ -18,7 +18,7 @@ const STEPS: Step[] = [
   { targets: ["card-checkin-cta", "card-readiness"], title: "Start every day here", text: "A 20-second check-in on sleep, energy and soreness gives you a readiness score. It decides whether today's weights go up, hold or come down." },
   { targets: ["info-workingSets", "info-readiness", "info-rir"], title: "Not sure what a term means?", text: "Tap the ⓘ next to any training term, like RIR or Readiness, for a one-line explanation." },
   { targets: ["card-today-session", "card-empty-day", "card-rest-day", "card-no-program"], title: "Today's workout", text: "Your program picks the session and the weights. Tap Start workout and log each set as you go. On rest days you can still train anyway." },
-  { targets: ["button-open-nutrition"], title: "Food", text: "Tap here to log meals. Calories and protein fill up against your daily targets." },
+  { targets: ["button-open-nutrition"], title: "Fuel", text: "Tap here to log meals. Calories and protein fill up against your daily targets." },
   { targets: ["tab-progress"], title: "Progress", text: "Muscle fatigue, strength trends and past workouts. The weekly report, experiments and photos are under More." },
   { targets: ["tab-social"], title: "Social", text: "Train with friends: share PRs, give respect, and keep streaks going together." },
   { targets: ["button-open-coach"], title: "Ask the Coach", text: "Questions about your training, sleep or food? The Coach answers from your own data." },

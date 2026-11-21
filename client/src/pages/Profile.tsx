@@ -117,10 +117,10 @@ export default function Profile() {
             return (
               <div className="stat-grid" style={{ gridTemplateColumns: `repeat(${flat ? 2 : 3}, 1fr)` }} data-testid="grid-calorie-targets">
                 {flat
-                  ? <div className="stat"><div className="label">Every day</div><div className="v" data-testid="text-cal-every-day">{targets.cal}</div><div className="s">kcal</div></div>
+                  ? <div className="stat"><div className="label">Every day</div><div className="v" data-testid="text-cal-every-day">{targets.cal.toLocaleString()}</div><div className="s">kcal</div></div>
                   : <>
-                      <div className="stat"><div className="label">{hi}</div><div className="v" data-testid="text-cal-high">{targets.highCal}</div><div className="s">kcal</div></div>
-                      <div className="stat"><div className="label">{lo}</div><div className="v" data-testid="text-cal-low">{targets.lowCal}</div><div className="s">kcal</div></div>
+                      <div className="stat"><div className="label">{hi}</div><div className="v" data-testid="text-cal-high">{targets.highCal.toLocaleString()}</div><div className="s">kcal</div></div>
+                      <div className="stat"><div className="label">{lo}</div><div className="v" data-testid="text-cal-low">{targets.lowCal.toLocaleString()}</div><div className="s">kcal</div></div>
                     </>}
                 <div className="stat"><div className="label">Protein</div><div className="v">{targets.protein}g</div><div className="s">{targets.proteinPerKg} g/kg</div></div>
               </div>

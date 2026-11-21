@@ -50,3 +50,15 @@ describe("joint prep first", () => {
     expect(top.filter((id) => ["band_pull_apart", "band_dislocate", "band_external_rotation", "band_face_pull"].includes(id)).length).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe("muscle reference", async () => {
+  const { MUSCLES, MUSCLE_INFO } = await import("./exercises");
+  it("every muscle has a short name that fits the list column, a full name, location and function", () => {
+    for (const m of MUSCLES) {
+      const i = MUSCLE_INFO[m];
+      expect(i, m).toBeTruthy();
+      expect(i.short.length, m).toBeLessThanOrEqual(15);
+      expect(i.full.length && i.where.length > 5 && i.does.length > 20, m).toBe(true);
+    }
+  });
+});
