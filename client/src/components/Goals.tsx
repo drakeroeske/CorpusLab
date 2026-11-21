@@ -4,7 +4,7 @@ import { Check, ChevronRight, Pencil, Plus, Target, Trophy } from "lucide-react"
 import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
 import type { ActivityType, PersonalGoal, GoalKind, HabitMetric, Units } from "@/lib/types";
-import { EX, newId } from "@/lib/exercises";
+import { EX, isTimed, newId } from "@/lib/exercises";
 import { addDays, dateKey, daysBetween, fmtDate, fmtW, nutritionTargets, roundTo, toKg, trainingDaysPerWeek } from "@/lib/engine";
 import { HABIT_LABEL, RACES, activeGoals, bestSetAtReps, weightPlanGoal, currentBodyweight, finishedGoals, goalProgress, goalTitle, newlyAchieved, recentBestE1rm, type GoalCtx, type GoalProgress } from "@/lib/goals";
 import { Bar, Empty, NumInput, Seg, Sheet, Stepper } from "./ui";
@@ -187,6 +187,7 @@ export function GoalEditorSheet({ goal, onClose }: { goal?: PersonalGoal; onClos
   const beaten = prevBest && weight && prevBest.weight >= weight ? prevBest : null;
   const pickLift = (id: string) => {
     setExId(id); setPicking(false);
+    if (isTimed(id) && reps < 10) setReps(60);
     if (weight == null) {
       const best = recentBestE1rm(state.sessions, id, today);
       // Suggest the next round number a bit above today's estimated max.
@@ -195,7 +196,7 @@ export function GoalEditorSheet({ goal, onClose }: { goal?: PersonalGoal; onClos
   };
 
   const missing = kind === "bodyweight" ? (bwTarget == null || bwTarget <= 0 ? "Enter a target weight." : null)
-    : kind === "lift" ? (!exId ? "Pick the lift." : !weight || weight <= 0 ? "Enter the target weight." : null)
+    : kind === "lift" ? (!exId ? "Pick the lift." : weight == null || (weight <= 0 && !isTimed(exId)) ? "Enter the target weight." : null)
     : kind === "cardio" ? (!cDistKm || cDistKm <= 0 ? "Enter the distance." : cMetric === "time" && !parseDuration(cTime) ? "Enter a target time, like 25:00." : null)
     : null;
   const deadlineBad = deadline && deadline <= today && !goal ? "Pick a deadline in the future." : null;
@@ -203,7 +204,7 @@ export function GoalEditorSheet({ goal, onClose }: { goal?: PersonalGoal; onClos
   const build = (): PersonalGoal | null => {
     const base = { id: goal?.id ?? newId("goal"), createdAt: goal?.createdAt ?? today, ...(title.trim() ? { title: title.trim().slice(0, 60) } : {}), deadline: deadline || null, achievedAt: goal?.achievedAt ?? null, ...(goal?.archived ? { archived: true } : {}) };
     if (kind === "bodyweight" && bwTarget) return { ...base, kind, start: goal?.kind === "bodyweight" ? goal.start : bw, target: bwTarget };
-    if (kind === "lift" && exId && weight) {
+    if (kind === "lift" && exId && (weight || (weight === 0 && isTimed(exId)))) {
       const keepStart = goal?.kind === "lift" && goal.exId === exId;
       return { ...base, kind, exId, weight, reps, startE1rm: keepStart ? (goal as Extract<PersonalGoal, { kind: "lift" }>).startE1rm : bestE1 };
     }
@@ -284,11 +285,11 @@ export function GoalEditorSheet({ goal, onClose }: { goal?: PersonalGoal; onClos
               <NumInput value={weight} onChange={setWeight} min={0} max={2000} decimals={2} allowEmpty data-testid="input-goal-lift-weight" />
             </label>
             <div className="field">
-              <span className="label">Reps</span>
-              <Stepper value={reps} onChange={(v) => setReps(Math.max(1, Math.round(v)))} min={1} max={50} decimals={0} testId="stepper-goal-reps" />
+              <span className="label">{exId && isTimed(exId) ? "Seconds" : "Reps"}</span>
+              <Stepper value={reps} onChange={(v) => setReps(Math.max(1, Math.round(v)))} step={exId && isTimed(exId) ? 5 : 1} min={1} max={exId && isTimed(exId) ? 900 : 50} decimals={0} unit={exId && isTimed(exId) ? "s" : undefined} testId="stepper-goal-reps" />
             </div>
           </div>
-          <p className="text-xs faint mt-2">Counts when you log a set of at least this weight for at least this many reps.</p>
+          <p className="text-xs faint mt-2">{exId && isTimed(exId) ? "Counts when you log a set of at least this weight for at least this long. For a bodyweight hold, leave the weight at 0." : "Counts when you log a set of at least this weight for at least this many reps."}</p>
           {beaten && <p className="text-sm mt-2" role="status" data-testid="text-goal-already-beaten">You've already done {fmtW(beaten.weight)} × {beaten.reps} ({fmtDate(beaten.date)}). Aim higher? Only sets from today on count toward this goal.</p>}
         </div>
       )}

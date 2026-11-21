@@ -14,7 +14,7 @@ const TIERS: { v: Tier; l: string; help: string }[] = [
   { v: "stabilizer", l: "Stabilizer", help: "Stabilizer: muscles holding you steady without moving, like abs and lower back in a squat. Each set counts as a quarter set." },
 ];
 const TIER_NAME: Record<Tier, string> = { primary: "main", secondary: "secondary", stabilizer: "stabilizer" };
-const COMPOUND_PATTERNS = (Object.keys(PATTERN_LABEL) as Exercise["pattern"][]).filter((p) => p !== "isolation");
+const COMPOUND_PATTERNS = (Object.keys(PATTERN_LABEL) as Exercise["pattern"][]).filter((p) => p !== "isolation" && p !== "hold");
 
 /** Where a custom exercise is still in use (blocks deleting). */
 export function customExerciseUses(state: ReturnType<typeof useStore>["state"], id: string): string[] {
@@ -42,8 +42,10 @@ export function CustomExerciseSheet({ exercise, initialName = "", onClose, onSav
   const [equipment, setEquipment] = useState<Equipment | null>(exercise?.equipment ?? null);
   const [notes, setNotes] = useState(exercise?.notes ?? "");
   // Compound vs isolation follows the muscles until the user picks; the finer movement pattern sits under Advanced.
+  // Timed exercises (carries, planks, hangs) log weight × seconds instead of reps.
+  const [measure, setMeasure] = useState<"reps" | "time">(exercise?.measure === "time" ? "time" : "reps");
   const [kind, setKind] = useState<"compound" | "isolation" | null>(exercise ? (exercise.pattern === "isolation" ? "isolation" : "compound") : null);
-  const [pattern, setPattern] = useState<Exercise["pattern"] | null>(exercise && exercise.pattern !== "isolation" ? exercise.pattern : null);
+  const [pattern, setPattern] = useState<Exercise["pattern"] | null>(exercise && exercise.pattern !== "isolation" && exercise.pattern !== "hold" ? exercise.pattern : null);
   const [advanced, setAdvanced] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [tried, setTried] = useState(false);
@@ -54,7 +56,7 @@ export function CustomExerciseSheet({ exercise, initialName = "", onClose, onSav
   const guessed = guessPattern(primary);
   const effKind = kind ?? (guessed === "isolation" ? "isolation" : "compound");
   const guessedCompound = guessed === "isolation" ? guessPattern(primary.filter((m) => !SMALL_MUSCLES.includes(m))) : guessed;
-  const effPattern: Exercise["pattern"] = effKind === "isolation" ? "isolation" : (pattern ?? (guessedCompound === "isolation" ? "horizontal_push" : guessedCompound));
+  const effPattern: Exercise["pattern"] = measure === "time" ? "hold" : effKind === "isolation" ? "isolation" : (pattern ?? (guessedCompound === "isolation" ? "horizontal_push" : guessedCompound));
   const uses = exercise ? customExerciseUses(state, exercise.id) : [];
 
   // A muscle sits in exactly one level, so it never counts twice. Tapping it in another level moves it there.
@@ -72,7 +74,7 @@ export function CustomExerciseSheet({ exercise, initialName = "", onClose, onSav
     setTried(true);
     if (missing || !equipment) return;
     const ex: Exercise = {
-      id: exercise?.id ?? newId("cx"), name: trimmed, primary, secondary, ...(stabilizers.length ? { stabilizers } : {}), equipment, pattern: effPattern,
+      id: exercise?.id ?? newId("cx"), name: trimmed, primary, secondary, ...(stabilizers.length ? { stabilizers } : {}), equipment, pattern: effPattern, ...(measure === "time" ? { measure: "time" as const } : {}),
       ratio: 1, custom: true, ...(notes.trim() ? { notes: notes.trim() } : {}),
     };
     const prev = state.customExercises ?? [];
@@ -128,6 +130,11 @@ export function CustomExerciseSheet({ exercise, initialName = "", onClose, onSav
         ))}
       </div>
 
+      <div className="label mt-5 mb-2">Logged as</div>
+      <Seg value={measure} onChange={(v) => setMeasure(v)} options={[{ v: "reps", l: "Weight × reps" }, { v: "time", l: "Weight × time" }]} testId="seg-custom-measure" />
+      <p className="text-xs faint mt-2">{measure === "time" ? "For carries, holds and hangs: log the weight and how many seconds you lasted." : "The usual: weight and how many reps."}</p>
+
+      {measure === "reps" && (<>
       <div className="label mt-5 mb-2">Type</div>
       <Seg value={effKind} onChange={(v) => setKind(v)} options={[{ v: "compound", l: "Compound" }, { v: "isolation", l: "Isolation" }]} testId="seg-custom-kind" />
       <p className="text-xs faint mt-2">{effKind === "compound" ? "Several joints move together, like a press, row or squat. Gets longer rest." : "One joint, one muscle doing most of the work, like a curl or fly."}{kind === null ? " We guessed from the muscles." : ""}</p>
@@ -149,6 +156,7 @@ export function CustomExerciseSheet({ exercise, initialName = "", onClose, onSav
           )}
         </>
       )}
+      </>)}
 
       <label className="field mt-5">
         <span className="label">Notes <span className="faint" style={{ textTransform: "none", letterSpacing: 0 }}>(optional)</span></span>
@@ -161,7 +169,7 @@ export function CustomExerciseSheet({ exercise, initialName = "", onClose, onSav
           <b>{trimmed || "Unnamed exercise"}</b> · {primary.length ? primary.map((m) => MUSCLE_LABEL[m]).join(", ") : "no main muscle yet"}
           {secondary.length ? <span className="muted"> · also {secondary.map((m) => MUSCLE_LABEL[m]).join(", ")}</span> : null}
           {stabilizers.length ? <span className="muted"> · stabilizes with {stabilizers.map((m) => MUSCLE_LABEL[m]).join(", ")}</span> : null}
-          {equipment ? ` · ${EQUIPMENT_LABEL[equipment]}` : ""} · {effKind === "compound" ? `Compound (${PATTERN_LABEL[effPattern]})` : "Isolation"}
+          {equipment ? ` · ${EQUIPMENT_LABEL[equipment]}` : ""} · {measure === "time" ? "Weight × time" : effKind === "compound" ? `Compound (${PATTERN_LABEL[effPattern]})` : "Isolation"}
         </p>
       </div>
       {tried && missing && <p className="text-sm mt-4" role="alert" style={{ color: "var(--ink-deep)" }} data-testid="text-custom-error">{missing}</p>}

@@ -4,15 +4,16 @@ import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
 import { e1rm, fmtDate, fmtW, roundTo, sessionVolume } from "@/lib/engine";
 import { freeLog } from "@/lib/derived";
-import { EX } from "@/lib/exercises";
+import { EX, fmtReps, isTimed } from "@/lib/exercises";
 import type { ExerciseLog, Session, SetKind, SetLog, SetPart, Units } from "@/lib/types";
 import { Seg, Sheet, Stepper } from "@/components/ui";
 import { ExercisePicker } from "@/components/ProgramEditor";
 
 export const KIND_LABEL: Record<SetKind, string> = { drop: "Drop set", restpause: "Rest-pause" };
 
-/** "185 × 8 → 135 × 6" for drop sets, "185 × 8 + 3 + 2" for rest-pause, "185 × 8" otherwise. */
-export function fmtSet(x: SetLog, sep = " × "): string {
+/** "185 × 8 → 135 × 6" for drop sets, "185 × 8 + 3 + 2" for rest-pause, "185 × 8" otherwise; "100 × 45 s" for carries and holds. */
+export function fmtSet(x: SetLog, sep = " × ", exId?: string): string {
+  if (exId && isTimed(exId)) return x.weight > 0 ? `${fmtW(x.weight)}${sep}${fmtReps(exId, x.reps)}` : fmtReps(exId, x.reps);
   const main = `${fmtW(x.weight)}${sep}${x.reps}`;
   if (!x.kind || !x.parts?.length) return main;
   if (x.kind === "restpause") return `${main} + ${x.parts.map((p) => p.reps).join(" + ")}`;
@@ -20,6 +21,14 @@ export function fmtSet(x: SetLog, sep = " × "): string {
 }
 
 const stepFor = (units: Units) => (units === "lb" ? 5 : 2.5);
+
+/** The set a feed post shows for an exercise: best estimated max, or for carries and holds the heaviest, then longest. */
+export function topSetFor(l: ExerciseLog, units: Units): { name: string; weight: number; reps: number; units: Units; timed?: boolean } {
+  const timed = isTimed(l.exId);
+  const score = (x: SetLog) => (timed ? x.weight * 1000 + x.reps : e1rm(x.weight, x.reps));
+  const b = l.sets.reduce((x, y) => (score(y) > score(x) ? y : x), l.sets[0]);
+  return { name: EX[l.exId].name, weight: b.weight, reps: b.reps, units, ...(timed ? { timed: true } : {}) };
+}
 
 /** Starting rows when someone switches a set to a drop set (one drop, ~25% lighter) or rest-pause (two mini-sets). */
 export function defaultParts(kind: SetKind, weight: number, reps: number, inc: number): SetPart[] {
@@ -76,9 +85,10 @@ export function SetTypeFields({ kind, parts, weight, reps, inc, units, onChange,
 }
 
 /** Fix a set that was logged wrong: weight, reps, set type, effort and quality, or delete it. */
-export function EditSetSheet({ title, initial, units, inc, onSave, onDelete, onClose }: {
-  title: string; initial: SetLog; units: Units; inc?: number; onSave: (s: SetLog) => void; onDelete?: () => void; onClose: () => void;
+export function EditSetSheet({ title, initial, units, inc, exId, onSave, onDelete, onClose }: {
+  title: string; initial: SetLog; units: Units; inc?: number; exId?: string; onSave: (s: SetLog) => void; onDelete?: () => void; onClose: () => void;
 }) {
+  const timed = !!exId && isTimed(exId);
   const step = inc ?? stepFor(units);
   const [w, setW] = useState(initial.weight);
   const [reps, setReps] = useState(initial.reps);
@@ -93,9 +103,9 @@ export function EditSetSheet({ title, initial, units, inc, onSave, onDelete, onC
       <div className="stack" style={{ gap: 12 }}>
         <div className="grid grid-cols-2 gap-3">
           <div className="field"><span className="label">Weight ({units})</span><Stepper value={w} step={step} unit={units} onChange={setW} testId="stepper-edit-weight" /></div>
-          <div className="field"><span className="label">Reps</span><Stepper value={reps} step={1} min={0} max={100} decimals={0} unit="reps" onChange={setReps} testId="stepper-edit-reps" /></div>
+          <div className="field"><span className="label">{timed ? "Time" : "Reps"}</span><Stepper value={reps} step={timed ? 5 : 1} min={0} max={timed ? 900 : 100} decimals={0} unit={timed ? "s" : "reps"} onChange={setReps} testId="stepper-edit-reps" /></div>
         </div>
-        <SetTypeFields kind={kind} parts={parts} weight={w} reps={reps} inc={step} units={units} onChange={(k, p) => { setKind(k); setParts(p); }} testId="edit-set" />
+        {!timed && <SetTypeFields kind={kind} parts={parts} weight={w} reps={reps} inc={step} units={units} onChange={(k, p) => { setKind(k); setParts(p); }} testId="edit-set" />}
         <div className="field"><span className="label">Reps in reserve (optional)</span>
           <Seg className="seg-num" value={rir ?? -1} onChange={(v) => setRir(v === -1 ? null : v)} options={[{ v: -1, l: "–" }, { v: 0, l: "0" }, { v: 1, l: "1" }, { v: 2, l: "2" }, { v: 3, l: "3" }, { v: 4, l: "4" }]} testId="seg-edit-rir" />
         </div>
@@ -117,12 +127,12 @@ export function EditSetSheet({ title, initial, units, inc, onSave, onDelete, onC
 }
 
 /** One logged set as a tappable row. Tapping opens the editor. */
-export function SetRow({ set: st, n, onEdit, testId }: { set: SetLog; n: number; onEdit: () => void; testId: string }) {
+export function SetRow({ set: st, n, onEdit, testId, exId }: { set: SetLog; n: number; onEdit: () => void; testId: string; exId?: string }) {
   return (
     <button type="button" className="w-full flex items-center gap-3 text-left text-[15px]" style={{ minHeight: 44, borderTop: "1px solid var(--line)" }} onClick={onEdit} aria-label={`Edit set ${n}`} data-testid={testId}>
       <span className="muted w-12 shrink-0">Set {n}</span>
       <span className="mono flex-1 min0">
-        <b>{fmtSet(st)}</b>
+        <b>{fmtSet(st, " × ", exId)}</b>
         {st.kind && <span className="chip ml-2" style={{ fontFamily: "var(--font-sans)" }}>{KIND_LABEL[st.kind]}</span>}
         {st.rir != null && <span className="muted"> · {st.rir} RIR</span>}{st.quality != null && <span className="muted"> · Q{st.quality}</span>}
       </span>
@@ -152,7 +162,7 @@ export function EditWorkoutSheet({ session, onClose }: { session: Session; onClo
       // Keep this workout's own feed post in step with the fixed numbers.
       feed: st.feed.map((p) => (p.sessionId === session.id && p.author === "me" ? {
         ...p, sessionName: done.dayName,
-        topSets: done.exercises.slice(0, 3).map((l) => { const b = l.sets.reduce((x, y) => (e1rm(y.weight, y.reps) > e1rm(x.weight, x.reps) ? y : x), l.sets[0]); return { name: EX[l.exId].name, weight: b.weight, reps: b.reps, units: u }; }),
+        topSets: done.exercises.filter((l) => l.sets.length).slice(0, 3).map((l) => topSetFor(l, u)),
       } : p)),
     }));
     ui.toast("Workout updated");
@@ -180,7 +190,7 @@ export function EditWorkoutSheet({ session, onClose }: { session: Session; onClo
               <span className="font-semibold min0">{EX[l.exId]?.name ?? l.exId}</span>
               <button className="icon-btn" style={{ width: 40, height: 40, border: 0 }} aria-label={`Remove ${EX[l.exId]?.name ?? "exercise"}`} onClick={() => setDraft((d) => ({ ...d, exercises: d.exercises.filter((_, i) => i !== e) }))} data-testid={`button-edit-remove-exercise-${e}`}><Trash2 size={15} /></button>
             </div>
-            {l.sets.map((st, i) => <SetRow key={i} set={st} n={i + 1} onEdit={() => setEditing({ e, s: i })} testId={`row-edit-set-${e}-${i}`} />)}
+            {l.sets.map((st, i) => <SetRow key={i} set={st} n={i + 1} exId={l.exId} onEdit={() => setEditing({ e, s: i })} testId={`row-edit-set-${e}-${i}`} />)}
             {l.sets.length === 0 && <p className="text-[13px] muted" style={{ borderTop: "1px solid var(--line)", paddingTop: 8 }}>No sets. Add one, or it's dropped when you save.</p>}
             <button className="btn btn-sm btn-ghost mt-1" style={{ paddingLeft: 0 }} onClick={() => setEditing({ e, s: null })} data-testid={`button-edit-add-set-${e}`}><Plus size={14} /> Add a set</button>
           </div>
@@ -207,6 +217,7 @@ export function EditWorkoutSheet({ session, onClose }: { session: Session; onClo
           title={`${editing.s == null ? "Add set" : `Set ${editing.s + 1}`} · ${EX[ed.exId]?.name ?? ""}`}
           initial={editing.s == null ? blank(ed) : ed.sets[editing.s]}
           units={u}
+          exId={ed.exId}
           onSave={(x) => updEx(editing.e, (l) => ({ ...l, sets: editing.s == null ? [...l.sets, x] : l.sets.map((y, j) => (j === editing.s ? x : y)) }))}
           onDelete={editing.s == null ? undefined : () => updEx(editing.e, (l) => ({ ...l, sets: l.sets.filter((_, j) => j !== editing.s) }))}
           onClose={() => setEditing(null)}

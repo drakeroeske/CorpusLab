@@ -5,6 +5,10 @@ const E = (
   equipment: Exercise["equipment"], pattern: Exercise["pattern"], ratio: number,
 ): Exercise => ({ id, name, primary, secondary, ...(stabilizers.length ? { stabilizers } : {}), equipment, pattern, ratio });
 
+/** A carry or hold: logged as weight × seconds. */
+const T = (id: string, name: string, primary: Muscle[], secondary: Muscle[], stabilizers: Muscle[], equipment: Exercise["equipment"], ratio: number): Exercise =>
+  ({ ...E(id, name, primary, secondary, stabilizers, equipment, "hold", ratio), measure: "time" });
+
 // Shorthands for muscles that always move together in a lift.
 const BI: Muscle[] = ["biceps_long", "biceps_short"];
 const ELBOW_FLEX: Muscle[] = [...BI, "brachialis"];
@@ -104,6 +108,17 @@ export const EXERCISES: Exercise[] = [
   E("burpee", "Burpee", ["chest_mid", "vasti"], ["front_delts", "triceps_lateral", "glute_max", "abs", "hip_flexors"], ["obliques", "gastrocnemius", "triceps_long"], "bodyweight", "isolation", 1),
   E("toes_to_bar", "Toes-to-Bar", ["abs", "hip_flexors"], ["obliques", "lats", "forearms"], ["triceps_long", "mid_back"], "bodyweight", "isolation", 1),
   E("double_under", "Double-Under", ["gastrocnemius", "soleus"], ["front_delts", "forearms"], [...BRACE, "vasti"], "bodyweight", "isolation", 1),
+  // Carries & holds: weight × time. A set's reps field holds seconds.
+  T("farmers_carry", "Farmer's Carry", ["forearms", "traps_upper"], ["glute_med", "obliques", "abs", "mid_back"], ["vasti", "glute_max", "lower_back", "gastrocnemius"], "dumbbell", 1),
+  T("trap_bar_carry", "Trap Bar Carry", ["forearms", "traps_upper"], ["glute_med", "obliques", "abs", "vasti", "glute_max"], ["lower_back", "mid_back", "gastrocnemius"], "barbell", 2.2),
+  T("suitcase_carry", "Suitcase Carry", ["obliques", "forearms"], ["glute_med", "traps_upper", "abs"], ["lower_back", "mid_back"], "dumbbell", 0.8),
+  T("overhead_carry", "Overhead Carry", ["front_delts", "side_delts"], ["triceps_lateral", "traps_upper", "abs", "obliques"], ["forearms", "mid_back", "triceps_long"], "dumbbell", 0.4),
+  T("sled_push", "Sled Push", ["vasti", "glute_max"], ["gastrocnemius", "soleus", "hamstrings", "rectus_femoris"], [...BRACE, "front_delts", "triceps_lateral"], "machine", 3),
+  T("plank", "Plank", ["abs"], ["obliques"], ["front_delts", "glute_max", "vasti", "chest_mid"], "bodyweight", 1),
+  T("side_plank", "Side Plank", ["obliques"], ["glute_med", "abs"], ["side_delts", "adductors"], "bodyweight", 1),
+  T("dead_hang", "Dead Hang", ["forearms"], ["lats"], ["rear_delts", "mid_back", "abs"], "bodyweight", 1),
+  T("wall_sit", "Wall Sit", ["vasti"], ["glute_max", "rectus_femoris"], ["adductors", "abs"], "bodyweight", 1),
+  T("hollow_hold", "Hollow Body Hold", ["abs", "hip_flexors"], ["obliques"], ["rectus_femoris"], "bodyweight", 1),
   E("shrug", "Dumbbell Shrug", ["traps_upper"], ["forearms"], ["mid_back"], "dumbbell", "isolation", 1),
 ];
 
@@ -275,10 +290,23 @@ export function upgradeExerciseMuscles<T extends Exercise>(e: T): T {
 
 export const PATTERN_LABEL: Record<Exercise["pattern"], string> = {
   squat: "Squat", hinge: "Hinge", horizontal_push: "Horizontal push", vertical_push: "Vertical push",
-  horizontal_pull: "Horizontal pull", vertical_pull: "Vertical pull", isolation: "Isolation",
+  horizontal_pull: "Horizontal pull", vertical_pull: "Vertical pull", isolation: "Isolation", hold: "Carries & holds",
 };
 
-export const isCompound = (ex: Exercise) => ex.pattern !== "isolation";
+export const isCompound = (ex: Exercise) => ex.pattern !== "isolation" && ex.pattern !== "hold";
+
+/** Logged as weight × seconds (carries, planks, hangs): a set's reps field holds seconds. */
+export const isTimed = (ex: Exercise | string | undefined | null): boolean => {
+  const e = typeof ex === "string" ? REGISTRY[ex] ?? BUILT_IN[ex] : ex;
+  return e?.measure === "time";
+};
+/** "45 s" for timed exercises, "8" for reps; long holds read "1:30". */
+export function fmtReps(ex: Exercise | string | undefined | null, n: number): string {
+  if (!isTimed(ex)) return String(n);
+  return n >= 90 ? `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}` : `${n} s`;
+}
+/** The unit word for the rep field: "reps" or "s". */
+export const repUnit = (ex: Exercise | string | undefined | null) => (isTimed(ex) ? "s" : "reps");
 export const EQUIPMENT_LABEL: Record<Exercise["equipment"], string> = {
   barbell: "Barbell", dumbbell: "Dumbbell", machine: "Machine", cable: "Cable", bodyweight: "Bodyweight", smith: "Smith machine", kettlebell: "Kettlebell",
 };

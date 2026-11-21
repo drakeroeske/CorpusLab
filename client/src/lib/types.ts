@@ -17,7 +17,9 @@ export type Muscle =
 export type LegacyMuscle = "chest" | "shoulders" | "triceps" | "biceps" | "upper_back" | "glutes" | "quads" | "calves";
 
 export type Pattern =
-  | "squat" | "hinge" | "horizontal_push" | "vertical_push" | "horizontal_pull" | "vertical_pull" | "isolation";
+  | "squat" | "hinge" | "horizontal_push" | "vertical_push" | "horizontal_pull" | "vertical_pull" | "isolation"
+  /** Loaded carries and isometric holds, logged as weight × time. */
+  | "hold";
 
 export type Equipment = "barbell" | "dumbbell" | "machine" | "cable" | "bodyweight" | "smith" | "kettlebell";
 
@@ -40,6 +42,8 @@ export interface Exercise {
   ratio: number;
   /** Optional cues or setup notes on a custom exercise. */
   notes?: string;
+  /** "time": logged as weight × seconds (carries, planks, hangs). A set's `reps` then holds seconds. Missing = reps. */
+  measure?: "reps" | "time";
 }
 
 export type ProgressionStyle = "double" | "straight";
@@ -281,7 +285,8 @@ export interface FeedPost {
   author: string; // spotter id or "me"
   ts: number;
   sessionName: string;
-  topSets: { name: string; weight: number; reps: number; units: Units }[];
+  /** timed: reps holds seconds (carries, holds). */
+  topSets: { name: string; weight: number; reps: number; units: Units; timed?: boolean }[];
   prs: string[];
   durationMin: number;
   likes: string[];

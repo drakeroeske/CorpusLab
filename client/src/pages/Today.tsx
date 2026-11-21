@@ -8,7 +8,7 @@ import { newSession, prescriptionsFor, sessionSummary, useToday } from "@/lib/de
 import { StartWorkoutSheet } from "@/components/StartWorkout";
 import { TodayGoals } from "@/components/Goals";
 import { addDays, fmtDate, fmtW, proteinByDate, caloriesByDate, calTargetFor, isCutting } from "@/lib/engine";
-import { EX, MUSCLE_LABEL, newId } from "@/lib/exercises";
+import { EX, MUSCLE_LABEL, isTimed, newId } from "@/lib/exercises";
 import { Bar } from "@/components/ui";
 import { EngineHeader, Tag } from "@/components/riso";
 import { ReadinessRing } from "@/components/ReadinessRing";
@@ -188,7 +188,7 @@ export default function Today() {
                           <div className="font-semibold text-[14px]">{ex.name}</div>
                           <div className="text-[12px] muted flex items-center flex-wrap">{rx.sets} sets · {rx.rir} RIR{hot.length > 0 && <>&nbsp;· {MUSCLE_LABEL[hot[0]]} still {t.fatigue[hot[0]]}% fatigued</>}</div>
                         </td>
-                        <td className="r font-bold" data-testid={`text-rx-${pe.id}`}>{rx.weight > 0 ? `${fmtW(rx.weight)} × ${rx.repMin}–${rx.repMax}` : `BW × ${rx.repMin}–${rx.repMax}`}</td>
+                        <td className="r font-bold" data-testid={`text-rx-${pe.id}`}>{`${rx.weight > 0 ? fmtW(rx.weight) : "BW"} × ${rx.repMin}–${rx.repMax}${isTimed(pe.exId) ? " s" : ""}`}</td>
                       </tr>
                     );
                   })}

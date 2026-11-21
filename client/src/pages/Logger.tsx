@@ -16,11 +16,11 @@ import { SaveAsWorkoutSheet } from "@/components/SavedWorkouts";
 import { ExercisePicker } from "@/components/ProgramEditor";
 import { Tag } from "@/components/riso";
 import { e1rm, fmtDate, fmtW, jumpFor, logsForPe, platesPerSide, prescribe, restDefault, substitutes, warmupSets, type Prescription } from "@/lib/engine";
-import { EX, MUSCLE_LABEL, isCompound, newId } from "@/lib/exercises";
+import { EX, MUSCLE_LABEL, isCompound, newId, fmtReps, isTimed } from "@/lib/exercises";
 import type { ExerciseLog, FeedPost, ProgramExercise, Session, SetKind, SetPart, Units } from "@/lib/types";
 import { Seg, Sheet, Stepper } from "@/components/ui";
 import { PRCardSheet, type PRData } from "@/components/PRCard";
-import { EditSetSheet, KIND_LABEL, SetRow, SetTypeFields, defaultParts, normalizeSet } from "@/components/SetEditor";
+import { EditSetSheet, KIND_LABEL, SetRow, SetTypeFields, defaultParts, normalizeSet, topSetFor } from "@/components/SetEditor";
 import { afterSupersetSet, linkSuperset, supersetGroup, unlinkSuperset } from "@/lib/superset";
 
 const mmss = (s: number) => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.max(0, Math.floor(s) % 60)).padStart(2, "0")}`;
@@ -73,6 +73,7 @@ function FocusExercise({ log, idx, rx, pe, fatigue, isFirstCompound, nextName, o
   const ui = useUI();
   const u = profile.units;
   const ex = EX[log.exId];
+  const timed = isTimed(log.exId);
   const subbed = log.exId !== log.originalExId;
   const subs = substitutes(log.originalExId, rx.weight, pe.increment || 5).filter((c) => c.ex.id !== log.exId);
   const target = log.targetWeight;
@@ -123,8 +124,8 @@ function FocusExercise({ log, idx, rx, pe, fatigue, isFirstCompound, nextName, o
       {subbed && <div className="text-[13px] muted mt-0.5">Swapped in for {EX[log.originalExId].name}</div>}
       {supersetWith && <div className="text-[13px] mt-1 flex items-center gap-1" data-testid={`text-superset-${idx}`}><Link2 size={13} /> Superset with {supersetWith.join(" and ")}</div>}
       <div className="mono text-[17px] mt-2" data-testid={`text-target-${idx}`}>
-        <b>{target > 0 ? `${fmtW(target)} ${u}` : ex.equipment === "bodyweight" ? "Body weight" : rx.decision === "start" ? "Your pick" : "Body weight"}</b> × {rx.repMin}–{rx.repMax}
-        <span className="muted text-[14px]" style={{ fontFamily: "var(--font-sans)" }}> · {rx.sets} sets · <Term k="rir">{rx.rir} RIR</Term></span>
+        <b>{target > 0 ? `${fmtW(target)} ${u}` : ex.equipment === "bodyweight" ? "Body weight" : rx.decision === "start" ? "Your pick" : "Body weight"}</b> × {rx.repMin}–{rx.repMax}{timed ? " s" : ""}
+        <span className="muted text-[14px]" style={{ fontFamily: "var(--font-sans)" }}> · {rx.sets} sets{timed ? "" : <> · <Term k="rir">{rx.rir} RIR</Term></>}</span>
       </div>
 
       {/* Tools that matter before or between sets. */}
@@ -137,16 +138,20 @@ function FocusExercise({ log, idx, rx, pe, fatigue, isFirstCompound, nextName, o
 
       {log.sets.length > 0 && (
         <div className="mt-3">
-          {log.sets.map((st, i) => <SetRow key={i} set={st} n={i + 1} onEdit={() => setEditSet(i)} testId={`row-set-${idx}-${i}`} />)}
+          {log.sets.map((st, i) => <SetRow key={i} set={st} n={i + 1} exId={log.exId} onEdit={() => setEditSet(i)} testId={`row-set-${idx}-${i}`} />)}
           <p className="text-[12px] faint mt-1">Tap a set to fix it or change its type.</p>
         </div>
       )}
 
       <div className="grid grid-cols-2 gap-3 mt-4">
         <div className="field"><span className="label">Weight ({u})</span><Stepper value={w} step={inc} unit={u} onChange={setW} testId={`stepper-weight-${idx}`} /></div>
-        <div className="field"><span className="label">Reps · aim for {rx.repGoal}</span><Stepper value={reps} step={1} min={0} max={100} unit="reps" decimals={0} onChange={setReps} testId={`stepper-reps-${idx}`} /></div>
+        {timed
+          ? <div className="field"><span className="label">Time · aim for {fmtReps(log.exId, rx.repGoal)}</span><Stepper value={reps} step={5} min={0} max={900} unit="s" decimals={0} onChange={setReps} testId={`stepper-reps-${idx}`} /></div>
+          : <div className="field"><span className="label">Reps · aim for {rx.repGoal}</span><Stepper value={reps} step={1} min={0} max={100} unit="reps" decimals={0} onChange={setReps} testId={`stepper-reps-${idx}`} /></div>}
       </div>
-      <div className="mt-3"><SetTypeFields kind={kind} parts={parts} weight={w} reps={reps} inc={inc} units={u} onChange={(k, p) => { setKind(k); setParts(p); }} testId={`set-type-${idx}`} /></div>
+      {timed
+        ? <p className="text-xs faint mt-2" data-testid={`text-timed-hint-${idx}`}>{ex.equipment === "bodyweight" ? "Bodyweight: leave weight at 0, or add the plate or vest you used." : "Weight per hand for dumbbells and kettlebells."} When every set reaches {fmtReps(log.exId, rx.repMax)}, the weight goes up next time.</p>
+        : <div className="mt-3"><SetTypeFields kind={kind} parts={parts} weight={w} reps={reps} inc={inc} units={u} onChange={(k, p) => { setKind(k); setParts(p); }} testId={`set-type-${idx}`} /></div>}
 
       <button className="btn btn-sm btn-ghost mt-2" style={{ paddingLeft: 0, whiteSpace: "normal", textAlign: "left" }} onClick={() => setMore(!more)} aria-expanded={more} data-testid={`button-more-${idx}`}>
         {more ? <ChevronDown size={16} /> : <ChevronRight size={16} />} More: effort, set quality, why this target
@@ -166,7 +171,7 @@ function FocusExercise({ log, idx, rx, pe, fatigue, isFirstCompound, nextName, o
       )}
 
       <button className={`btn btn-lg btn-block mt-3 ${done ? "btn-outline" : "btn-primary"}`} onClick={logSet} data-testid={`button-log-set-${idx}`}>
-        <Check size={18} /> {done ? (kind ? `Log an extra ${KIND_LABEL[kind].toLowerCase()}` : "Log an extra set") : kind ? `Log ${KIND_LABEL[kind].toLowerCase()}` : `Log set ${log.sets.length + 1}`} · <span className="mono">{fmtW(w)} × {reps}{kind && parts.length ? ` + ${parts.length} ${kind === "drop" ? (parts.length === 1 ? "drop" : "drops") : (parts.length === 1 ? "mini-set" : "mini-sets")}` : ""}</span>
+        <Check size={18} /> {done ? (kind ? `Log an extra ${KIND_LABEL[kind].toLowerCase()}` : "Log an extra set") : kind ? `Log ${KIND_LABEL[kind].toLowerCase()}` : `Log set ${log.sets.length + 1}`} · <span className="mono">{fmtW(w)} × {timed ? fmtReps(log.exId, reps) : reps}{kind && parts.length ? ` + ${parts.length} ${kind === "drop" ? (parts.length === 1 ? "drop" : "drops") : (parts.length === 1 ? "mini-set" : "mini-sets")}` : ""}</span>
       </button>
       {done && nextName && <button className="btn btn-lg btn-block btn-primary mt-2" onClick={onNext} data-testid="button-next-exercise">Next: {nextName} <ChevronRight size={18} /></button>}
       {pe.technique && !techKind && log.sets.length === rx.sets - 1 && <p className="text-xs blue mt-2">Last set: {pe.technique === "drop" ? "drop set — strip ~25% and continue to near failure" : pe.technique === "restpause" ? "rest-pause — 15s rest, 2 mini-sets" : "take this set to failure"}.</p>}
@@ -185,7 +190,7 @@ function FocusExercise({ log, idx, rx, pe, fatigue, isFirstCompound, nextName, o
         </Sheet>
       )}
       {editSet != null && log.sets[editSet] && (
-        <EditSetSheet title={`Set ${editSet + 1} · ${ex.name}`} initial={log.sets[editSet]} units={u} inc={inc}
+        <EditSetSheet title={`Set ${editSet + 1} · ${ex.name}`} initial={log.sets[editSet]} units={u} inc={inc} exId={log.exId}
           onSave={(x) => { updLog((l) => ({ ...l, sets: l.sets.map((y, j) => (j === editSet ? x : y)) })); ui.toast("Set updated"); }}
           onDelete={() => { updLog((l) => ({ ...l, sets: l.sets.filter((_, j) => j !== editSet) })); ui.toast("Set deleted"); }}
           onClose={() => setEditSet(null)} />
@@ -364,8 +369,8 @@ export default function Logger() {
             <div className="label mb-2">Personal records</div>
             {sum.prs.map((p) => (
               <div key={p.exId} className="rowline">
-                <div className="min0"><div className="font-semibold text-sm">{EX[p.exId].name}</div><div className="mono text-xs muted">{fmtW(p.weight)} × {p.reps} · e1RM {Math.round(p.e1rm)} {u}</div></div>
-                <button className="btn btn-sm btn-primary" onClick={() => setPr({ lift: EX[p.exId].name, weight: p.weight, reps: p.reps, e1rm: p.e1rm, units: u, why: prWhyStat(state, summary.date, targets.protein), name: profile.name, date: fmtDate(summary.date, { month: "short", day: "numeric", year: "numeric" }) })} data-testid={`button-pr-card-${p.exId}`}>PR card</button>
+                <div className="min0"><div className="font-semibold text-sm">{EX[p.exId].name}</div><div className="mono text-xs muted">{isTimed(p.exId) ? `${p.weight > 0 ? `${fmtW(p.weight)} ${u} × ` : ""}${fmtReps(p.exId, p.reps)} · longest at that weight` : `${fmtW(p.weight)} × ${p.reps} · e1RM ${Math.round(p.e1rm)} ${u}`}</div></div>
+                {!isTimed(p.exId) && <button className="btn btn-sm btn-primary" onClick={() => setPr({ lift: EX[p.exId].name, weight: p.weight, reps: p.reps, e1rm: p.e1rm, units: u, why: prWhyStat(state, summary.date, targets.protein), name: profile.name, date: fmtDate(summary.date, { month: "short", day: "numeric", year: "numeric" }) })} data-testid={`button-pr-card-${p.exId}`}>PR card</button>}
               </div>
             ))}
           </div>
@@ -408,7 +413,7 @@ export default function Logger() {
       const sum = sessionSummary({ ...st, sessions: st.sessions }, done);
       const post: FeedPost = {
         id: newId("post"), author: "me", ts: done.end!, sessionName: done.dayName, sessionId: done.id,
-        topSets: done.exercises.slice(0, 3).map((l) => { const b = l.sets.reduce((x, y) => (e1rm(y.weight, y.reps) > e1rm(x.weight, x.reps) ? y : x), l.sets[0]); return { name: EX[l.exId].name, weight: b.weight, reps: b.reps, units: u }; }),
+        topSets: done.exercises.filter((l) => l.sets.length).slice(0, 3).map((l) => topSetFor(l, u)),
         prs: sum.prs.map((p) => EX[p.exId].name), durationMin: sum.dur, likes: [], comments: [],
       };
       if (auth.live && !auth.viewing && auth.me?.shareFeed) {

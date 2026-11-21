@@ -6,7 +6,7 @@ import type {
   Activity, AppState, CalorieSplitMode, CheckIn, Exercise, ExerciseLog, Goal, Meal, Muscle, Profile, Program, ProgramDay,
   ProgramExercise, Session, SetLog, Sex, Spotter, Units, Experiment,
 } from "./types";
-import { EX, EXERCISES, MUSCLES, MUSCLE_LABEL, MAIN_LIFTS, allExercises, isCompound, muscleShares } from "./exercises";
+import { EX, EXERCISES, MUSCLES, MUSCLE_LABEL, MAIN_LIFTS, allExercises, isCompound, muscleShares, fmtReps, isTimed } from "./exercises";
 import { loadScore, readinessBand, trainingLoadInputs, type LoadSession } from "./readiness";
 import { activityLoadSessions, activityMuscleLoad, trainedDates } from "./activities";
 import { warmupRate } from "./warmups";
@@ -49,8 +49,9 @@ export function linreg(points: { x: number; y: number }[]) {
 /** Epley: weight × (1 + reps/30) */
 export const e1rm = (w: number, reps: number) => (reps <= 0 ? 0 : reps === 1 ? w : w * (1 + reps / 30));
 
+/** Best estimated 1RM in a log. Timed exercises (carries, holds) have none: their reps field is seconds. */
 export const logBestE1rm = (log: ExerciseLog) =>
-  log.sets.reduce((m, s) => Math.max(m, e1rm(s.weight * log.equivFactor, s.reps)), 0);
+  isTimed(log.originalExId) || isTimed(log.exId) ? 0 : log.sets.reduce((m, s) => Math.max(m, e1rm(s.weight * log.equivFactor, s.reps)), 0);
 
 /* =========================== progression =========================== */
 export type Decision = "start" | "increase" | "add_rep" | "hold" | "reduce";
@@ -130,11 +131,12 @@ export function prescribe(pe: ProgramExercise, logs: ExerciseLog[], readiness: n
   let rir = pe.technique === "failure" ? 0 : isCompound(ex) ? 2 : 1;
   const u = units;
   let why = "";
-  const last = st.last ? `${fmtW(st.last.weight)}×${st.last.reps}` : "";
+  const timed = isTimed(ex);
+  const last = st.last ? `${fmtW(st.last.weight)}×${fmtReps(ex, st.last.reps)}` : "";
   switch (st.decision) {
     case "start": why = `First session — start conservative at ${fmtW(weight)} ${u}`; break;
     case "increase": why = `Hit ${last} (top of range) → +${fmtW(jumpFor(pe, st.baseWeight))} ${u} (${pe.incrementPct ?? DEFAULT_INC_PCT}%)`; break;
-    case "add_rep": why = st.last && st.last.reps >= pe.repMax ? `Hit ${last} but it was a grind → same weight, make it clean first` : `Last ${last} within range → same weight, aim ${st.repGoal} reps`; break;
+    case "add_rep": why = st.last && st.last.reps >= pe.repMax ? `Hit ${last} but it was a grind → same weight, make it clean first` : `Last ${last} within range → same weight, aim ${timed ? fmtReps(ex, st.repGoal) : `${st.repGoal} reps`}`; break;
     case "hold": why = `Last ${last} below range → hold; one more miss triggers −10%`; break;
     case "reduce": why = `Below range 2 sessions running → reset −10% to ${fmtW(weight)} ${u}`; break;
   }
@@ -274,6 +276,7 @@ export function logsForPe(sessions: Session[], peId: string): ExerciseLog[] {
 /** e1RM per session for an exercise (by original exercise id) */
 export function e1rmSeries(sessions: Session[], exId: string): { date: string; e1rm: number; ts: number }[] {
   const out: { date: string; e1rm: number; ts: number }[] = [];
+  if (isTimed(exId)) return out;
   for (const s of [...sessions].filter((s) => s.end).sort((a, b) => a.start - b.start)) {
     const logs = s.exercises.filter((e) => e.originalExId === exId && e.sets.length);
     if (!logs.length) continue;
@@ -296,6 +299,15 @@ export function sessionPRs(sessions: Session[], session: Session): { exId: strin
   for (const log of session.exercises) {
     if (!log.sets.length || seen.has(log.originalExId)) continue;
     seen.add(log.originalExId);
+    if (isTimed(log.originalExId)) {
+      // A timed record is a weight-and-time combination never matched before: heavier for as long, or longer at that weight or more.
+      const before = earlier.flatMap((s) => s.exercises.filter((e) => e.originalExId === log.originalExId).flatMap((e) => e.sets.map((x) => ({ w: x.weight * e.equivFactor, t: x.reps }))));
+      if (!before.length) continue;
+      const rec = log.sets.filter((x) => x.reps > 0 && !before.some((b) => b.w >= x.weight * log.equivFactor && b.t >= x.reps))
+        .sort((a, b) => b.weight - a.weight || b.reps - a.reps)[0];
+      if (rec) out.push({ exId: log.originalExId, e1rm: 0, weight: rec.weight, reps: rec.reps });
+      continue;
+    }
     const prev = Math.max(0, ...earlier.flatMap((s) => s.exercises.filter((e) => e.originalExId === log.originalExId && e.sets.length).map(logBestE1rm)));
     const best = log.sets.reduce((b, s) => (e1rm(s.weight * log.equivFactor, s.reps) > e1rm(b.weight * log.equivFactor, b.reps) ? s : b), log.sets[0]);
     const v = e1rm(best.weight * log.equivFactor, best.reps);
@@ -379,7 +391,8 @@ export function weeklySets(sessions: Session[], from: string, to: string): Recor
 }
 /** Weight × reps for a whole set, including any drops or rest-pause mini-sets. */
 export const setVolume = (x: SetLog) => x.weight * x.reps + (x.parts ?? []).reduce((a, p) => a + p.weight * p.reps, 0);
-export const sessionVolume = (s: Session) => s.exercises.reduce((a, l) => a + l.sets.reduce((b, x) => b + setVolume(x), 0), 0);
+/** Weight × reps lifted. Timed sets (carries, holds) aren't reps, so they're left out. */
+export const sessionVolume = (s: Session) => s.exercises.reduce((a, l) => a + (isTimed(l.exId) ? 0 : l.sets.reduce((b, x) => b + setVolume(x), 0)), 0);
 export const VOLUME_RANGE = { min: 10, max: 20 };
 
 /* =========================== plateau & deload =========================== */

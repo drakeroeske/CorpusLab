@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ArrowDown, ArrowUp, BookmarkPlus, ChevronDown, ChevronRight, Copy, GripVertical, Plus, Trash2 } from "lucide-react";
 import { moveItem, useDragReorder } from "./DragList";
 import type { Program, ProgramDay, ProgramExercise, Units } from "@/lib/types";
-import { EX, isCompound, newId } from "@/lib/exercises";
+import { EX, isCompound, newId, isTimed } from "@/lib/exercises";
 import { ExerciseCatalog } from "./ExerciseCatalog";
 import { NumInput, Seg, Sheet } from "./ui";
 import { DEFAULT_INC_PCT, fmtW, jumpFor } from "@/lib/engine";
@@ -40,7 +40,7 @@ function ExerciseRow({ pe, units, onChange, onRemove, onMove, idx, total, itemPr
         <button className="flex-1 min0 flex items-center gap-3 text-left" style={{ padding: "10px 12px 10px 0", minHeight: 52 }} onClick={() => setOpen(!open)} data-testid={`toggle-exercise-${pe.id}`}>
           <div className="min0 flex-1">
             <div className="font-semibold truncate">{ex.name}</div>
-            <div className="mono text-xs muted">{pe.sets} × {pe.repMin}–{pe.repMax} · {pe.startWeight} {units} · +{pe.incrementPct ?? DEFAULT_INC_PCT}% (≈{fmtW(jumpFor(pe, pe.startWeight))} {units}){pe.technique ? ` · ${pe.technique}` : ""}</div>
+            <div className="mono text-xs muted">{pe.sets} × {pe.repMin}–{pe.repMax}{isTimed(pe.exId) ? " s" : ""} · {pe.startWeight} {units} · +{pe.incrementPct ?? DEFAULT_INC_PCT}% (≈{fmtW(jumpFor(pe, pe.startWeight))} {units}){pe.technique ? ` · ${pe.technique}` : ""}</div>
           </div>
           {open ? <ChevronDown size={16} className="muted shrink-0" /> : <ChevronRight size={16} className="muted shrink-0" />}
         </button>
@@ -49,8 +49,8 @@ function ExerciseRow({ pe, units, onChange, onRemove, onMove, idx, total, itemPr
         <div style={{ padding: "0 12px 12px" }} className="stack">
           <div className="grid grid-cols-3 gap-2">
             <NumField label="Sets" value={pe.sets} onChange={(v) => onChange({ ...pe, sets: Math.max(1, Math.round(v)) })} testId={`input-sets-${pe.id}`} />
-            <NumField label="Rep min" value={pe.repMin} onChange={(v) => onChange({ ...pe, repMin: Math.max(1, Math.round(v)) })} testId={`input-repmin-${pe.id}`} />
-            <NumField label="Rep max" value={pe.repMax} onChange={(v) => onChange({ ...pe, repMax: Math.max(pe.repMin, Math.round(v)) })} testId={`input-repmax-${pe.id}`} />
+            <NumField label={isTimed(pe.exId) ? "Seconds min" : "Rep min"} value={pe.repMin} onChange={(v) => onChange({ ...pe, repMin: Math.max(1, Math.round(v)) })} testId={`input-repmin-${pe.id}`} />
+            <NumField label={isTimed(pe.exId) ? "Seconds max" : "Rep max"} value={pe.repMax} onChange={(v) => onChange({ ...pe, repMax: Math.max(pe.repMin, Math.round(v)) })} testId={`input-repmax-${pe.id}`} />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <NumField label={`Start weight (${units})`} value={pe.startWeight} step={0.5} onChange={(v) => onChange({ ...pe, startWeight: v })} testId={`input-start-${pe.id}`} />
@@ -79,7 +79,7 @@ function ExerciseRow({ pe, units, onChange, onRemove, onMove, idx, total, itemPr
 export function newProgramExercise(exId: string, units: Units): ProgramExercise {
   const comp = isCompound(EX[exId]);
   return {
-    id: newId("pe"), exId, sets: 3, repMin: comp ? 6 : 10, repMax: comp ? 10 : 15, startWeight: 0,
+    id: newId("pe"), exId, sets: 3, repMin: isTimed(exId) ? 30 : comp ? 6 : 10, repMax: isTimed(exId) ? 60 : comp ? 10 : 15, startWeight: 0,
     increment: units === "lb" ? (["back_squat", "deadlift", "leg_press", "hip_thrust"].includes(exId) ? 10 : 5) : (comp ? 2.5 : 1.25),
     style: "double", technique: null,
   };
