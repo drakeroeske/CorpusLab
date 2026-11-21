@@ -7,7 +7,7 @@ import { useUI } from "@/App";
 import { newSession, prescriptionsFor, sessionSummary, useToday } from "@/lib/derived";
 import { StartWorkoutSheet } from "@/components/StartWorkout";
 import { TodayGoals } from "@/components/Goals";
-import { addDays, fmtDate, fmtW, proteinByDate, caloriesByDate, calTargetFor } from "@/lib/engine";
+import { addDays, fmtDate, fmtW, proteinByDate, caloriesByDate, calTargetFor, isCutting } from "@/lib/engine";
 import { EX, MUSCLE_LABEL, newId } from "@/lib/exercises";
 import { Bar } from "@/components/ui";
 import { EngineHeader, Tag } from "@/components/riso";
@@ -129,7 +129,9 @@ export default function Today() {
         {t.flags.length > 0 && (
           <section className="warn" data-testid="card-plateaus">
             <div className="inner">
-              <div className="font-bold flex items-center"><Term k="plateau">{t.flags.length === 1 ? "1 lift has stalled" : `${t.flags.length} lifts have stalled`}</Term></div>
+              <div className="font-bold flex items-center"><Term k="plateau">{t.flags.every((f) => f.kind === "cut_dropping" || f.kind === "protein") && isCutting(state)
+                ? (t.flags.length === 1 ? "1 lift is slipping" : `${t.flags.length} lifts are slipping`)
+                : (t.flags.length === 1 ? "1 lift has stalled" : `${t.flags.length} lifts have stalled`)}</Term></div>
               {t.flags.map((f) => (
                 <p key={f.exId} className="text-sm mt-1" data-testid={`card-plateau-${f.exId}`}><b>{EX[f.exId].name}.</b> {f.fix}</p>
               ))}

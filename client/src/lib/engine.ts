@@ -391,17 +391,25 @@ export function isPlateau(series: { e1rm: number }[]): boolean {
   return Math.max(...last3) <= priorBest * 1.002;
 }
 
-export interface PlateauFlag { exId: string; fix: string; kind: "deload" | "add_set" | "calories" | "protein" | "variation" }
+export interface PlateauFlag { exId: string; fix: string; kind: "deload" | "add_set" | "calories" | "protein" | "variation" | "cut_dropping" }
 let _proteinTarget = 0;
 /** set by the app so plateau fixes can reference protein adherence */
 export const setProteinTarget = (g: number) => { _proteinTarget = g; };
 
-export function plateauFix(ctx: { avgReadiness7: number | null; weeklySetsPrimary: number; weightSlopePerWeek: number; proteinHit?: number }): Omit<PlateauFlag, "exId"> {
-  if (ctx.avgReadiness7 != null && ctx.avgReadiness7 < 65) return { kind: "deload", fix: `Readiness has averaged ${Math.round(ctx.avgReadiness7)} — take a deload week (60% volume, same weights) to let fatigue clear.` };
-  if (ctx.weeklySetsPrimary < 12) return { kind: "add_set", fix: `Only ${r1(ctx.weeklySetsPrimary)} hard sets/week for this muscle — add 1 working set.` };
-  if (ctx.weightSlopePerWeek < -0.1) return { kind: "calories", fix: `Body weight is dropping while strength stalls — raise calories ~200 kcal/day.` };
-  if (ctx.proteinHit != null && ctx.proteinHit < 0.6) return { kind: "protein", fix: `Protein hit only ${Math.round(ctx.proteinHit * 100)}% of days in the last 2 weeks — get protein to target daily before changing the program.` };
-  return { kind: "variation", fix: "Recovery and volume look fine — swap to a close variation for 3 weeks or widen the rep range." };
+/**
+ * One change to suggest for a stalled (or, in a cut, dropping) lift.
+ * cutting = the user is deliberately losing weight: never suggest eating more; holding strength is the goal.
+ */
+export function plateauFix(ctx: { avgReadiness7: number | null; weeklySetsPrimary: number; weightSlopePerWeek: number; proteinHit?: number; cutting?: boolean }): Omit<PlateauFlag, "exId"> {
+  if (ctx.avgReadiness7 != null && ctx.avgReadiness7 < 65) return { kind: "deload", fix: `Readiness has averaged ${Math.round(ctx.avgReadiness7)}. Take a deload week (60% volume, same weights) to let fatigue clear.` };
+  if (ctx.cutting) {
+    if (ctx.proteinHit != null && ctx.proteinHit < 0.6) return { kind: "protein", fix: `Strength is slipping in your cut and protein hit only ${Math.round(ctx.proteinHit * 100)}% of days. Getting protein to target every day is the best way to hold on to muscle.` };
+    return { kind: "cut_dropping", fix: "Strength is slipping during your cut. Keep the weights heavy, keep protein at target, and consider a slightly slower rate of loss (for example, move your goal's deadline out). Holding strength is the aim here, not PRs." };
+  }
+  if (ctx.weeklySetsPrimary < 12) return { kind: "add_set", fix: `About ${Math.max(1, Math.round(ctx.weeklySetsPrimary))} hard set${Math.round(ctx.weeklySetsPrimary) === 1 ? "" : "s"} a week for this muscle lately. Add 1 working set.` };
+  if (ctx.weightSlopePerWeek < -0.1) return { kind: "calories", fix: "Body weight is dropping while strength stalls, and you're not trying to lose weight. Raise calories about 200 kcal a day." };
+  if (ctx.proteinHit != null && ctx.proteinHit < 0.6) return { kind: "protein", fix: `Protein hit only ${Math.round(ctx.proteinHit * 100)}% of days in the last 2 weeks. Get protein to target daily before changing the program.` };
+  return { kind: "variation", fix: "Recovery and volume look fine. Swap to a close variation for 3 weeks or widen the rep range." };
 }
 
 /* =========================== projection =========================== */
@@ -640,19 +648,47 @@ export function weightSlopePerWeek(state: AppState, today: string) {
   return linreg(w.map((x) => ({ x: daysBetween(today, x.date), y: x.w }))).slope * 7;
 }
 
+/**
+ * Is the user deliberately losing weight? An active bodyweight goal decides (target below the latest weigh-in);
+ * without one, the profile goal does (fat loss).
+ */
+export function isCutting(state: AppState): boolean {
+  const p = state.profile;
+  if (!p) return false;
+  const g = (state.goals ?? []).filter((x) => x.kind === "bodyweight" && !x.archived && !x.achievedAt).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0];
+  if (g && g.kind === "bodyweight") {
+    const latest = [...state.checkins].filter((c) => c.bodyWeight != null).sort((a, b) => (a.date < b.date ? -1 : 1)).pop()?.bodyWeight ?? p.bodyWeight;
+    return g.target < latest - 0.5;
+  }
+  return p.goal === "fatloss";
+}
+
+/** Recent best is clearly below the earlier best (≥5%): strength is falling, not just flat. */
+export function isDropping(series: { e1rm: number }[]): boolean {
+  if (series.length < 4) return false;
+  const recent = Math.max(...series.slice(-3).map((s) => s.e1rm));
+  const prior = Math.max(...series.slice(-9, -3).map((s) => s.e1rm));
+  return recent < prior * 0.95;
+}
+
 export function plateauFlags(state: AppState, today: string): PlateauFlag[] {
   const ar = avgReadiness(state, today, 7);
-  const sets = weeklySets(state.sessions, addDays(today, -6), today);
+  // Two weeks of sets, per week: one missed week doesn't read as "0 sets a week".
+  const sets = weeklySets(state.sessions, addDays(today, -13), today);
   const ws = weightSlopePerWeek(state, today);
+  const cutting = isCutting(state);
   const flags: PlateauFlag[] = [];
   const active = new Set(state.program?.days.flatMap((d) => d.exercises.map((e) => e.exId)) ?? []);
   for (const id of performedExerciseIds(state.sessions)) {
     if (!active.has(id) || !isCompound(EX[id])) continue; // isolation e1RMs are too noisy at small loads
     const ser = e1rmSeries(state.sessions, id);
-    if (!isPlateau(ser)) continue;
+    // Not trained in the last 2 weeks: nothing to judge yet.
+    if (!ser.length || daysBetween(ser[ser.length - 1].date, today) > 14) continue;
+    // In a cut, flat strength is the goal; only a real drop is worth flagging.
+    if (cutting ? !isDropping(ser) : !isPlateau(ser)) continue;
     const prim = EX[id].primary[0];
     const proteinHit = _proteinTarget ? proteinHitRate(state, _proteinTarget, today, 14) : undefined;
-    flags.push({ exId: id, ...plateauFix({ avgReadiness7: ar, weeklySetsPrimary: sets[prim], weightSlopePerWeek: ws, proteinHit }) });
+    flags.push({ exId: id, ...plateauFix({ avgReadiness7: ar, weeklySetsPrimary: sets[prim] / 2, weightSlopePerWeek: ws, proteinHit, cutting }) });
   }
   return flags;
 }
