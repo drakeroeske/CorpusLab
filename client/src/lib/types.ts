@@ -287,6 +287,13 @@ export interface FeedPost {
   likes: string[];
   comments: FeedComment[];
   sessionId?: string;
+  /** Non-lifting posts: a run/ride/class/WOD, or a reached goal. Missing = a lifting workout. */
+  type?: "activity" | "goal";
+  /** Big line on the card ("5.02 MI", "AMRAP 12") and the line under it. */
+  headline?: string;
+  detail?: string;
+  /** Short badge in the card header ("RUN", "WOD", "GOAL"). */
+  badge?: string;
 }
 
 export interface Crew {

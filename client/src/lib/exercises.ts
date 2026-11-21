@@ -197,6 +197,36 @@ export const MUSCLE_LABEL: Record<Muscle, string> = {
   rectus_femoris: "Rectus femoris", vasti: "Quads (vasti)", hamstrings: "Hamstrings", gastrocnemius: "Calves (gastroc)", soleus: "Soleus",
 };
 
+/** Muscle reference: a short label for tight lists, the anatomical name, where it is and what it does. */
+export const MUSCLE_INFO: Record<Muscle, { short: string; full: string; where: string; does: string }> = {
+  chest_upper: { short: "Upper chest", full: "Pectoralis major, clavicular head", where: "Upper chest, from the collarbone to the upper arm.", does: "Raises the arm forward and brings it across the body. Works most in incline presses and low-to-high flyes." },
+  chest_mid: { short: "Mid chest", full: "Pectoralis major, sternal head", where: "Middle and lower chest, from the breastbone and ribs to the upper arm.", does: "Brings the arm across and down the body. The main mover in flat bench, dips and flyes." },
+  front_delts: { short: "Front delts", full: "Anterior deltoid", where: "Front of the shoulder.", does: "Raises the arm forward. Works hard in overhead and incline pressing." },
+  side_delts: { short: "Side delts", full: "Lateral (medial) deltoid", where: "Outside of the shoulder.", does: "Raises the arm out to the side and gives the shoulders their width. Lateral raises are its main exercise." },
+  rear_delts: { short: "Rear delts", full: "Posterior deltoid", where: "Back of the shoulder.", does: "Pulls the arm back and turns it outward. Works in rows, face pulls and reverse flyes." },
+  biceps_long: { short: "Biceps long", full: "Biceps brachii, long head", where: "Outer side of the front of the upper arm.", does: "Bends the elbow and turns the palm up. It crosses the shoulder, so curls with the arm behind you (incline curls) stretch it most." },
+  biceps_short: { short: "Biceps short", full: "Biceps brachii, short head", where: "Inner side of the front of the upper arm.", does: "Bends the elbow and turns the palm up. Works hardest with the arm in front of the body (preacher curls)." },
+  brachialis: { short: "Brachialis", full: "Brachialis", where: "Under the biceps, low on the front of the upper arm.", does: "The strongest elbow bender in any grip. Hammer and reverse curls target it." },
+  triceps_long: { short: "Triceps long", full: "Triceps brachii, long head", where: "Back of the upper arm, inner side.", does: "Straightens the elbow and pulls the arm down. It crosses the shoulder, so overhead extensions stretch it most." },
+  triceps_lateral: { short: "Triceps lat/med", full: "Triceps brachii, lateral and medial heads", where: "Back of the upper arm, outer side and deep near the elbow.", does: "Straighten the elbow. They carry most of the load in pushdowns, presses and lockouts." },
+  forearms: { short: "Forearms", full: "Forearm flexors and extensors, incl. brachioradialis", where: "Between the elbow and the wrist.", does: "Grip, wrist control, and elbow bending with a thumbs-up grip." },
+  lats: { short: "Lats", full: "Latissimus dorsi", where: "Sides of the back, from the lower spine and hips up to the upper arm.", does: "Pulls the arm down and back. The main mover in pull-ups, pulldowns and rows." },
+  traps_upper: { short: "Upper traps", full: "Trapezius, upper fibers", where: "Between the neck and the shoulders.", does: "Lifts the shoulder blades (shrugs) and helps rotate them as the arm goes overhead. Holds heavy loads in deadlifts and carries." },
+  mid_back: { short: "Mid back", full: "Middle and lower trapezius, rhomboids", where: "Between the shoulder blades.", does: "Squeezes the shoulder blades together and holds them steady. Key in rows and for a stable bench press." },
+  lower_back: { short: "Lower back", full: "Erector spinae", where: "Along both sides of the lower spine.", does: "Keeps the spine straight under load. Works in deadlifts, squats, rows and every hinge." },
+  abs: { short: "Abs", full: "Rectus abdominis", where: "Front of the stomach.", does: "Curls the trunk forward and braces the spine, keeping you rigid under heavy lifts." },
+  obliques: { short: "Obliques", full: "Internal and external obliques", where: "Sides of the waist.", does: "Twist and side-bend the trunk, and resist twisting. Brace during one-sided and overhead work." },
+  glute_max: { short: "Glute max", full: "Gluteus maximus", where: "The buttocks.", does: "Extends the hip: standing up out of a squat, locking out a deadlift. The body's biggest muscle." },
+  glute_med: { short: "Glute med", full: "Gluteus medius", where: "Upper outer hip.", does: "Moves the leg out to the side and keeps the pelvis level on one leg. Stops the knees caving in on squats and lunges." },
+  hip_flexors: { short: "Hip flexors", full: "Iliopsoas, plus rectus femoris and others", where: "Front of the hip, where the thigh meets the trunk.", does: "Lift the knee toward the chest. Work in leg raises, sprinting and sit-ups." },
+  adductors: { short: "Adductors", full: "Adductor group, incl. adductor magnus", where: "Inner thigh.", does: "Pull the legs together. Adductor magnus also extends the hip, so wide squats and deadlifts work it hard." },
+  rectus_femoris: { short: "Rectus fem.", full: "Rectus femoris", where: "Center of the front of the thigh.", does: "The one quad muscle that crosses the hip: straightens the knee and lifts the thigh. Leg extensions train it best." },
+  vasti: { short: "Quads", full: "Vastus lateralis, medialis and intermedius", where: "Front and sides of the thigh.", does: "Straighten the knee. The main movers in squats, leg press and lunges." },
+  hamstrings: { short: "Hamstrings", full: "Biceps femoris, semitendinosus, semimembranosus", where: "Back of the thigh.", does: "Bend the knee and extend the hip. Romanian deadlifts and leg curls train them best." },
+  gastrocnemius: { short: "Calves", full: "Gastrocnemius", where: "Upper calf, the visible bulge.", does: "Points the foot and helps bend the knee. Trained with straight-leg calf raises." },
+  soleus: { short: "Soleus", full: "Soleus", where: "Lower calf, underneath the gastrocnemius.", does: "Points the foot, especially with the knee bent. Seated calf raises target it, and it does much of the work in running." },
+};
+
 /** Region name for a muscle, e.g. front_delts → "Shoulders". Lets searches like "shoulders" or "quads" still match. */
 export const MUSCLE_REGION: Record<Muscle, string> = Object.fromEntries(MUSCLE_GROUPS.flatMap((g) => g.muscles.map((m) => [m, g.label]))) as Record<Muscle, string>;
 const SEARCH_ALIASES: Partial<Record<Muscle, string>> = {

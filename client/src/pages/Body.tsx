@@ -1,4 +1,4 @@
-import { Term } from "@/components/Term";
+import { MuscleName, Term } from "@/components/Term";
 import { useMemo, useRef, useState } from "react";
 import { Camera, Lock, Trash2 } from "lucide-react";
 import { useStore } from "@/lib/store";
@@ -52,8 +52,8 @@ export function FatigueView() {
               const minor = MINOR_MUSCLES.has(m);
               const low = !minor && v < VOLUME_RANGE.min, high = v > VOLUME_RANGE.max;
               return (
-                <div key={m} className="grid items-center gap-3" style={{ gridTemplateColumns: "118px 1fr 36px 44px", minHeight: 28 }} data-testid={`row-weekly-sets-${m}`}>
-                  <span className="text-[13px]" style={{ lineHeight: 1.15 }}>{MUSCLE_LABEL[m]}</span>
+                <div key={m} className="grid items-center gap-3" style={{ gridTemplateColumns: "112px 1fr 36px 44px", minHeight: 30 }} data-testid={`row-weekly-sets-${m}`}>
+                  <span className="text-[13px]" style={{ lineHeight: 1.15 }}><MuscleName m={m} /></span>
                   <div style={{ position: "relative" }}>
                     <Bar pct={(v / 24) * 100} color={low ? "var(--orange)" : high ? "var(--blue)" : "var(--lime)"} />
                     <i style={{ position: "absolute", top: -3, bottom: -3, left: `${(10 / 24) * 100}%`, width: 1, background: "var(--muted)" }} />

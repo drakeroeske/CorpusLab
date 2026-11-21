@@ -1,3 +1,5 @@
+import { MuscleName } from "@/components/Term";
+import type { Muscle } from "@/lib/types";
 import { Info, Term } from "@/components/Term";
 import { useEffect, useMemo, useRef, useState, type TouchEvent as RTouchEvent } from "react";
 import { AlertTriangle, ArrowDown, ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, Disc, Flame, Link2, List as ListIcon, Plus, Repeat, Timer, Unlink, X } from "lucide-react";
@@ -354,7 +356,7 @@ export default function Logger() {
         <div className="card">
           <div className="label mb-2">Sets per muscle</div>
           {Object.entries(sum.sets).sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0)).map(([m, n]) => (
-            <div key={m} className="flex items-center gap-3 mono text-sm" style={{ minHeight: 28 }}><span className="w-24 text-[13px]" style={{ fontFamily: "var(--font-sans)" }}>{MUSCLE_LABEL[m as keyof typeof MUSCLE_LABEL]}</span><div className="flex-1 bar"><i style={{ width: `${Math.min(100, (n ?? 0) * 12)}%` }} /></div><span className="w-6 text-right">{n}</span></div>
+            <div key={m} className="flex items-center gap-3 mono text-sm" style={{ minHeight: 28 }}><span className="w-28 text-[13px]" style={{ fontFamily: "var(--font-sans)" }}><MuscleName m={m as Muscle} /></span><div className="flex-1 bar"><i style={{ width: `${Math.min(100, (n ?? 0) * 12)}%` }} /></div><span className="w-6 text-right">{n}</span></div>
           ))}
         </div>
         {sum.prs.length > 0 && (
