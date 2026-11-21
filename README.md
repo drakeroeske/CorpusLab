@@ -1,6 +1,6 @@
 # Corpus (CorpusLab)
 
-Mobile-first, science-based training engine. Riso Lab design: paper / ink / cobalt, Anton + Archivo Black + Space Mono.
+Mobile-first, science-based training app. Current look: bone background, logo pink and black; Space Grotesk text, Archivo Black / Anton titles, bold Inter numbers. Design decisions live in [docs/](docs/README.md).
 
 ## Run locally
 
