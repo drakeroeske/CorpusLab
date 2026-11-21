@@ -7,7 +7,7 @@ import { useUI } from "@/App";
 import { newSession, prescriptionsFor, sessionSummary, useToday } from "@/lib/derived";
 import { StartWorkoutSheet } from "@/components/StartWorkout";
 import { TodayGoals } from "@/components/Goals";
-import { addDays, fmtDate, fmtW, proteinByDate, caloriesByDate } from "@/lib/engine";
+import { addDays, fmtDate, fmtW, proteinByDate, caloriesByDate, calTargetFor } from "@/lib/engine";
 import { EX, MUSCLE_LABEL, newId } from "@/lib/exercises";
 import { Bar } from "@/components/ui";
 import { EngineHeader, Tag } from "@/components/riso";
@@ -47,7 +47,7 @@ export default function Today() {
   const rxs = day ? prescriptionsFor(state, day, r.score, t.inDeload, u) : [];
   const totalSets = rxs.reduce((a, x) => a + x.rx.sets, 0);
   const isTraining = !!t.day;
-  const calTarget = isTraining ? targets.trainingCal : targets.restCal;
+  const calTarget = calTargetFor(targets, t.today, isTraining);
   const cal = caloriesByDate(state.meals)[t.today] ?? 0;
   const prot = proteinByDate(state.meals)[t.today] ?? 0;
   const doneSum = t.doneToday ? sessionSummary(state, t.doneToday) : null;

@@ -1,3 +1,4 @@
+import { trainingDaysPerWeek, splitDescription } from "@/lib/engine";
 import { WeightPlanNote } from "@/components/Goals";
 import { Info } from "@/components/Term";
 import { EngineHeader, setGrain, setInk, useGrain, useInk } from "@/components/riso";
@@ -33,6 +34,8 @@ export default function Profile() {
   const [resetOpen, setResetOpen] = useState(false);
   const [gymPick, setGymPick] = useState(false);
   const upd = (p: Partial<P>) => set((s) => ({ ...s, profile: { ...(s.profile ?? profile), ...p } }));
+  // "My own" stays chosen while the box is being retyped (an empty box means: use the estimate until a number is in).
+  const [ownMaint, setOwnMaint] = useState(profile.maintenanceKcal != null);
   const u = profile.units;
 
   return (
@@ -106,14 +109,57 @@ export default function Profile() {
           }} />}
         </div>
 
-        <div className="section-title"><h2>Nutrition targets</h2><span className="label">{targets.weightPlan ? "from your goal" : "auto"}</span></div>
+        <div className="section-title"><h2>Nutrition targets</h2><span className="label">{targets.weightPlan ? "from your goal" : targets.customMaintenance ? "your maintenance" : "auto"}</span></div>
         <div className="card">
-          <div className="stat-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
-            <div className="stat"><div className="label">Training day</div><div className="v">{targets.trainingCal}</div><div className="s">kcal</div></div>
-            <div className="stat"><div className="label">Rest day</div><div className="v">{targets.restCal}</div><div className="s">kcal</div></div>
-            <div className="stat"><div className="label">Protein</div><div className="v">{targets.protein}g</div><div className="s">{targets.proteinPerKg} g/kg</div></div>
+          {(() => {
+            const flat = targets.split.mode === "flat" || targets.highCal === targets.lowCal;
+            const [hi, lo] = targets.split.mode === "weekend" ? ["Sat–Sun", "Mon–Fri"] : ["Training day", "Rest day"];
+            return (
+              <div className="stat-grid" style={{ gridTemplateColumns: `repeat(${flat ? 2 : 3}, 1fr)` }} data-testid="grid-calorie-targets">
+                {flat
+                  ? <div className="stat"><div className="label">Every day</div><div className="v" data-testid="text-cal-every-day">{targets.cal}</div><div className="s">kcal</div></div>
+                  : <>
+                      <div className="stat"><div className="label">{hi}</div><div className="v" data-testid="text-cal-high">{targets.highCal}</div><div className="s">kcal</div></div>
+                      <div className="stat"><div className="label">{lo}</div><div className="v" data-testid="text-cal-low">{targets.lowCal}</div><div className="s">kcal</div></div>
+                    </>}
+                <div className="stat"><div className="label">Protein</div><div className="v">{targets.protein}g</div><div className="s">{targets.proteinPerKg} g/kg</div></div>
+              </div>
+            );
+          })()}
+          <div className="mt-4">
+            <div className="text-sm mb-2">Daily calories</div>
+            <Seg value={targets.split.mode} onChange={(mode) => upd({ calorieSplit: { mode, amount: profile.calorieSplit?.amount ?? (mode === "weekend" ? 300 : 150) } })}
+              options={[{ v: "flat", l: "Same daily" }, { v: "training", l: "Train/rest" }, { v: "weekend", l: "Weekends" }]} testId="seg-calorie-split" />
+            <p className="text-xs muted mt-2" data-testid="text-calorie-split-help">{targets.split.mode === "flat" ? "The same target every day." : targets.split.mode === "training" ? "More on training days to fuel and recover, less on rest days." : "More on Saturday and Sunday, a little less Monday to Friday."} Your weekly total stays the same either way.</p>
+            {targets.split.mode !== "flat" && (
+              <div className="flex items-center justify-between gap-3 mt-2">
+                <span className="text-xs muted">{targets.split.mode === "training" ? "Extra on training days" : "Extra on Sat & Sun"}</span>
+                <Stepper value={profile.calorieSplit?.amount ?? 150} onChange={(v) => upd({ calorieSplit: { mode: targets.split.mode, amount: Math.min(600, Math.max(50, Math.round(v / 50) * 50)) } })}
+                  step={50} min={50} max={600} decimals={0} unit="kcal" testId="stepper-calorie-split" />
+              </div>
+            )}
           </div>
-          <p className="mono text-[11px] muted mt-3">Mifflin–St Jeor BMR {targets.bmr} × activity {targets.activity} = TDEE {targets.tdee} {targets.goalAdj >= 0 ? "+" : ""}{targets.goalAdj} goal <Info k="tdee" size={13} /></p>
+          <div className="flex items-center justify-between gap-3 mt-4">
+            <span className="text-sm">Maintenance <Info k="tdee" size={13} /></span>
+            <Seg value={ownMaint ? "own" : "calc"} onChange={(v) => { setOwnMaint(v === "own"); upd({ maintenanceKcal: v === "own" ? Math.round(targets.tdee / 10) * 10 : null }); }}
+              options={[{ v: "calc", l: "Calculated" }, { v: "own", l: "My own" }]} testId="seg-maintenance-mode" />
+          </div>
+          {ownMaint ? (
+            <>
+              <label className="field mt-2">
+                <span className="label">Your maintenance (kcal/day)</span>
+                <NumInput value={profile.maintenanceKcal ?? null} onChange={(v) => upd({ maintenanceKcal: v })} min={800} max={8000} integer allowEmpty data-testid="input-maintenance-kcal" />
+              </label>
+              {!targets.customMaintenance && <p className="text-xs mt-1.5" role="status" data-testid="text-maintenance-invalid">Enter at least 800 kcal. Until then the estimate is used.</p>}
+              <p className="text-xs muted mt-1.5">Use a number you trust, like from a metabolic test or months of tracking food and weight. It replaces the estimate; your goal and training-day adjustments still apply on top.</p>
+            </>
+          ) : (
+            <p className="mono text-[11px] muted mt-2" data-testid="text-maintenance-breakdown">
+              BMR {targets.bmr.toLocaleString()} (Mifflin–St Jeor) × {targets.activity} for {trainingDaysPerWeek(state.program)} lifting days{targets.activityKcal ? ` + ${targets.activityKcal} from logged cardio & classes` : ""} = {targets.tdee.toLocaleString()} maintenance
+            </p>
+          )}
+          <p className="mono text-[11px] muted mt-1" data-testid="text-targets-math">{targets.tdee.toLocaleString()} {targets.goalAdj >= 0 ? "+" : "−"} {Math.abs(targets.goalAdj)} goal = {targets.cal.toLocaleString()} kcal/day average{targets.split.mode !== "flat" && targets.highCal !== targets.lowCal ? ` (${splitDescription(targets)})` : ""}</p>
+          {!targets.customMaintenance && !targets.activityKcal && (state.activities ?? []).length === 0 && <p className="text-xs faint mt-1">Runs, rides, classes and WODs you log raise this automatically.</p>}
           <WeightPlanNote className="mt-2" />
         </div>
 

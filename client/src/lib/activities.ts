@@ -181,3 +181,31 @@ export function predictedTimes(list: Activity[] | undefined, type: ActivityType,
     .map((a) => ({ date: a.date, sec: riegel(a.durationSec, a.distanceKm!, targetKm) }))
     .sort((a, b) => (a.date < b.date ? -1 : 1));
 }
+
+/* ---------------- energy (for maintenance calories) ---------------- */
+
+/** MET range per type, from easy to all-out effort (Compendium of Physical Activities, rounded). */
+const MET: Record<ActivityType, [number, number]> = {
+  run: [7, 12], walk: [3, 5], hike: [5, 8], cycle: [5, 11], row: [5, 10], swim: [5, 10], elliptical: [4.5, 8], stairs: [6, 9.5],
+  wod: [6, 10], hiit: [6, 9.5], yoga: [2.3, 4], pilates: [3, 4.5], sport: [5, 9], other: [3.5, 7],
+};
+
+/**
+ * Calories an activity burns ON TOP of resting burn (resting is already in BMR, so counting it again would double up).
+ * Runs and walks with a distance use the ~1 kcal per kg per km rule (about half that walking), which holds across paces.
+ * Everything else: (MET − 1) × kg × hours, with MET picked from the type's range by the logged effort.
+ */
+export function activityNetKcal(a: Activity, kg: number): number {
+  if (a.distanceKm && a.distanceKm > 0 && (a.type === "run" || a.type === "walk")) return Math.round(kg * a.distanceKm * (a.type === "run" ? 1.0 : 0.5));
+  const [lo, hi] = MET[a.type];
+  const rpe = a.rpe ?? ACTIVITY[a.type].defaultRpe;
+  const met = lo + (hi - lo) * Math.min(1, Math.max(0, (rpe - 3) / 7));
+  return Math.round(Math.max(0, met - 1) * kg * (a.durationSec / 3600));
+}
+
+/** Average extra calories a day from activities over the last `days` days (default 4 weeks), so targets stay steady. */
+export function activityKcalPerDay(list: Activity[] | undefined, kg: number, today: string, days = 28): number {
+  const from = new Date(Date.parse(today + "T12:00:00") - (days - 1) * 86400000).toISOString().slice(0, 10);
+  const total = (list ?? []).filter((a) => a.date >= from && a.date <= today).reduce((t, a) => t + activityNetKcal(a, kg), 0);
+  return Math.round(total / days);
+}

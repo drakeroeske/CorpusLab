@@ -10,7 +10,7 @@ export const GLOSSARY = {
   halfLife: { term: "T½ 48 h", text: "Half-life: fatigue in a muscle drops by about half every 48 hours of rest." },
   workingSets: { term: "Working sets", text: "The hard sets that count toward progress. Warm-up sets aren't included." },
   dots: { term: "DOTS", text: "A score that adjusts strength for body weight and sex, so lifters of different sizes can be compared fairly." },
-  tdee: { term: "TDEE", text: "Total daily energy expenditure: about how many calories you burn in a day, including training. BMR is the part you'd burn at complete rest." },
+  tdee: { term: "Maintenance (TDEE)", text: "About how many calories you burn in a day, including training: the intake that keeps your weight steady. Estimated as resting burn (BMR, Mifflin–St Jeor) × an activity factor for your lifting days, plus calories from runs, rides, classes and WODs you log (4-week average). You can enter your own number in Profile instead." },
 } as const;
 
 export type GlossaryKey = keyof typeof GLOSSARY;
