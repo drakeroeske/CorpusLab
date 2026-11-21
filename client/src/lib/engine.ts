@@ -472,6 +472,10 @@ export function strengthTrendPct(sessions: Session[], today: string, days = 14):
 /* =========================== nutrition =========================== */
 export interface NutritionTargets {
   bmr: number; tdee: number; cal: number; trainingCal: number; restCal: number; protein: number; proteinPerKg: number; activity: number; goalAdj: number;
+  /** Average extra kcal/day from logged runs, rides, classes and WODs (0 when maintenance is the user's own number). */
+  activityKcal: number;
+  /** Maintenance is the number the user entered, not the estimate. */
+  customMaintenance: boolean;
   /** Set when an active bodyweight goal is driving the numbers instead of the profile goal. */
   weightPlan?: WeightPlanResult | null;
 }
@@ -491,19 +495,22 @@ export interface WeightPlanResult {
 /** About 7,700 kcal per kg (3,500 per lb) of bodyweight change. */
 export const KCAL_PER_KG = 7700;
 
-export function nutritionTargets(p: Profile, daysPerWeek: number, plan?: WeightPlan | null): NutritionTargets {
+export function nutritionTargets(p: Profile, daysPerWeek: number, plan?: WeightPlan | null, opts: { activityKcalPerDay?: number } = {}): NutritionTargets {
   const kg = plan?.currentKg ?? toKg(p.bodyWeight, p.units);
   const sexAdj = p.sex === "m" ? 5 : p.sex === "f" ? -161 : -78;
   const bmr = 10 * kg + 6.25 * p.heightCm - 5 * p.age + sexAdj;
   const activity = daysPerWeek <= 3 ? 1.375 : daysPerWeek <= 5 ? 1.55 : 1.725;
-  const tdee = bmr * activity;
+  // Maintenance: the user's own number if they set one; otherwise BMR × lifting-days factor + logged cardio/classes.
+  const custom = !!(p.maintenanceKcal && p.maintenanceKcal >= 800);
+  const activityKcal = custom ? 0 : Math.max(0, Math.round(opts.activityKcalPerDay ?? 0));
+  const tdee = custom ? p.maintenanceKcal! : bmr * activity + activityKcal;
   // training-day bump, rest-day trim, weekly average preserved
   const bump = 150;
   const restDays = 7 - daysPerWeek;
   const restTrim = restDays > 0 ? Math.round((bump * daysPerWeek) / restDays / 10) * 10 : 0;
   const pack = (calRaw: number, goalAdj: number, protein: number, weightPlan: WeightPlanResult | null = null): NutritionTargets => {
     const cal = Math.round(calRaw / 10) * 10;
-    return { bmr: Math.round(bmr), tdee: Math.round(tdee), cal, trainingCal: cal + bump, restCal: cal - restTrim, protein, proteinPerKg: Math.round((protein / kg) * 10) / 10, activity, goalAdj: Math.round(goalAdj), weightPlan };
+    return { bmr: Math.round(bmr), tdee: Math.round(tdee), cal, trainingCal: cal + bump, restCal: cal - restTrim, protein, proteinPerKg: Math.round((protein / kg) * 10) / 10, activity, goalAdj: Math.round(goalAdj), weightPlan, activityKcal, customMaintenance: custom };
   };
 
   if (plan) {

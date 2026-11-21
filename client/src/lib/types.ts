@@ -97,6 +97,8 @@ export interface Profile {
   pledgedAt?: string | null;
   /** First-run tour: false = show it on Today; missing or true = done. Only new accounts start at false. */
   tourDone?: boolean;
+  /** The user's own maintenance calories (kcal/day). Replaces the BMR × activity estimate when set. */
+  maintenanceKcal?: number | null;
 }
 
 /** A drop set strips weight and keeps going; a rest-pause set rests ~15s and squeezes out mini-sets at the same weight. */

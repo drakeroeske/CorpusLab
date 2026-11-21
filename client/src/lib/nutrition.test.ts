@@ -57,3 +57,41 @@ describe("nutrition targets from a bodyweight goal", () => {
     expect(weightPlanFor(s, "2026-11-15")).toBeNull();
   });
 });
+
+describe("maintenance: logged activities and the user's own number", async () => {
+  const { activityNetKcal, activityKcalPerDay } = await import("./activities");
+  const run = (date: string, km: number, min: number, rpe = 6) => ({ id: date + km, type: "run" as const, date, start: 0, durationSec: min * 60, distanceKm: km, rpe });
+  it("a 10 km run burns ~1 kcal per kg per km above rest", () => {
+    expect(activityNetKcal(run("2026-11-20", 10, 55), 80)).toBe(800);
+  });
+  it("no distance: MET by effort, minus resting burn", () => {
+    const yoga = { id: "y", type: "yoga" as const, date: "2026-11-20", start: 0, durationSec: 3600, rpe: 3 };
+    expect(activityNetKcal(yoga, 70)).toBe(Math.round((2.3 - 1) * 70)); // easy yoga ≈ 91 kcal
+    const wod = { id: "w", type: "wod" as const, date: "2026-11-20", start: 0, durationSec: 20 * 60, rpe: 10 };
+    expect(activityNetKcal(wod, 80)).toBe(Math.round((10 - 1) * 80 / 3)); // all-out 20 min ≈ 240 kcal
+  });
+  it("averages over 4 weeks and ignores older activities", () => {
+    const list = [run("2026-11-20", 7, 40), run("2026-11-13", 7, 40), run("2026-10-01", 20, 120)];
+    expect(activityKcalPerDay(list, 80, "2026-11-21")).toBe(Math.round((560 * 2) / 28));
+  });
+  it("adds activity calories to maintenance", () => {
+    const base = nutritionTargets(p, 4);
+    const t = nutritionTargets(p, 4, null, { activityKcalPerDay: 210 });
+    expect(t.tdee - base.tdee).toBe(210);
+    expect(t.activityKcal).toBe(210);
+    expect(t.cal - base.cal).toBeGreaterThanOrEqual(200);
+  });
+  it("the user's own maintenance replaces the estimate; goals still apply on top", () => {
+    const own = { ...p, maintenanceKcal: 2600 };
+    const t = nutritionTargets(own, 4, null, { activityKcalPerDay: 300 });
+    expect(t.customMaintenance).toBe(true);
+    expect(t.tdee).toBe(2600);
+    expect(t.activityKcal).toBe(0);
+    expect(t.cal).toBe(2600 - 150); // recomp −150
+    const cut = nutritionTargets(own, 4, { currentKg: kg(200), targetKg: kg(190), daysLeft: 70 });
+    expect(cut.tdee).toBe(2600);
+    expect(cut.goalAdj).toBeLessThan(-400);
+    // nonsense values are ignored
+    expect(nutritionTargets({ ...p, maintenanceKcal: 300 }, 4).customMaintenance).toBe(false);
+  });
+});

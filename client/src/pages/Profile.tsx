@@ -1,3 +1,4 @@
+import { trainingDaysPerWeek } from "@/lib/engine";
 import { WeightPlanNote } from "@/components/Goals";
 import { Info } from "@/components/Term";
 import { EngineHeader, setGrain, setInk, useGrain, useInk } from "@/components/riso";
@@ -33,6 +34,8 @@ export default function Profile() {
   const [resetOpen, setResetOpen] = useState(false);
   const [gymPick, setGymPick] = useState(false);
   const upd = (p: Partial<P>) => set((s) => ({ ...s, profile: { ...(s.profile ?? profile), ...p } }));
+  // "My own" stays chosen while the box is being retyped (an empty box means: use the estimate until a number is in).
+  const [ownMaint, setOwnMaint] = useState(profile.maintenanceKcal != null);
   const u = profile.units;
 
   return (
@@ -106,14 +109,34 @@ export default function Profile() {
           }} />}
         </div>
 
-        <div className="section-title"><h2>Nutrition targets</h2><span className="label">{targets.weightPlan ? "from your goal" : "auto"}</span></div>
+        <div className="section-title"><h2>Nutrition targets</h2><span className="label">{targets.weightPlan ? "from your goal" : targets.customMaintenance ? "your maintenance" : "auto"}</span></div>
         <div className="card">
           <div className="stat-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
             <div className="stat"><div className="label">Training day</div><div className="v">{targets.trainingCal}</div><div className="s">kcal</div></div>
             <div className="stat"><div className="label">Rest day</div><div className="v">{targets.restCal}</div><div className="s">kcal</div></div>
             <div className="stat"><div className="label">Protein</div><div className="v">{targets.protein}g</div><div className="s">{targets.proteinPerKg} g/kg</div></div>
           </div>
-          <p className="mono text-[11px] muted mt-3">Mifflin–St Jeor BMR {targets.bmr} × activity {targets.activity} = TDEE {targets.tdee} {targets.goalAdj >= 0 ? "+" : ""}{targets.goalAdj} goal <Info k="tdee" size={13} /></p>
+          <div className="flex items-center justify-between gap-3 mt-4">
+            <span className="text-sm">Maintenance <Info k="tdee" size={13} /></span>
+            <Seg value={ownMaint ? "own" : "calc"} onChange={(v) => { setOwnMaint(v === "own"); upd({ maintenanceKcal: v === "own" ? Math.round(targets.tdee / 10) * 10 : null }); }}
+              options={[{ v: "calc", l: "Calculated" }, { v: "own", l: "My own" }]} testId="seg-maintenance-mode" />
+          </div>
+          {ownMaint ? (
+            <>
+              <label className="field mt-2">
+                <span className="label">Your maintenance (kcal/day)</span>
+                <NumInput value={profile.maintenanceKcal ?? null} onChange={(v) => upd({ maintenanceKcal: v })} min={800} max={8000} integer allowEmpty data-testid="input-maintenance-kcal" />
+              </label>
+              {!targets.customMaintenance && <p className="text-xs mt-1.5" role="status" data-testid="text-maintenance-invalid">Enter at least 800 kcal. Until then the estimate is used.</p>}
+              <p className="text-xs muted mt-1.5">Use a number you trust, like from a metabolic test or months of tracking food and weight. It replaces the estimate; your goal and training-day adjustments still apply on top.</p>
+            </>
+          ) : (
+            <p className="mono text-[11px] muted mt-2" data-testid="text-maintenance-breakdown">
+              BMR {targets.bmr.toLocaleString()} (Mifflin–St Jeor) × {targets.activity} for {trainingDaysPerWeek(state.program)} lifting days{targets.activityKcal ? ` + ${targets.activityKcal} from logged cardio & classes` : ""} = {targets.tdee.toLocaleString()} maintenance
+            </p>
+          )}
+          <p className="mono text-[11px] muted mt-1" data-testid="text-targets-math">{targets.tdee.toLocaleString()} {targets.goalAdj >= 0 ? "+" : "−"} {Math.abs(targets.goalAdj)} goal = {targets.cal.toLocaleString()} kcal/day average</p>
+          {!targets.customMaintenance && !targets.activityKcal && (state.activities ?? []).length === 0 && <p className="text-xs faint mt-1">Runs, rides, classes and WODs you log raise this automatically.</p>}
           <WeightPlanNote className="mt-2" />
         </div>
 
