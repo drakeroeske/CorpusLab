@@ -1,6 +1,7 @@
 import { Info } from "@/components/Term";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, FlaskConical, Lightbulb, Target } from "lucide-react";
+import { ChevronLeft, ChevronRight, FlaskConical, Lightbulb, Pencil, Target } from "lucide-react";
+import { EditWorkoutSheet, fmtSet } from "@/components/SetEditor";
 import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
 import Logger from "./Logger";
@@ -17,7 +18,9 @@ import {
 import { EX, MUSCLE_LABEL, MUSCLES, TEMPLATES, buildTemplate, newId } from "@/lib/exercises";
 import { convertProgram } from "@/lib/actions";
 import { ExerciseCatalog } from "@/components/ExerciseCatalog";
-import type { Experiment, Program, ProgramDay } from "@/lib/types";
+import type { Activity, Experiment, Program, ProgramDay, Session } from "@/lib/types";
+import { ActivityRow, ActivitySheet } from "@/components/Activity";
+import { warmupSummary } from "@/lib/warmups";
 
 export default function Train() {
   const ui = useUI();
@@ -160,7 +163,7 @@ export function LabReport() {
 
       <div className="section-title"><h2>Hard sets per muscle</h2><span className="label">target 10–20</span></div>
       <div className="card">
-        {MUSCLES.filter((m) => rep.sets[m] > 0 || ["chest", "lats", "quads", "hamstrings", "shoulders"].includes(m)).map((m) => (
+        {MUSCLES.filter((m) => rep.sets[m] > 0 || ["chest_mid", "lats", "vasti", "hamstrings", "side_delts"].includes(m)).map((m) => (
           <div key={m} className="grid items-center gap-3" style={{ gridTemplateColumns: "92px 1fr 34px", minHeight: 26 }}>
             <span className="text-[13px]">{MUSCLE_LABEL[m]}</span>
             <Bar pct={(rep.sets[m] / 24) * 100} color={rep.sets[m] < VOLUME_RANGE.min ? "var(--orange)" : rep.sets[m] > VOLUME_RANGE.max ? "var(--blue)" : "var(--lime)"} />
@@ -294,11 +297,24 @@ function ExperimentReportSheet({ exp, onClose }: { exp: Experiment; onClose: () 
 export function History() {
   const { state, profile } = useStore();
   const [open, setOpen] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Session | null>(null);
+  const [editAct, setEditAct] = useState<Activity | null>(null);
+  const [kind, setKind] = useState<"all" | "lifting" | "other">("all");
+  const acts = state.activities ?? [];
   const list = [...state.sessions].filter((s) => s.end).sort((a, b) => b.start - a.start);
-  if (!list.length) return <Empty>No sessions yet. Finish a workout and it shows here.</Empty>;
+  // Lifting sessions and other activities in one timeline, newest first.
+  const items: ({ k: "s"; s: Session; t: number } | { k: "a"; a: Activity; t: number })[] = [
+    ...(kind !== "other" ? list.map((s) => ({ k: "s" as const, s, t: s.start })) : []),
+    ...(kind !== "lifting" ? acts.map((a) => ({ k: "a" as const, a, t: a.start })) : []),
+  ].sort((a, b) => b.t - a.t);
+  if (!list.length && !acts.length) return <Empty>No workouts yet. Finish a workout or log a run, class or WOD and it shows here.</Empty>;
   return (
     <div className="stack" data-testid="view-history">
-      {list.slice(0, 40).map((s) => {
+      {acts.length > 0 && list.length > 0 && <Seg value={kind} onChange={setKind} options={[{ v: "all", l: "All" }, { v: "lifting", l: "Lifting" }, { v: "other", l: "Cardio & more" }]} testId="seg-history-kind" />}
+      {editAct && <ActivitySheet activity={editAct} onClose={() => setEditAct(null)} />}
+      {items.slice(0, 60).map((it) => {
+        if (it.k === "a") return <ActivityRow key={it.a.id} a={it.a} onOpen={() => setEditAct(it.a)} />;
+        const s = it.s;
         const prs = sessionPRs(state.sessions, s);
         const isOpen = open === s.id;
         return (
@@ -313,18 +329,21 @@ export function History() {
             </button>
             {isOpen && (
               <div style={{ padding: "0 14px 12px" }}>
+                {s.warmup && <p className="text-xs muted mb-1" data-testid={`text-history-warmup-${s.id}`}>{s.warmup.status === "done" ? `Warm-up: ${warmupSummary(s.warmup.items)}` : "Warm-up skipped"}</p>}
                 {s.exercises.map((l, i) => (
                   <div key={i} className="rowline" style={{ alignItems: "flex-start" }}>
                     <span className="text-[13px] min0">{EX[l.exId].name}</span>
-                    <span className="mono text-xs text-right muted">{l.sets.map((x) => `${fmtW(x.weight)}×${x.reps}`).join("  ")}</span>
+                    <span className="mono text-xs text-right muted">{l.sets.map((x) => fmtSet(x, "×")).join("  ")}</span>
                   </div>
                 ))}
                 {s.coachNote && <p className="text-xs blue mt-2">Coach: {s.coachNote}</p>}
+                <button className="btn btn-sm btn-outline mt-3" onClick={() => setEditing(s)} data-testid={`button-edit-workout-${s.id}`}><Pencil size={14} /> Edit workout</button>
               </div>
             )}
           </div>
         );
       })}
+      {editing && <EditWorkoutSheet session={editing} onClose={() => setEditing(null)} />}
     </div>
   );
 }

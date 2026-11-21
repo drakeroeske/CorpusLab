@@ -29,15 +29,18 @@ export function convertUnits(s: AppState, to: Units): AppState {
   const len = to === "kg" ? 2.54 : 1 / 2.54; // inches <-> cm for measurements
   const w = (x: number) => Math.round(x * f * 2) / 2;
   const w1 = (x: number) => Math.round(x * f * 10) / 10;
+  // A set's drop-set / rest-pause parts carry weights too.
+  const convSet = <T extends { weight: number; parts?: { weight: number; reps: number }[] }>(st: T): T => ({ ...st, weight: w(st.weight), ...(st.parts ? { parts: st.parts.map((p) => ({ ...p, weight: w(p.weight) })) } : {}) });
   const l = (x?: number | null) => (x == null ? x : Math.round(x * len * 10) / 10);
   return {
     ...s,
     profile: { ...s.profile, units: to, bodyWeight: w1(s.profile.bodyWeight), barWeight: to === "kg" ? 20 : 45 },
     program: s.program ? convertProgram(s.program, from, to) : s.program,
-    sessions: s.sessions.map((x) => ({ ...x, exercises: x.exercises.map((e) => ({ ...e, targetWeight: w(e.targetWeight), sets: e.sets.map((st) => ({ ...st, weight: w(st.weight) })) })) })),
-    activeSession: s.activeSession ? { ...s.activeSession, exercises: s.activeSession.exercises.map((e) => ({ ...e, targetWeight: w(e.targetWeight), sets: e.sets.map((st) => ({ ...st, weight: w(st.weight) })) })) } : null,
+    sessions: s.sessions.map((x) => ({ ...x, exercises: x.exercises.map((e) => ({ ...e, targetWeight: w(e.targetWeight), sets: e.sets.map(convSet) })) })),
+    activeSession: s.activeSession ? { ...s.activeSession, exercises: s.activeSession.exercises.map((e) => ({ ...e, targetWeight: w(e.targetWeight), sets: e.sets.map(convSet) })) } : null,
     checkins: s.checkins.map((c) => ({ ...c, bodyWeight: c.bodyWeight != null ? w1(c.bodyWeight) : c.bodyWeight })),
     measurements: s.measurements.map((m) => ({ ...m, waist: l(m.waist), chest: l(m.chest), arms: l(m.arms), thighs: l(m.thighs) })),
+    goals: s.goals?.map((g) => (g.kind === "bodyweight" ? { ...g, start: w1(g.start), target: w1(g.target) } : g.kind === "lift" ? { ...g, weight: w(g.weight), startE1rm: w1(g.startE1rm) } : g)),
     feed: s.feed.map((p) => (p.author === "me" ? { ...p, topSets: p.topSets.map((t) => ({ ...t, weight: w(t.weight), units: to })) } : p)),
   };
 }

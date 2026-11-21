@@ -2,8 +2,7 @@ import type { AppState, CheckIn, Client, Crew, ExerciseLog, FeedPost, Meal, Musc
 import { buildTemplate, EX, isCompound, newId } from "./exercises";
 import {
   addDays, clamp, daysBetween as daysBetweenK, computeReadiness, dateKey, dayForDate, dayMuscles, e1rm, hrvBaseline, logsForPe,
-  nutritionTargets, parseKey, prescribe, sessionPRs, toKg, trainingDaysPerWeek, weekdayOf,
-} from "./engine";
+  nutritionTargets, parseKey, prescribe, sessionPRs, toKg, trainingDaysPerWeek, weekdayOf, calTargetFor } from "./engine";
 import { emptyState } from "./empty";
 
 function rng(seed: number) {
@@ -81,7 +80,7 @@ export function buildDemo(o: DemoOpts = {}): AppState {
       yday.exercises.forEach((l) => EX[l.exId].primary.forEach((m) => ms.add(m)));
       ms.forEach((m) => { const v = clamp(Math.round(n(1.6, 0.9)), 0, 4); if (v) soreness[m] = v; });
     }
-    if (isToday) { soreness.quads = 3; soreness.glutes = 2; soreness.hamstrings = 2; }
+    if (isToday) { soreness.vasti = 3; soreness.rectus_femoris = 2; soreness.glute_max = 2; soreness.hamstrings = 2; }
     const skipCheckin = !isToday && R() < 0.07;
     if (!skipCheckin) {
       checkins.push({
@@ -96,7 +95,7 @@ export function buildDemo(o: DemoOpts = {}): AppState {
     const day = dayForDate(program, date);
     const lastWeek = i >= totalDays - 10;
     const proteinFactor = (o.proteinShift ?? 0) + (lastWeek ? (R() < 0.6 ? n(0.78, 0.05) : n(1.02, 0.04)) : weekN >= 4.2 && weekN < 5.2 ? n(0.86, 0.08) : n(1.0, 0.07));
-    const calTarget = day ? targets.trainingCal : targets.restCal;
+    const calTarget = calTargetFor(targets, date, !!day);
     const calFactor = n(1.0, 0.06);
     const preCarbs = day && R() < 0.55;
     const mealPlan = [

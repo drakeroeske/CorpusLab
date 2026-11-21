@@ -6,14 +6,16 @@ import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
 import { newSession, prescriptionsFor, sessionSummary, useToday } from "@/lib/derived";
 import { StartWorkoutSheet } from "@/components/StartWorkout";
-import { addDays, fmtDate, fmtW, proteinByDate, caloriesByDate } from "@/lib/engine";
+import { TodayGoals } from "@/components/Goals";
+import { addDays, fmtDate, fmtW, proteinByDate, caloriesByDate, calTargetFor, isCutting } from "@/lib/engine";
 import { EX, MUSCLE_LABEL, newId } from "@/lib/exercises";
 import { Bar } from "@/components/ui";
 import { EngineHeader, Tag } from "@/components/riso";
 import { ReadinessRing } from "@/components/ReadinessRing";
 import { Info, Term } from "@/components/Term";
 import { InboxButton } from "@/components/Inbox";
-import type { Meal } from "@/lib/types";
+import type { Activity, Meal } from "@/lib/types";
+import { ActivityRow, ActivitySheet } from "@/components/Activity";
 
 export function readinessColor(score: number | null) {
   if (score == null) return "var(--muted)";
@@ -37,16 +39,19 @@ export default function Today() {
   const [why, setWhy] = useState(false);
   const [showList, setShowList] = useState(false);
   const [startOpen, setStartOpen] = useState(false);
+  const [actOpen, setActOpen] = useState(false);
+  const [editAct, setEditAct] = useState<Activity | null>(null);
   const u = profile.units;
   const r = t.readiness;
   const day = t.day;
   const rxs = day ? prescriptionsFor(state, day, r.score, t.inDeload, u) : [];
   const totalSets = rxs.reduce((a, x) => a + x.rx.sets, 0);
   const isTraining = !!t.day;
-  const calTarget = isTraining ? targets.trainingCal : targets.restCal;
+  const calTarget = calTargetFor(targets, t.today, isTraining);
   const cal = caloriesByDate(state.meals)[t.today] ?? 0;
   const prot = proteinByDate(state.meals)[t.today] ?? 0;
   const doneSum = t.doneToday ? sessionSummary(state, t.doneToday) : null;
+  const todayActs = (state.activities ?? []).filter((a) => a.date === t.today).sort((a, b) => a.start - b.start);
 
   const start = () => {
     if (!state.activeSession) {
@@ -124,7 +129,9 @@ export default function Today() {
         {t.flags.length > 0 && (
           <section className="warn" data-testid="card-plateaus">
             <div className="inner">
-              <div className="font-bold flex items-center"><Term k="plateau">{t.flags.length === 1 ? "1 lift has stalled" : `${t.flags.length} lifts have stalled`}</Term></div>
+              <div className="font-bold flex items-center"><Term k="plateau">{t.flags.every((f) => f.kind === "cut_dropping" || f.kind === "protein") && isCutting(state)
+                ? (t.flags.length === 1 ? "1 lift is slipping" : `${t.flags.length} lifts are slipping`)
+                : (t.flags.length === 1 ? "1 lift has stalled" : `${t.flags.length} lifts have stalled`)}</Term></div>
               {t.flags.map((f) => (
                 <p key={f.exId} className="text-sm mt-1" data-testid={`card-plateau-${f.exId}`}><b>{EX[f.exId].name}.</b> {f.fix}</p>
               ))}
@@ -198,10 +205,16 @@ export default function Today() {
             <button className="btn btn-outline btn-block mt-3" onClick={() => (state.activeSession ? start() : setStartOpen(true))} data-testid="button-train-anyway">{state.activeSession ? "Resume workout" : "Train anyway"}</button>
           </section>
         )}
+        {todayActs.map((a) => <ActivityRow key={a.id} a={a} showDate={false} onOpen={() => setEditAct(a)} />)}
+        <button className="btn btn-sm btn-ghost btn-block" onClick={() => setActOpen(true)} data-testid="button-log-activity-today"><Plus size={14} /> Log a run, ride, class or WOD</button>
         {startOpen && <StartWorkoutSheet onClose={() => setStartOpen(false)} />}
+        {(actOpen || editAct) && <ActivitySheet activity={editAct ?? undefined} onClose={() => { setActOpen(false); setEditAct(null); }} />}
 
-        {/* 4. Food: one slim row; tap to log. */}
-        <div className="section-title"><h2>Food</h2></div>
+        {/* 4. Goals: up to three, with progress. */}
+        <TodayGoals />
+
+        {/* 5. Fuel: one slim row; tap to log. */}
+        <div className="section-title"><h2>Fuel</h2></div>
         <button className="card w-full text-left flex items-center gap-3" onClick={() => ui.open("nutrition")} data-testid="button-open-nutrition" aria-label="Log a meal">
           <div className="min0 flex-1 grid grid-cols-2 gap-4">
             <div data-testid="text-cal-today">

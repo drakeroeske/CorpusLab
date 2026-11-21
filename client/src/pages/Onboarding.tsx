@@ -5,7 +5,7 @@ import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
 import type { Experience, Goal, Profile, Program, Sex, Units } from "@/lib/types";
 import { TEMPLATES, buildTemplate, newId } from "@/lib/exercises";
-import { dateKey, nutritionTargets, trainingDaysPerWeek } from "@/lib/engine";
+import { dateKey, nutritionTargets, trainingDaysPerWeek, splitDescription } from "@/lib/engine";
 import { NumInput, Seg, Wordmark } from "@/components/ui";
 import { buildDemo } from "@/lib/demo";
 import { useAuth } from "@/lib/auth";
@@ -147,7 +147,7 @@ export default function Onboarding() {
               {howOpen && (
                 <div className="text-sm muted mt-1 stack" style={{ gap: 6 }}>
                   <p>Your body burns about <b>{targets.tdee.toLocaleString()}</b> kcal a day <Info k="tdee" size={13} />, estimated from your size, age and training days. Your goal adjusts that by {targets.goalAdj >= 0 ? "+" : "−"}{Math.abs(targets.goalAdj)} kcal.</p>
-                  <p>Training days: {targets.trainingCal.toLocaleString()} kcal · rest days: {targets.restCal.toLocaleString()} kcal.</p>
+                  <p>{splitDescription(targets)[0].toUpperCase() + splitDescription(targets).slice(1)} kcal.</p>
                   <p>Protein: {targets.proteinPerKg} g per kg of body weight. You can change all of this later in Profile.</p>
                 </div>
               )}

@@ -3,11 +3,13 @@
  * Every function here takes plain data and returns plain data.
  */
 import type {
-  AppState, CheckIn, Exercise, ExerciseLog, Goal, Meal, Muscle, Profile, Program, ProgramDay,
-  ProgramExercise, Session, Sex, Spotter, Units, Experiment,
+  Activity, AppState, CalorieSplitMode, CheckIn, Exercise, ExerciseLog, Goal, Meal, Muscle, Profile, Program, ProgramDay,
+  ProgramExercise, Session, SetLog, Sex, Spotter, Units, Experiment,
 } from "./types";
-import { EX, EXERCISES, MUSCLES, MUSCLE_LABEL, MAIN_LIFTS, allExercises, isCompound } from "./exercises";
-import { loadScore, readinessBand, trainingLoadInputs } from "./readiness";
+import { EX, EXERCISES, MUSCLES, MUSCLE_LABEL, MAIN_LIFTS, allExercises, isCompound, muscleShares } from "./exercises";
+import { loadScore, readinessBand, trainingLoadInputs, type LoadSession } from "./readiness";
+import { activityLoadSessions, activityMuscleLoad, trainedDates } from "./activities";
+import { warmupRate } from "./warmups";
 
 /* =========================== dates =========================== */
 export const pad = (n: number) => String(n).padStart(2, "0");
@@ -168,7 +170,10 @@ export interface ReadinessResult {
 const BASE_WEIGHTS = { sleepH: 25.5, sleepQ: 8.5, hrv: 17, energy: 12.75, soreness: 12.75, stress: 8.5, load: 15 } as const;
 
 /** Training-load sub-score (0–1) for `date`, from logged workouts; null with under 2 weeks of history. */
-export function trainingLoad(sessions: Session[], date: string): number | null {
+/** Lifting sessions plus activities, in the shape the training-load model reads. */
+export const loadSessionsOf = (state: Pick<AppState, "sessions" | "activities">): LoadSession[] => [...state.sessions, ...activityLoadSessions(state.activities)];
+
+export function trainingLoad(sessions: LoadSession[], date: string): number | null {
   const { recent, usual } = trainingLoadInputs(sessions, date);
   return loadScore(recent, usual);
 }
@@ -318,10 +323,10 @@ export function halfLifeHours(sleepAfter: number | null | undefined, proteinMiss
 }
 
 /**
- * Each working set adds 1.0 to primaries, 0.5 to secondaries; exponential decay.
+ * Each working set adds 1.0 to primaries, 0.5 to secondaries, 0.25 to stabilizers; exponential decay.
  * Half-life 48h (36h if sleep ≥ 7.5h, 60h if sleep < 6h or protein target missed).
  */
-export function muscleFatigue(sessions: Session[], checkins: CheckIn[], meals: Meal[], proteinTarget: number, now: number): Record<Muscle, number> {
+export function muscleFatigue(sessions: Session[], checkins: CheckIn[], meals: Meal[], proteinTarget: number, now: number, activities: Activity[] = []): Record<Muscle, number> {
   const out = Object.fromEntries(MUSCLES.map((m) => [m, 0])) as Record<Muscle, number>;
   const ciBy = Object.fromEntries(checkins.map((c) => [c.date, c]));
   const prot = proteinByDate(meals);
@@ -336,13 +341,24 @@ export function muscleFatigue(sessions: Session[], checkins: CheckIn[], meals: M
     for (const log of s.exercises) {
       const ex = EX[log.exId];
       if (!ex) continue;
+      const shares = muscleShares(ex);
       for (const set of log.sets) {
         const age = Math.max(0, (now - set.ts) / 3600000);
         const decay = Math.pow(0.5, age / hl);
-        ex.primary.forEach((m) => (out[m] += 1 * decay));
-        ex.secondary.forEach((m) => (out[m] += 0.5 * decay));
+        for (const [m, w] of shares) out[m] += w * decay;
       }
     }
+  }
+  // Runs, rides, classes and WODs: their muscle load decays from when they ended, on the same half-life rules.
+  for (const a of activities) {
+    const endTs = a.start + a.durationSec * 1000;
+    const age = (now - endTs) / 3600000;
+    if (age < 0 || age > 24 * 12) continue;
+    const sleepAfter = ciBy[addDays(a.date, 1)]?.sleepH ?? ciBy[a.date]?.sleepH;
+    const loggedProtein = prot[a.date];
+    const proteinMissed = loggedProtein != null && loggedProtein < proteinTarget * 0.9 && a.date !== dateKey(new Date(now));
+    const decay = Math.pow(0.5, age / halfLifeHours(sleepAfter, proteinMissed));
+    for (const [m, u] of activityMuscleLoad(a)) out[m] += u * decay;
   }
   return out;
 }
@@ -356,13 +372,14 @@ export function weeklySets(sessions: Session[], from: string, to: string): Recor
       const ex = EX[log.exId];
       if (!ex) return;
       const n = log.sets.length;
-      ex.primary.forEach((m) => (out[m] += n));
-      ex.secondary.forEach((m) => (out[m] += n * 0.5));
+      for (const [m, w] of muscleShares(ex)) out[m] += n * w;
     }),
   );
   return out;
 }
-export const sessionVolume = (s: Session) => s.exercises.reduce((a, l) => a + l.sets.reduce((b, x) => b + x.weight * x.reps, 0), 0);
+/** Weight × reps for a whole set, including any drops or rest-pause mini-sets. */
+export const setVolume = (x: SetLog) => x.weight * x.reps + (x.parts ?? []).reduce((a, p) => a + p.weight * p.reps, 0);
+export const sessionVolume = (s: Session) => s.exercises.reduce((a, l) => a + l.sets.reduce((b, x) => b + setVolume(x), 0), 0);
 export const VOLUME_RANGE = { min: 10, max: 20 };
 
 /* =========================== plateau & deload =========================== */
@@ -374,17 +391,25 @@ export function isPlateau(series: { e1rm: number }[]): boolean {
   return Math.max(...last3) <= priorBest * 1.002;
 }
 
-export interface PlateauFlag { exId: string; fix: string; kind: "deload" | "add_set" | "calories" | "protein" | "variation" }
+export interface PlateauFlag { exId: string; fix: string; kind: "deload" | "add_set" | "calories" | "protein" | "variation" | "cut_dropping" }
 let _proteinTarget = 0;
 /** set by the app so plateau fixes can reference protein adherence */
 export const setProteinTarget = (g: number) => { _proteinTarget = g; };
 
-export function plateauFix(ctx: { avgReadiness7: number | null; weeklySetsPrimary: number; weightSlopePerWeek: number; proteinHit?: number }): Omit<PlateauFlag, "exId"> {
-  if (ctx.avgReadiness7 != null && ctx.avgReadiness7 < 65) return { kind: "deload", fix: `Readiness has averaged ${Math.round(ctx.avgReadiness7)} — take a deload week (60% volume, same weights) to let fatigue clear.` };
-  if (ctx.weeklySetsPrimary < 12) return { kind: "add_set", fix: `Only ${r1(ctx.weeklySetsPrimary)} hard sets/week for this muscle — add 1 working set.` };
-  if (ctx.weightSlopePerWeek < -0.1) return { kind: "calories", fix: `Body weight is dropping while strength stalls — raise calories ~200 kcal/day.` };
-  if (ctx.proteinHit != null && ctx.proteinHit < 0.6) return { kind: "protein", fix: `Protein hit only ${Math.round(ctx.proteinHit * 100)}% of days in the last 2 weeks — get protein to target daily before changing the program.` };
-  return { kind: "variation", fix: "Recovery and volume look fine — swap to a close variation for 3 weeks or widen the rep range." };
+/**
+ * One change to suggest for a stalled (or, in a cut, dropping) lift.
+ * cutting = the user is deliberately losing weight: never suggest eating more; holding strength is the goal.
+ */
+export function plateauFix(ctx: { avgReadiness7: number | null; weeklySetsPrimary: number; weightSlopePerWeek: number; proteinHit?: number; cutting?: boolean }): Omit<PlateauFlag, "exId"> {
+  if (ctx.avgReadiness7 != null && ctx.avgReadiness7 < 65) return { kind: "deload", fix: `Readiness has averaged ${Math.round(ctx.avgReadiness7)}. Take a deload week (60% volume, same weights) to let fatigue clear.` };
+  if (ctx.cutting) {
+    if (ctx.proteinHit != null && ctx.proteinHit < 0.6) return { kind: "protein", fix: `Strength is slipping in your cut and protein hit only ${Math.round(ctx.proteinHit * 100)}% of days. Getting protein to target every day is the best way to hold on to muscle.` };
+    return { kind: "cut_dropping", fix: "Strength is slipping during your cut. Keep the weights heavy, keep protein at target, and consider a slightly slower rate of loss (for example, move your goal's deadline out). Holding strength is the aim here, not PRs." };
+  }
+  if (ctx.weeklySetsPrimary < 12) return { kind: "add_set", fix: `About ${Math.max(1, Math.round(ctx.weeklySetsPrimary))} hard set${Math.round(ctx.weeklySetsPrimary) === 1 ? "" : "s"} a week for this muscle lately. Add 1 working set.` };
+  if (ctx.weightSlopePerWeek < -0.1) return { kind: "calories", fix: "Body weight is dropping while strength stalls, and you're not trying to lose weight. Raise calories about 200 kcal a day." };
+  if (ctx.proteinHit != null && ctx.proteinHit < 0.6) return { kind: "protein", fix: `Protein hit only ${Math.round(ctx.proteinHit * 100)}% of days in the last 2 weeks. Get protein to target daily before changing the program.` };
+  return { kind: "variation", fix: "Recovery and volume look fine. Swap to a close variation for 3 weeks or widen the rep range." };
 }
 
 /* =========================== projection =========================== */
@@ -453,23 +478,98 @@ export function strengthTrendPct(sessions: Session[], today: string, days = 14):
 }
 
 /* =========================== nutrition =========================== */
-export interface NutritionTargets { bmr: number; tdee: number; cal: number; trainingCal: number; restCal: number; protein: number; proteinPerKg: number; activity: number; goalAdj: number }
+export interface NutritionTargets {
+  bmr: number; tdee: number; cal: number; trainingCal: number; restCal: number; protein: number; proteinPerKg: number; activity: number; goalAdj: number;
+  /** Average extra kcal/day from logged runs, rides, classes and WODs (0 when maintenance is the user's own number). */
+  activityKcal: number;
+  /** Maintenance is the number the user entered, not the estimate. */
+  customMaintenance: boolean;
+  /** How calories vary across the week; the per-day numbers below follow it. */
+  split: { mode: CalorieSplitMode; amount: number };
+  /** Higher days (training days, or Sat–Sun) and lower days. Equal to cal when the split is flat. */
+  highCal: number; lowCal: number;
+  /** Set when an active bodyweight goal is driving the numbers instead of the profile goal. */
+  weightPlan?: WeightPlanResult | null;
+}
 
-export function nutritionTargets(p: Profile, daysPerWeek: number): NutritionTargets {
-  const kg = toKg(p.bodyWeight, p.units);
+/** An active bodyweight goal, in kg. daysLeft null = no deadline (use a default pace). */
+export interface WeightPlan { currentKg: number; targetKg: number; daysLeft: number | null }
+export interface WeightPlanResult {
+  dir: "lose" | "gain" | "hold";
+  /** Planned change per week, kg (positive number). */
+  kgPerWeek: number;
+  /** The deadline would need a faster rate than is safe, or calories below BMR; the plan uses the safe limit instead. */
+  capped: boolean;
+  /** The pace came from a default because the goal has no (future) deadline. */
+  defaultPace: boolean;
+}
+
+/** About 7,700 kcal per kg (3,500 per lb) of bodyweight change. */
+export const KCAL_PER_KG = 7700;
+
+export function nutritionTargets(p: Profile, daysPerWeek: number, plan?: WeightPlan | null, opts: { activityKcalPerDay?: number } = {}): NutritionTargets {
+  const kg = plan?.currentKg ?? toKg(p.bodyWeight, p.units);
   const sexAdj = p.sex === "m" ? 5 : p.sex === "f" ? -161 : -78;
   const bmr = 10 * kg + 6.25 * p.heightCm - 5 * p.age + sexAdj;
   const activity = daysPerWeek <= 3 ? 1.375 : daysPerWeek <= 5 ? 1.55 : 1.725;
-  const tdee = bmr * activity;
+  // Maintenance: the user's own number if they set one; otherwise BMR × lifting-days factor + logged cardio/classes.
+  const custom = !!(p.maintenanceKcal && p.maintenanceKcal >= 800);
+  const activityKcal = custom ? 0 : Math.max(0, Math.round(opts.activityKcalPerDay ?? 0));
+  const tdee = custom ? p.maintenanceKcal! : bmr * activity + activityKcal;
+  // Weekly shape: move calories from lower days to higher days; the weekly total (and so the goal) is unchanged.
+  const split = p.calorieSplit ?? { mode: "training" as const, amount: 150 };
+  const highDays = split.mode === "training" ? daysPerWeek : split.mode === "weekend" ? 2 : 0;
+  const lowDays = 7 - highDays;
+  const bump = split.mode === "flat" || highDays === 0 || lowDays === 0 ? 0 : Math.max(0, Math.min(1000, split.amount));
+  const trim = bump ? Math.round((bump * highDays) / lowDays / 10) * 10 : 0;
+  const pack = (calRaw: number, goalAdj: number, protein: number, weightPlan: WeightPlanResult | null = null): NutritionTargets => {
+    const cal = Math.round(calRaw / 10) * 10;
+    const highCal = cal + bump, lowCal = cal - trim;
+    return {
+      bmr: Math.round(bmr), tdee: Math.round(tdee), cal, highCal, lowCal,
+      trainingCal: split.mode === "training" ? highCal : cal, restCal: split.mode === "training" ? lowCal : cal,
+      split: { mode: split.mode, amount: bump }, protein, proteinPerKg: Math.round((protein / kg) * 10) / 10, activity, goalAdj: Math.round(goalAdj), weightPlan, activityKcal, customMaintenance: custom,
+    };
+  };
+
+  if (plan) {
+    // A bodyweight goal sets the calorie gap: (kg to change × 7,700 kcal) spread over the days left.
+    const diff = plan.targetKg - kg;
+    const dir: WeightPlanResult["dir"] = Math.abs(diff) < 0.5 ? "hold" : diff < 0 ? "lose" : "gain";
+    if (dir === "hold") return pack(tdee, 0, Math.round(kg * 2.0), { dir, kgPerWeek: 0, capped: false, defaultPace: false });
+    // Safe limits: lose ≤ 1% of bodyweight a week, gain ≤ 0.5% (faster gain is mostly fat). Defaults are half that.
+    const maxRate = dir === "lose" ? kg * 0.01 : kg * 0.005;
+    const defaultPace = !plan.daysLeft || plan.daysLeft <= 0;
+    let rate = defaultPace ? maxRate / 2 : Math.abs(diff) / (plan.daysLeft! / 7);
+    let capped = rate > maxRate;
+    rate = Math.min(rate, maxRate);
+    let adj = (dir === "lose" ? -1 : 1) * (rate * KCAL_PER_KG) / 7;
+    // Never plan to eat below BMR (and never under 1,200 / 1,500 kcal).
+    const floor = Math.max(bmr, p.sex === "m" ? 1500 : 1200);
+    if (tdee + adj < floor) { adj = floor - tdee; rate = (Math.abs(adj) * 7) / KCAL_PER_KG; capped = true; }
+    // Protein: high in a cut to keep muscle, based on goal weight so a big cut doesn't inflate it.
+    const protein = dir === "lose" ? Math.round(Math.max(2.2 * plan.targetKg, 1.6 * kg)) : Math.round(1.8 * kg);
+    return pack(tdee + adj, adj, protein, { dir, kgPerWeek: Math.round(rate * 100) / 100, capped, defaultPace });
+  }
+
   const goalAdj: Record<Goal, number> = { muscle: p.experience === "beginner" ? 350 : 250, strength: 200, fatloss: -500, recomp: -150 };
-  const cal = Math.round((tdee + goalAdj[p.goal]) / 10) * 10;
   const perKg: Record<Goal, number> = { muscle: 1.8, strength: 1.6, fatloss: 2.2, recomp: 2.0 };
-  const protein = Math.round(kg * perKg[p.goal]);
-  // training-day bump, rest-day trim, weekly average preserved
-  const bump = 150;
-  const restDays = 7 - daysPerWeek;
-  const restTrim = restDays > 0 ? Math.round((bump * daysPerWeek) / restDays / 10) * 10 : 0;
-  return { bmr: Math.round(bmr), tdee: Math.round(tdee), cal, trainingCal: cal + bump, restCal: cal - restTrim, protein, proteinPerKg: perKg[p.goal], activity, goalAdj: goalAdj[p.goal] };
+  const t = pack(tdee + goalAdj[p.goal], goalAdj[p.goal], Math.round(kg * perKg[p.goal]));
+  return { ...t, proteinPerKg: perKg[p.goal] };
+}
+
+/** The calorie target for a given day, following the user's weekly split. */
+export function calTargetFor(t: NutritionTargets, date: string, isTrainingDay: boolean): number {
+  if (t.split.mode === "training") return isTrainingDay ? t.highCal : t.lowCal;
+  if (t.split.mode === "weekend") { const wd = new Date(date + "T12:00:00").getDay(); return wd === 0 || wd === 6 ? t.highCal : t.lowCal; }
+  return t.cal;
+}
+
+/** "2,900 on training days, 2,550 on rest days" / "2,750 every day" / "3,100 Sat–Sun, 2,610 Mon–Fri". */
+export function splitDescription(t: NutritionTargets): string {
+  const f = (n: number) => n.toLocaleString();
+  if (t.split.mode === "flat" || t.highCal === t.lowCal) return `${f(t.cal)} every day`;
+  return t.split.mode === "training" ? `${f(t.highCal)} on training days, ${f(t.lowCal)} on rest days` : `${f(t.highCal)} Sat–Sun, ${f(t.lowCal)} Mon–Fri`;
 }
 
 /* =========================== DOTS =========================== */
@@ -527,7 +627,7 @@ export function readinessSeries(state: AppState, today: string, days = 56): { da
   for (let i = days - 1; i >= 0; i--) {
     const d = addDays(today, -i);
     const ci = state.checkins.find((c) => c.date === d);
-    const r = computeReadiness(ci, hrvBaseline(state.checkins, d), dayMuscles(dayForDate(state.program, d)), trainingLoad(state.sessions, d));
+    const r = computeReadiness(ci, hrvBaseline(state.checkins, d), dayMuscles(dayForDate(state.program, d)), trainingLoad(loadSessionsOf(state), d));
     out.push({ date: d, score: r.score });
   }
   return out;
@@ -548,19 +648,47 @@ export function weightSlopePerWeek(state: AppState, today: string) {
   return linreg(w.map((x) => ({ x: daysBetween(today, x.date), y: x.w }))).slope * 7;
 }
 
+/**
+ * Is the user deliberately losing weight? An active bodyweight goal decides (target below the latest weigh-in);
+ * without one, the profile goal does (fat loss).
+ */
+export function isCutting(state: AppState): boolean {
+  const p = state.profile;
+  if (!p) return false;
+  const g = (state.goals ?? []).filter((x) => x.kind === "bodyweight" && !x.archived && !x.achievedAt).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0];
+  if (g && g.kind === "bodyweight") {
+    const latest = [...state.checkins].filter((c) => c.bodyWeight != null).sort((a, b) => (a.date < b.date ? -1 : 1)).pop()?.bodyWeight ?? p.bodyWeight;
+    return g.target < latest - 0.5;
+  }
+  return p.goal === "fatloss";
+}
+
+/** Recent best is clearly below the earlier best (≥5%): strength is falling, not just flat. */
+export function isDropping(series: { e1rm: number }[]): boolean {
+  if (series.length < 4) return false;
+  const recent = Math.max(...series.slice(-3).map((s) => s.e1rm));
+  const prior = Math.max(...series.slice(-9, -3).map((s) => s.e1rm));
+  return recent < prior * 0.95;
+}
+
 export function plateauFlags(state: AppState, today: string): PlateauFlag[] {
   const ar = avgReadiness(state, today, 7);
-  const sets = weeklySets(state.sessions, addDays(today, -6), today);
+  // Two weeks of sets, per week: one missed week doesn't read as "0 sets a week".
+  const sets = weeklySets(state.sessions, addDays(today, -13), today);
   const ws = weightSlopePerWeek(state, today);
+  const cutting = isCutting(state);
   const flags: PlateauFlag[] = [];
   const active = new Set(state.program?.days.flatMap((d) => d.exercises.map((e) => e.exId)) ?? []);
   for (const id of performedExerciseIds(state.sessions)) {
     if (!active.has(id) || !isCompound(EX[id])) continue; // isolation e1RMs are too noisy at small loads
     const ser = e1rmSeries(state.sessions, id);
-    if (!isPlateau(ser)) continue;
+    // Not trained in the last 2 weeks: nothing to judge yet.
+    if (!ser.length || daysBetween(ser[ser.length - 1].date, today) > 14) continue;
+    // In a cut, flat strength is the goal; only a real drop is worth flagging.
+    if (cutting ? !isDropping(ser) : !isPlateau(ser)) continue;
     const prim = EX[id].primary[0];
     const proteinHit = _proteinTarget ? proteinHitRate(state, _proteinTarget, today, 14) : undefined;
-    flags.push({ exId: id, ...plateauFix({ avgReadiness7: ar, weeklySetsPrimary: sets[prim], weightSlopePerWeek: ws, proteinHit }) });
+    flags.push({ exId: id, ...plateauFix({ avgReadiness7: ar, weeklySetsPrimary: sets[prim] / 2, weightSlopePerWeek: ws, proteinHit, cutting }) });
   }
   return flags;
 }
@@ -633,7 +761,7 @@ export function weeklyReport(state: AppState, from: string, targets: NutritionTa
     if (prot[d] == null) continue;
     loggedDays++;
     if (prot[d] >= targets.protein * 0.95) proteinDays++;
-    const tgt = dayForDate(state.program, d) ? targets.trainingCal : targets.restCal;
+    const tgt = calTargetFor(targets, d, !!dayForDate(state.program, d));
     if (Math.abs(cals[d] - tgt) <= tgt * 0.1) calorieDays++;
   }
   const prs = inWeek.flatMap((s) => sessionPRs(state.sessions, s).map((p) => ({ ...p, date: s.date })));
@@ -668,6 +796,12 @@ export function weeklyReport(state: AppState, from: string, targets: NutritionTa
     const ts = mean(top.map((x) => x.sleep)), rsl = mean(rest.map((x) => x.sleep));
     if (ts - rsl >= 0.3) insights.push({ tone: "info", text: `Your best sessions followed ${r1(Math.min(...top.map((x) => x.sleep)) >= 7 ? Math.floor(ts * 2) / 2 : ts)}h+ sleep (avg ${r1(ts)}h vs ${r1(rsl)}h for the rest).` });
   }
+  // warm-ups
+  const wu = warmupRate(state.sessions, from, end);
+  if (wu.total >= 2) {
+    if (wu.warmed / wu.total < 0.5) insights.push({ tone: "warn", text: `Warmed up before ${wu.warmed} of ${wu.total} workouts. Five minutes of easy cardio and a couple of band moves is enough.` });
+    else if (wu.warmed === wu.total) insights.push({ tone: "good", text: `Warmed up before all ${wu.total} workouts.` });
+  }
   // pre-workout carbs
   const withCarbs: number[] = [], without: number[] = [];
   for (const x of recent) {
@@ -679,7 +813,7 @@ export function weeklyReport(state: AppState, from: string, targets: NutritionTa
     if (Math.abs(diff) >= 0.8) insights.push({ tone: diff > 0 ? "info" : "warn", text: `Sessions with 40g+ carbs in the 3h before ran ${diff > 0 ? "+" : ""}${r1(diff)}% e1RM vs sessions without.` });
   }
   // volume
-  const keyMuscles: Muscle[] = ["chest", "lats", "upper_back", "quads", "hamstrings", "shoulders", "glutes"];
+  const keyMuscles: Muscle[] = ["chest_mid", "lats", "mid_back", "vasti", "hamstrings", "side_delts", "glute_max"];
   const low = keyMuscles.filter((m) => sets[m] < VOLUME_RANGE.min).sort((a, b) => sets[a] - sets[b]);
   if (low.length && inWeek.length) insights.push({ tone: "warn", text: `${MUSCLE_LABEL[low[0]]} volume ${r1(sets[low[0]])} sets/week — below the 10-set floor.` });
   const high = MUSCLES.filter((m) => sets[m] > VOLUME_RANGE.max);
@@ -773,7 +907,7 @@ export function matchScore(me: { gym: string; schedule: number[]; split: string;
 export function userStreak(state: AppState, today: string) {
   // consecutive planned days completed, counting back from yesterday (today counts if done)
   let streak = 0;
-  const done = new Set(state.sessions.filter((s) => s.end).map((s) => s.date));
+  const done = trainedDates(state.sessions, state.activities);
   for (let i = 0; i < 120; i++) {
     const d = addDays(today, -i);
     if (!dayForDate(state.program, d)) continue;
@@ -826,7 +960,7 @@ export function coachAnswer(q: string, ctx: CoachCtx): string {
     return dl.recommend ? `Yes — a deload is recommended: ${dl.reasons.join(" and ")}. Run one week at 60% of your sets with the same weights. You can start it from the Train tab.` : `No deload needed yet. 5-day readiness avg ${dl.avg5 != null ? Math.round(dl.avg5) : "—"} (trigger < 55) and ${dl.plateaus} lift${dl.plateaus === 1 ? "" : "s"} in plateau (trigger ≥ 3).`;
   }
   if (/(protein|eat|calorie|food|macro|nutrition|diet)/.test(ql)) {
-    return `Your targets: ${targets.cal} kcal (${targets.trainingCal} on training days, ${targets.restCal} on rest days) and ${targets.protein} g protein (${targets.proteinPerKg} g/kg). Over 14 days you hit protein on ${Math.round(ph * 100)}% of logged days. ${ph < 0.7 ? "Closing that gap is the cheapest gain available — add one 40 g protein meal on days you're short." : "That's solid; keep it consistent."}`;
+    return `Your targets: ${targets.cal} kcal a day on average (${splitDescription(targets)}) and ${targets.protein} g protein (${targets.proteinPerKg} g/kg). Over 14 days you hit protein on ${Math.round(ph * 100)}% of logged days. ${ph < 0.7 ? "Closing that gap is the cheapest gain available — add one 40 g protein meal on days you're short." : "That's solid; keep it consistent."}`;
   }
   if (/(sleep|tired|hrv|recover)/.test(ql)) {
     const ins = weeklyReport(state, weekStart(today), targets).insights.find((i) => i.text.includes("sleep"));

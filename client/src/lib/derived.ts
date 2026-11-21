@@ -1,9 +1,10 @@
 import { useMemo } from "react";
 import { useStore } from "./store";
 import {
-  computeReadiness, trainingLoad, dateKey, dayForDate, dayMuscles, deloadCheck, hrvBaseline, logsForPe, muscleFatigue,
+  computeReadiness, trainingLoad, loadSessionsOf, dateKey, dayForDate, dayMuscles, deloadCheck, hrvBaseline, logsForPe, muscleFatigue,
   phaseInfo, plateauFlags, prescribe, setProteinTarget, fatiguePct, sessionPRs, e1rmSeries, avgSleep, proteinHitRate,
   addDays, daysBetween, mean, r1, proteinByDate, fmtDate, fmtW, readinessEffect, roundTo, type Prescription,
+  setVolume,
 } from "./engine";
 import type { AppState, ExerciseLog, Muscle, ProgramDay, ProgramExercise, SavedWorkout, Session, Units } from "./types";
 import { EX, isCompound, newId } from "./exercises";
@@ -16,8 +17,8 @@ export function useToday() {
     const day = dayForDate(state.program, today);
     const checkin = state.checkins.find((c) => c.date === today);
     const muscles = dayMuscles(day);
-    const readiness = computeReadiness(checkin, hrvBaseline(state.checkins, today), muscles, trainingLoad(state.sessions, today));
-    const fatigueUnits = muscleFatigue(state.sessions, state.checkins, state.meals, targets.protein, Date.now());
+    const readiness = computeReadiness(checkin, hrvBaseline(state.checkins, today), muscles, trainingLoad(loadSessionsOf(state), today));
+    const fatigueUnits = muscleFatigue(state.sessions, state.checkins, state.meals, targets.protein, Date.now(), state.activities);
     const fatigue = Object.fromEntries(Object.entries(fatigueUnits).map(([k, v]) => [k, fatiguePct(v)])) as Record<Muscle, number>;
     const flags = plateauFlags(state, today);
     const deload = deloadCheck(state, today);
@@ -90,7 +91,7 @@ export function prWhyStat(state: AppState, date: string, proteinTarget: number):
 }
 
 export function sessionSummary(state: AppState, s: Session) {
-  const volume = s.exercises.reduce((a, l) => a + l.sets.reduce((b, x) => b + x.weight * x.reps, 0), 0);
+  const volume = s.exercises.reduce((a, l) => a + l.sets.reduce((b, x) => b + setVolume(x), 0), 0);
   const sets: Partial<Record<Muscle, number>> = {};
   s.exercises.forEach((l) => EX[l.exId]?.primary.forEach((m) => (sets[m] = (sets[m] ?? 0) + l.sets.length)));
   const prs = sessionPRs([...state.sessions.filter((x) => x.id !== s.id), s], s);

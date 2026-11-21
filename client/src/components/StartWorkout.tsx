@@ -1,5 +1,7 @@
-// "Start a different workout": an empty (freestyle) workout, a saved workout, or any day of the program.
-import { ChevronRight, Plus } from "lucide-react";
+// "Start a different workout": an empty (freestyle) workout, a run/class/WOD, a saved workout, or any day of the program.
+import { Activity as ActivityIcon, ChevronRight, Plus } from "lucide-react";
+import { useState } from "react";
+import { ActivitySheet } from "./Activity";
 import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
 import { newFreeSession, newSession, sessionFromSaved, useToday } from "@/lib/derived";
@@ -13,6 +15,7 @@ export function StartWorkoutSheet({ onClose }: { onClose: () => void }) {
   const days = state.program?.days ?? [];
   const saved = state.savedWorkouts ?? [];
 
+  const [logging, setLogging] = useState(false);
   const begin = (make: () => Session) => {
     set((s) => (s.activeSession ? s : { ...s, activeSession: make() }));
     onClose();
@@ -20,6 +23,7 @@ export function StartWorkoutSheet({ onClose }: { onClose: () => void }) {
     ui.setTab("train");
   };
 
+  if (logging) return <ActivitySheet onClose={onClose} />;
   return (
     <Sheet title="Start a workout" onClose={onClose} testId="sheet-start-workout">
       <button className="card w-full text-left flex items-center gap-3" onClick={() => begin(() => newFreeSession())} data-testid="button-start-empty">
@@ -27,6 +31,14 @@ export function StartWorkoutSheet({ onClose }: { onClose: () => void }) {
         <div className="min0 flex-1">
           <div className="font-semibold">Empty workout</div>
           <div className="text-[13px] muted">Add exercises as you go. Weights come from your last time.</div>
+        </div>
+        <ChevronRight size={16} className="faint shrink-0" />
+      </button>
+      <button className="card w-full text-left flex items-center gap-3 mt-2" onClick={() => setLogging(true)} data-testid="button-log-activity">
+        <ActivityIcon size={18} className="shrink-0" />
+        <div className="min0 flex-1">
+          <div className="font-semibold">Run, ride, class or WOD</div>
+          <div className="text-[13px] muted">Log cardio, a CrossFit workout, yoga, a sport, anything that isn't sets and reps.</div>
         </div>
         <ChevronRight size={16} className="faint shrink-0" />
       </button>

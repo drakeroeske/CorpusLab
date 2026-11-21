@@ -1,20 +1,27 @@
+import { MuscleName } from "@/components/Term";
+import type { Muscle } from "@/lib/types";
 import { Info, Term } from "@/components/Term";
 import { useEffect, useMemo, useRef, useState, type TouchEvent as RTouchEvent } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, Disc, Flame, List as ListIcon, Plus, Repeat, Timer, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, Disc, Flame, Link2, List as ListIcon, Plus, Repeat, Timer, Unlink, X } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
 import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { freeLog, freeRx, isFreeSession, newSession, savedFromSession, prescriptionsFor, prWhyStat, sessionStale, sessionSummary, syncSession, useToday } from "@/lib/derived";
 import { StartWorkoutSheet } from "@/components/StartWorkout";
+import { WarmupChip, WarmupStep } from "@/components/Warmup";
+import { warmupSummary } from "@/lib/warmups";
+import { ActivitySheet } from "@/components/Activity";
 import { SaveAsWorkoutSheet } from "@/components/SavedWorkouts";
 import { ExercisePicker } from "@/components/ProgramEditor";
 import { Tag } from "@/components/riso";
 import { e1rm, fmtDate, fmtW, jumpFor, logsForPe, platesPerSide, prescribe, restDefault, substitutes, warmupSets, type Prescription } from "@/lib/engine";
 import { EX, MUSCLE_LABEL, isCompound, newId } from "@/lib/exercises";
-import type { ExerciseLog, FeedPost, ProgramExercise, Session, Units } from "@/lib/types";
+import type { ExerciseLog, FeedPost, ProgramExercise, Session, SetKind, SetPart, Units } from "@/lib/types";
 import { Seg, Sheet, Stepper } from "@/components/ui";
 import { PRCardSheet, type PRData } from "@/components/PRCard";
+import { EditSetSheet, KIND_LABEL, SetRow, SetTypeFields, defaultParts, normalizeSet } from "@/components/SetEditor";
+import { afterSupersetSet, linkSuperset, supersetGroup, unlinkSuperset } from "@/lib/superset";
 
 const mmss = (s: number) => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.max(0, Math.floor(s) % 60)).padStart(2, "0")}`;
 
@@ -57,8 +64,10 @@ const QUALITY_HINT: Record<number, string> = {
 };
 
 /** One exercise, full screen: target, logged sets, big inputs, Log set. Extras sit behind "More". */
-function FocusExercise({ log, idx, rx, pe, fatigue, isFirstCompound, nextName, onNext }: {
+function FocusExercise({ log, idx, rx, pe, fatigue, isFirstCompound, nextName, onNext, supersetWith, onLogged, onSuperset }: {
   log: ExerciseLog; idx: number; rx: Prescription; pe: ProgramExercise; fatigue: Record<string, number>; isFirstCompound: boolean; nextName: string | null; onNext: () => void;
+  /** Names of the other exercises in this exercise's superset, or null. */
+  supersetWith: string[] | null; onLogged: () => void; onSuperset: () => void;
 }) {
   const { set, profile, state } = useStore();
   const ui = useUI();
@@ -74,7 +83,15 @@ function FocusExercise({ log, idx, rx, pe, fatigue, isFirstCompound, nextName, o
   const [quality, setQuality] = useState<number | null>(null);
   const [more, setMore] = useState(false);
   const [sheet, setSheet] = useState<"warm" | "plates" | "sub" | null>(null);
+  const [kind, setKind] = useState<SetKind | null>(null);
+  const [parts, setParts] = useState<SetPart[]>([]);
+  const [editSet, setEditSet] = useState<number | null>(null);
   useEffect(() => { setW(last?.weight ?? target); }, [target]); // eslint-disable-line
+  // A program day can ask for a drop set or rest-pause on the last set: pick that type for you when you get there.
+  const techKind: SetKind | null = pe.technique === "drop" ? "drop" : pe.technique === "restpause" ? "restpause" : null;
+  useEffect(() => {
+    if (techKind && log.sets.length === rx.sets - 1) { setKind(techKind); setParts(defaultParts(techKind, w, reps, inc)); }
+  }, [log.sets.length]); // eslint-disable-line
   const hot = ex.primary.filter((m) => (fatigue[m] ?? 0) > 60);
   const done = log.sets.length >= rx.sets;
   const inc = subbed && ex.equipment === "dumbbell" ? (u === "lb" ? 5 : 2) : pe.increment || (u === "lb" ? 5 : 2.5);
@@ -87,13 +104,14 @@ function FocusExercise({ log, idx, rx, pe, fatigue, isFirstCompound, nextName, o
       ...s,
       activeSession: {
         ...s.activeSession, restEnd: Date.now() + rest * 1000, restTotal: rest,
-        exercises: s.activeSession.exercises.map((l, i) => (i === idx ? { ...l, sets: [...l.sets, { weight: w, reps, rir, quality, ts: Date.now() }] } : l)),
+        exercises: s.activeSession.exercises.map((l, i) => (i === idx ? { ...l, sets: [...l.sets, normalizeSet({ weight: w, reps, rir, quality, kind, parts, ts: Date.now() })] } : l)),
       },
     } : s);
     if (navigator.vibrate) try { navigator.vibrate(15); } catch { /* noop */ }
-    setRir(null); setQuality(null);
+    setRir(null); setQuality(null); setKind(null); setParts([]);
     const isTop = log.sets.length === 0;
-    if (isTop) ui.toast(reps >= pe.repMax ? (quality != null && quality <= 2 ? "Top of range but a grind — same weight next time, make it clean" : `Top of range — next time +${fmtW(jumpFor(pe, w))} ${u}`) : reps >= pe.repMin ? "In range — aim +1 rep next time" : "Below range — holding weight");
+    onLogged();
+    if (isTop && !supersetWith) ui.toast(reps >= pe.repMax ? (quality != null && quality <= 2 ? "Top of range but a grind — same weight next time, make it clean" : `Top of range — next time +${fmtW(jumpFor(pe, w))} ${u}`) : reps >= pe.repMin ? "In range — aim +1 rep next time" : "Below range — holding weight");
   };
 
   return (
@@ -103,6 +121,7 @@ function FocusExercise({ log, idx, rx, pe, fatigue, isFirstCompound, nextName, o
         {done ? <span className="chip chip-signal shrink-0"><Check size={12} /> Done</span> : <span className="chip shrink-0" data-testid={`text-set-count-${idx}`}>Set {log.sets.length + 1} of {rx.sets}</span>}
       </div>
       {subbed && <div className="text-[13px] muted mt-0.5">Swapped in for {EX[log.originalExId].name}</div>}
+      {supersetWith && <div className="text-[13px] mt-1 flex items-center gap-1" data-testid={`text-superset-${idx}`}><Link2 size={13} /> Superset with {supersetWith.join(" and ")}</div>}
       <div className="mono text-[17px] mt-2" data-testid={`text-target-${idx}`}>
         <b>{target > 0 ? `${fmtW(target)} ${u}` : ex.equipment === "bodyweight" ? "Body weight" : rx.decision === "start" ? "Your pick" : "Body weight"}</b> × {rx.repMin}–{rx.repMax}
         <span className="muted text-[14px]" style={{ fontFamily: "var(--font-sans)" }}> · {rx.sets} sets · <Term k="rir">{rx.rir} RIR</Term></span>
@@ -113,18 +132,13 @@ function FocusExercise({ log, idx, rx, pe, fatigue, isFirstCompound, nextName, o
         {isFirstCompound && target > 0 && log.sets.length === 0 && <button className="btn btn-sm btn-outline" onClick={() => setSheet("warm")} data-testid={`button-warmup-${idx}`}><Flame size={14} /> Warm-up</button>}
         {["barbell", "smith"].includes(ex.equipment) && <button className="btn btn-sm btn-outline" onClick={() => setSheet("plates")} data-testid={`button-plates-${idx}`}><Disc size={14} /> Plates</button>}
         <button className="btn btn-sm btn-outline" onClick={() => setSheet("sub")} data-testid={`button-sub-${idx}`}><Repeat size={14} /> Swap</button>
+        <button className="btn btn-sm btn-outline" onClick={onSuperset} data-testid={`button-superset-${idx}`}><Link2 size={14} /> Superset</button>
       </div>
 
       {log.sets.length > 0 && (
         <div className="mt-3">
-          {log.sets.map((st, i) => (
-            <div key={i} className="flex items-center gap-3 text-[15px]" style={{ minHeight: 40, borderTop: "1px solid var(--line)" }} data-testid={`row-set-${idx}-${i}`}>
-              <Check size={15} className="shrink-0" style={{ color: "var(--ink)" }} />
-              <span className="muted w-12">Set {i + 1}</span>
-              <span className="mono flex-1"><b>{fmtW(st.weight)}</b> × {st.reps}{st.rir != null && <span className="muted"> · {st.rir} RIR</span>}{st.quality != null && <span className="muted"> · Q{st.quality}</span>}</span>
-              <button aria-label={`Delete set ${i + 1}`} className="faint" style={{ padding: 10, margin: -6 }} onClick={() => updLog((l) => ({ ...l, sets: l.sets.filter((_, j) => j !== i) }))} data-testid={`button-delete-set-${idx}-${i}`}><Trash2 size={15} /></button>
-            </div>
-          ))}
+          {log.sets.map((st, i) => <SetRow key={i} set={st} n={i + 1} onEdit={() => setEditSet(i)} testId={`row-set-${idx}-${i}`} />)}
+          <p className="text-[12px] faint mt-1">Tap a set to fix it or change its type.</p>
         </div>
       )}
 
@@ -132,6 +146,7 @@ function FocusExercise({ log, idx, rx, pe, fatigue, isFirstCompound, nextName, o
         <div className="field"><span className="label">Weight ({u})</span><Stepper value={w} step={inc} unit={u} onChange={setW} testId={`stepper-weight-${idx}`} /></div>
         <div className="field"><span className="label">Reps · aim for {rx.repGoal}</span><Stepper value={reps} step={1} min={0} max={100} unit="reps" decimals={0} onChange={setReps} testId={`stepper-reps-${idx}`} /></div>
       </div>
+      <div className="mt-3"><SetTypeFields kind={kind} parts={parts} weight={w} reps={reps} inc={inc} units={u} onChange={(k, p) => { setKind(k); setParts(p); }} testId={`set-type-${idx}`} /></div>
 
       <button className="btn btn-sm btn-ghost mt-2" style={{ paddingLeft: 0, whiteSpace: "normal", textAlign: "left" }} onClick={() => setMore(!more)} aria-expanded={more} data-testid={`button-more-${idx}`}>
         {more ? <ChevronDown size={16} /> : <ChevronRight size={16} />} More: effort, set quality, why this target
@@ -151,10 +166,10 @@ function FocusExercise({ log, idx, rx, pe, fatigue, isFirstCompound, nextName, o
       )}
 
       <button className={`btn btn-lg btn-block mt-3 ${done ? "btn-outline" : "btn-primary"}`} onClick={logSet} data-testid={`button-log-set-${idx}`}>
-        <Check size={18} /> {done ? "Log an extra set" : `Log set ${log.sets.length + 1}`} · <span className="mono">{fmtW(w)} × {reps}</span>
+        <Check size={18} /> {done ? (kind ? `Log an extra ${KIND_LABEL[kind].toLowerCase()}` : "Log an extra set") : kind ? `Log ${KIND_LABEL[kind].toLowerCase()}` : `Log set ${log.sets.length + 1}`} · <span className="mono">{fmtW(w)} × {reps}{kind && parts.length ? ` + ${parts.length} ${kind === "drop" ? (parts.length === 1 ? "drop" : "drops") : (parts.length === 1 ? "mini-set" : "mini-sets")}` : ""}</span>
       </button>
       {done && nextName && <button className="btn btn-lg btn-block btn-primary mt-2" onClick={onNext} data-testid="button-next-exercise">Next: {nextName} <ChevronRight size={18} /></button>}
-      {pe.technique && log.sets.length === rx.sets - 1 && <p className="text-xs blue mt-2">Last set: {pe.technique === "drop" ? "drop set — strip ~25% and continue to near failure" : pe.technique === "restpause" ? "rest-pause — 15s rest, 2 mini-sets" : "take this set to failure"}.</p>}
+      {pe.technique && !techKind && log.sets.length === rx.sets - 1 && <p className="text-xs blue mt-2">Last set: {pe.technique === "drop" ? "drop set — strip ~25% and continue to near failure" : pe.technique === "restpause" ? "rest-pause — 15s rest, 2 mini-sets" : "take this set to failure"}.</p>}
 
       {sheet === "warm" && (
         <Sheet title={`Warm-up · ${ex.name}`} onClose={() => setSheet(null)} testId="sheet-warmup">
@@ -168,6 +183,12 @@ function FocusExercise({ log, idx, rx, pe, fatigue, isFirstCompound, nextName, o
           ))}
           <p className="text-xs faint mt-3">Rest 60–90s between warm-ups. Plates shown per side.</p>
         </Sheet>
+      )}
+      {editSet != null && log.sets[editSet] && (
+        <EditSetSheet title={`Set ${editSet + 1} · ${ex.name}`} initial={log.sets[editSet]} units={u} inc={inc}
+          onSave={(x) => { updLog((l) => ({ ...l, sets: l.sets.map((y, j) => (j === editSet ? x : y)) })); ui.toast("Set updated"); }}
+          onDelete={() => { updLog((l) => ({ ...l, sets: l.sets.filter((_, j) => j !== editSet) })); ui.toast("Set deleted"); }}
+          onClose={() => setEditSet(null)} />
       )}
       {sheet === "plates" && <PlatesSheet initial={w || target} onClose={() => setSheet(null)} />}
       {sheet === "sub" && (
@@ -212,12 +233,12 @@ function ExerciseList({ session, rxFor, current, onPick, onAdd, canRemove }: { s
         const { rx } = rxFor(l);
         const done = l.sets.length >= rx.sets;
         return (
-          <div key={l.peId + l.exId} className={`rowline ${current === i ? "ex-active" : ""}`} style={{ gap: 6 }} data-testid={`row-exercise-${i}`}>
+          <div key={l.peId + l.exId} className={`rowline ${current === i ? "ex-active" : ""}`} style={{ gap: 6, ...(l.superset && session.exercises.filter((x) => x.superset === l.superset).length > 1 ? { boxShadow: "inset 3px 0 0 var(--signal)", paddingLeft: 6 } : {}) }} data-testid={`row-exercise-${i}`}>
             <button className="min0 flex-1 text-left flex items-center gap-3" style={{ minHeight: 44 }} onClick={() => onPick(i)} aria-current={current === i ? "step" : undefined} data-testid={`button-goto-exercise-${i}`}>
               <span className="w-5 shrink-0 flex justify-center">{done ? <Check size={16} style={{ color: "var(--ink)" }} /> : <span className="mono text-xs muted">{i + 1}</span>}</span>
               <span className="min0">
                 <span className={`block text-[15px] ${current === i ? "font-bold" : "font-semibold"}`}>{EX[l.exId].name}</span>
-                <span className="block text-[13px] muted">{l.sets.length} of {rx.sets} sets{current === i ? " · current" : ""}</span>
+                <span className="block text-[13px] muted">{l.sets.length} of {rx.sets} sets{l.superset && session.exercises.filter((x) => x.superset === l.superset).length > 1 ? " · superset" : ""}{current === i ? " · current" : ""}</span>
               </span>
             </button>
             <button className="icon-btn" style={{ width: 36, height: 36, border: 0 }} disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Move ${EX[l.exId].name} up`} data-testid={`button-move-up-${i}`}><ArrowUp size={16} /></button>
@@ -280,8 +301,12 @@ export default function Logger() {
   const [summary, setSummary] = useState<Session | null>(null);
   const [pr, setPr] = useState<PRData | null>(null);
   const [startOpen, setStartOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
+  const [ssOpen, setSsOpen] = useState(false);
+  const [ssAdding, setSsAdding] = useState(false);
+  const [warmOpen, setWarmOpen] = useState(false);
   const u = profile.units;
 
   const day = s ? state.program?.days.find((d) => d.id === s.dayId) : null;
@@ -326,11 +351,12 @@ export default function Logger() {
             <div className="stat"><div className="label">Working sets</div><div className="v">{sum.totalSets}</div></div>
             <div className="stat"><div className="label">PRs</div><div className="v lime" data-testid="text-summary-prs">{sum.prs.length}</div></div>
           </div>
+          {summary.warmup && <p className="text-xs muted mt-3" data-testid="text-summary-warmup">{summary.warmup.status === "done" ? `Warm-up: ${warmupSummary(summary.warmup.items)}` : "Warm-up skipped"}</p>}
         </div>
         <div className="card">
           <div className="label mb-2">Sets per muscle</div>
           {Object.entries(sum.sets).sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0)).map(([m, n]) => (
-            <div key={m} className="flex items-center gap-3 mono text-sm" style={{ minHeight: 28 }}><span className="w-24 text-[13px]" style={{ fontFamily: "var(--font-sans)" }}>{MUSCLE_LABEL[m as keyof typeof MUSCLE_LABEL]}</span><div className="flex-1 bar"><i style={{ width: `${Math.min(100, (n ?? 0) * 12)}%` }} /></div><span className="w-6 text-right">{n}</span></div>
+            <div key={m} className="flex items-center gap-3 mono text-sm" style={{ minHeight: 28 }}><span className="w-28 text-[13px]" style={{ fontFamily: "var(--font-sans)" }}><MuscleName m={m as Muscle} /></span><div className="flex-1 bar"><i style={{ width: `${Math.min(100, (n ?? 0) * 12)}%` }} /></div><span className="w-6 text-right">{n}</span></div>
           ))}
         </div>
         {sum.prs.length > 0 && (
@@ -363,7 +389,9 @@ export default function Logger() {
           {t.day && !t.doneToday && <button className="btn btn-primary btn-lg btn-block mt-3" onClick={() => set((st) => ({ ...st, activeSession: newSession(st, t.day!, t.readiness.score, t.inDeload, u) }))} data-testid="button-start-planned">Start {t.day.name}</button>}
           <button className={`btn btn-block mt-3 ${t.day && !t.doneToday ? "btn-ghost" : "btn-primary btn-lg"}`} onClick={() => setStartOpen(true)} data-testid="button-start-different">{t.day && !t.doneToday ? "Start a different workout" : t.doneToday ? "Start another workout" : days.length ? "Start a workout" : "Start an empty workout"}</button>
         </div>
+        <button className="btn btn-outline btn-block" onClick={() => setActivityOpen(true)} data-testid="button-log-activity-train">Log a run, ride, class or WOD</button>
         {startOpen && <StartWorkoutSheet onClose={() => setStartOpen(false)} />}
+        {activityOpen && <ActivitySheet onClose={() => setActivityOpen(false)} />}
         {t.readiness.score == null && <p className="text-xs faint">Tip: do your check-in first — targets adjust to readiness.</p>}
       </div>
     );
@@ -403,7 +431,20 @@ export default function Logger() {
   const cur = Math.min(Math.max(0, active), Math.max(0, n - 1));
   const log = s.exercises[cur];
   const go = (i: number) => { if (i >= 0 && i < n) { setActive(i); setListOpen(false); window.scrollTo({ top: 0 }); } };
-  const nextIdx = (() => { for (let k = 1; k < n; k++) { const j = (cur + k) % n; const l = s.exercises[j]; if (l.sets.length < rxFor(l).rx.sets) return j; } return cur + 1 < n ? cur + 1 : -1; })();
+  const remaining = (i: number) => (s.exercises[i] ? rxFor(s.exercises[i]).rx.sets - s.exercises[i].sets.length : 0);
+  const group = supersetGroup(s.exercises, cur);
+  const supersetWith = group.length > 1 ? group.filter((k) => k !== cur).map((k) => EX[s.exercises[k].exId].name) : null;
+  // In a superset: straight to the next exercise in it, no rest; after the last one, rest and start the next round.
+  const onLogged = () => {
+    const next = afterSupersetSet(s.exercises, cur, (i) => remaining(i) - (i === cur ? 1 : 0));
+    if (!next) return;
+    if (!next.rest) set((st) => (st.activeSession ? { ...st, activeSession: { ...st.activeSession, restEnd: null } } : st));
+    if (next.goTo !== cur) { go(next.goTo); ui.toast(next.rest ? `Round done. Rest, then ${EX[s.exercises[next.goTo].exId].name}` : `Superset: ${EX[s.exercises[next.goTo].exId].name} next, no rest`); }
+  };
+  const setExercises = (exercises: ExerciseLog[]) => set((st) => (st.activeSession ? { ...st, activeSession: { ...st.activeSession, exercises } } : st));
+  const linkWith = (b: number, exs = s.exercises) => { const r = linkSuperset(exs, cur, b); setExercises(r.exercises); setActive(r.index); setSsOpen(false); ui.toast(`Superset: ${EX[exs[cur].exId].name} + ${EX[exs[b].exId].name}`); };
+  const groupNext = group.length > 1 ? group.find((k) => k !== cur && remaining(k) > 0) : undefined;
+  const nextIdx = groupNext != null ? groupNext : (() => { for (let k = 1; k < n; k++) { const j = (cur + k) % n; const l = s.exercises[j]; if (l.sets.length < rxFor(l).rx.sets) return j; } return cur + 1 < n ? cur + 1 : -1; })();
 
   // Swipe left/right on the exercise card to move between exercises (taps and vertical scrolls are ignored).
   const onTouchStart = (e: RTouchEvent) => { const p = e.touches[0]; swipe.current = { x: p.clientX, y: p.clientY }; };
@@ -434,6 +475,11 @@ export default function Logger() {
           </>
         )}
       </div>
+      {/* Warm-up comes first: shown until it's logged or skipped (unless turned off in Profile), and reopenable from the chip. */}
+      {warmOpen || (!s.warmup && totalSets === 0 && state.warmupPrompt !== false) ? (
+        <WarmupStep session={s} onClose={warmOpen ? () => setWarmOpen(false) : undefined} />
+      ) : (<>
+      <WarmupChip session={s} onOpen={() => setWarmOpen(true)} />
       {!day && !free && (
         <div className="warn mb-3" data-testid="card-day-missing"><div className="inner">
           <div className="font-bold">Program changed</div>
@@ -478,7 +524,8 @@ export default function Logger() {
           ) : (
             <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
               <FocusExercise key={log.peId + log.exId} log={log} idx={cur} rx={rxFor(log).rx} pe={rxFor(log).pe} fatigue={t.fatigue} isFirstCompound={cur === firstCompound}
-                nextName={nextIdx >= 0 && nextIdx !== cur ? EX[s.exercises[nextIdx].exId].name : null} onNext={() => go(nextIdx)} />
+                nextName={nextIdx >= 0 && nextIdx !== cur ? EX[s.exercises[nextIdx].exId].name : null} onNext={() => go(nextIdx)}
+                supersetWith={supersetWith} onLogged={onLogged} onSuperset={() => setSsOpen(true)} />
               <div className="flex items-center justify-between mt-2">
                 <button className="btn btn-sm btn-ghost" style={{ paddingLeft: 0 }} disabled={cur === 0} onClick={() => go(cur - 1)} data-testid="button-prev-exercise"><ChevronLeft size={16} /> Previous</button>
                 <span className="text-[12px] faint">or swipe</span>
@@ -488,9 +535,35 @@ export default function Logger() {
           )}
         </>
       )}
+      </>)}
       <div style={{ height: 70 }} />
       <RestBar session={s} />
       {adding && <ExercisePicker title="Add exercise" onClose={() => setAdding(false)} onPick={addExercise} />}
+      {ssOpen && log && (
+        <Sheet title={`Superset · ${EX[log.exId].name}`} onClose={() => setSsOpen(false)} testId="sheet-superset">
+          <p className="text-sm muted mb-3">Do one set of each exercise back to back, then rest. After you log a set here, the next exercise in the superset opens with no rest timer.</p>
+          {supersetWith && (
+            <button className="btn btn-outline btn-block mb-3" onClick={() => { setExercises(unlinkSuperset(s.exercises, cur)); setSsOpen(false); ui.toast("Taken out of the superset"); }} data-testid="button-unlink-superset">
+              <Unlink size={16} /> Take {EX[log.exId].name} out of the superset
+            </button>
+          )}
+          <div className="label mb-1">{supersetWith ? "Add another exercise" : "Pair with"}</div>
+          {s.exercises.map((l, i) => (i === cur || group.includes(i) ? null : (
+            <button key={l.peId + l.exId} className="rowline w-full text-left" style={{ minHeight: 48 }} onClick={() => linkWith(i)} data-testid={`button-superset-with-${i}`}>
+              <span className="min0 flex-1"><span className="block font-semibold text-[15px]">{EX[l.exId].name}</span><span className="block text-[13px] muted">{l.sets.length} of {rxFor(l).rx.sets} sets{l.superset ? " · already in a superset" : ""}</span></span>
+              <Link2 size={16} className="muted" />
+            </button>
+          )))}
+          <button className="btn btn-ghost btn-block mt-2" onClick={() => setSsAdding(true)} data-testid="button-superset-new"><Plus size={16} /> A new exercise</button>
+        </Sheet>
+      )}
+      {ssAdding && (
+        <ExercisePicker title="Superset with" onClose={() => setSsAdding(false)} onPick={(exId) => {
+          const added = [...s.exercises, freeLog(state.sessions, exId, t.readiness.score, u, { extra: !free })];
+          setSsAdding(false);
+          linkWith(added.length - 1, added);
+        }} />
+      )}
     </div>
   );
 }

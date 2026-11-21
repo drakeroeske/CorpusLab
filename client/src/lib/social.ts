@@ -1,3 +1,4 @@
+import { trainedDates } from "./activities";
 import type { AppState, Client, ClientNote, Session } from "./types";
 import { EX } from "./exercises";
 import {
@@ -26,7 +27,7 @@ export interface PublicStats {
 export function adherence4w(state: AppState, today = dateKey()): number {
   const planned = trainingDaysPerWeek(state.program) * 4;
   const from = addDays(today, -28);
-  const done = state.sessions.filter((s) => s.end && s.date > from && s.date <= today).length;
+  const done = [...trainedDates(state.sessions, state.activities)].filter((d) => d > from && d <= today).length;
   return planned ? Math.min(1, done / planned) : 0;
 }
 
@@ -53,7 +54,7 @@ export function computePublicStats(state: AppState): PublicStats | null {
 export function missedPlannedThisWeek(state: AppState, today: string): boolean {
   const dow = new Date(today + "T12:00:00").getDay();
   const back = (dow + 6) % 7; // days since Monday
-  const done = new Set(state.sessions.filter((s) => s.end).map((s) => s.date));
+  const done = trainedDates(state.sessions, state.activities);
   for (let i = 1; i <= back; i++) {
     const d = addDays(today, -i);
     if (dayForDate(state.program, d) && !done.has(d)) return true;
@@ -78,7 +79,7 @@ export function clientFromState(id: string, name: string, state: AppState, notes
   const fill = known.length ? Math.round(known.reduce((a, b) => a + b, 0) / known.length) : 0;
   const readiness = rs.map((x) => (x == null ? fill : x));
   let missed = 0;
-  const done = new Set(state.sessions.filter((s) => s.end).map((s) => s.date));
+  const done = trainedDates(state.sessions, state.activities);
   for (let i = 1; i <= 7; i++) { const d = addDays(today, -i); if (dayForDate(state.program, d) && !done.has(d)) missed++; }
   const ended = state.sessions.filter((s) => s.end).sort((a, b) => b.start - a.start);
   const last = ended[0];

@@ -1,4 +1,4 @@
-import { Term } from "@/components/Term";
+import { MuscleName, Term } from "@/components/Term";
 import { useMemo, useRef, useState } from "react";
 import { Camera, Lock, Trash2 } from "lucide-react";
 import { useStore } from "@/lib/store";
@@ -11,7 +11,7 @@ import {
   addDays, avgSleep, bodyComp, bodyWeightSeries, daysBetween, e1rmSeries, fmtDate, mean, projection, proteinHitRate, r1,
   strengthTrendPct, weeklySets, whatIfMultiplier, VOLUME_RANGE,
 } from "@/lib/engine";
-import { EX, MAIN_LIFTS, MUSCLE_LABEL, MUSCLES, newId } from "@/lib/exercises";
+import { EX, MAIN_LIFTS, MINOR_MUSCLES, MUSCLE_GROUPS, MUSCLE_LABEL, MUSCLES, newId } from "@/lib/exercises";
 import type { Measurement, Muscle } from "@/lib/types";
 
 export function FatigueView() {
@@ -44,23 +44,29 @@ export function FatigueView() {
 
       <div className="section-title"><h2>Weekly sets per muscle</h2><span className="label">target {VOLUME_RANGE.min}–{VOLUME_RANGE.max}</span></div>
       <div className="card" data-testid="card-weekly-sets">
-        {MUSCLES.map((m) => {
-          const v = sets[m];
-          const low = v < VOLUME_RANGE.min, high = v > VOLUME_RANGE.max;
-          return (
-            <div key={m} className="grid items-center gap-3" style={{ gridTemplateColumns: "88px 1fr 36px 44px", minHeight: 28 }}>
-              <span className="text-[13px]">{MUSCLE_LABEL[m]}</span>
-              <div style={{ position: "relative" }}>
-                <Bar pct={(v / 24) * 100} color={low ? "var(--orange)" : high ? "var(--blue)" : "var(--lime)"} />
-                <i style={{ position: "absolute", top: -3, bottom: -3, left: `${(10 / 24) * 100}%`, width: 1, background: "var(--muted)" }} />
-                <i style={{ position: "absolute", top: -3, bottom: -3, left: `${(20 / 24) * 100}%`, width: 1, background: "var(--muted)" }} />
-              </div>
-              <span className="mono text-xs text-right">{r1(v)}</span>
-              <span className={`label text-right ${low ? "orange" : high ? "blue" : "lime"}`}>{low ? "low" : high ? "high" : "ok"}</span>
-            </div>
-          );
-        })}
-        <p className="text-[11px] faint mt-2">Primary muscle = 1 set, secondary = 0.5. Last 7 days.</p>
+        {MUSCLE_GROUPS.map((g) => (
+          <div key={g.id} className="mb-2" data-testid={`group-weekly-sets-${g.id}`}>
+            <div className="label mt-1 mb-1">{g.label}</div>
+            {g.muscles.map((m) => {
+              const v = sets[m];
+              const minor = MINOR_MUSCLES.has(m);
+              const low = !minor && v < VOLUME_RANGE.min, high = v > VOLUME_RANGE.max;
+              return (
+                <div key={m} className="grid items-center gap-3" style={{ gridTemplateColumns: "112px 1fr 36px 44px", minHeight: 30 }} data-testid={`row-weekly-sets-${m}`}>
+                  <span className="text-[13px]" style={{ lineHeight: 1.15 }}><MuscleName m={m} /></span>
+                  <div style={{ position: "relative" }}>
+                    <Bar pct={(v / 24) * 100} color={low ? "var(--orange)" : high ? "var(--blue)" : "var(--lime)"} />
+                    <i style={{ position: "absolute", top: -3, bottom: -3, left: `${(10 / 24) * 100}%`, width: 1, background: "var(--muted)" }} />
+                    <i style={{ position: "absolute", top: -3, bottom: -3, left: `${(20 / 24) * 100}%`, width: 1, background: "var(--muted)" }} />
+                  </div>
+                  <span className="mono text-xs text-right">{r1(v)}</span>
+                  <span className={`label text-right ${low ? "orange" : high ? "blue" : minor ? "faint" : "lime"}`}>{low ? "low" : high ? "high" : minor ? "—" : "ok"}</span>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+        <p className="text-[11px] faint mt-2">Main muscle = 1 set, secondary = 0.5, stabilizer = 0.25. Last 7 days. Small supporting muscles (—) have no minimum.</p>
       </div>
     </div>
   );

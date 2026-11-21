@@ -3,9 +3,18 @@ export type Experience = "beginner" | "intermediate" | "advanced";
 export type Goal = "muscle" | "strength" | "fatloss" | "recomp";
 export type Sex = "m" | "f" | null;
 
+/** Tracked individually, down to the head where heads train differently (e.g. front vs side delts). */
 export type Muscle =
-  | "chest" | "shoulders" | "rear_delts" | "triceps" | "biceps" | "forearms" | "abs"
-  | "lats" | "upper_back" | "lower_back" | "glutes" | "quads" | "hamstrings" | "calves";
+  | "chest_upper" | "chest_mid"
+  | "front_delts" | "side_delts" | "rear_delts"
+  | "biceps_long" | "biceps_short" | "brachialis" | "triceps_long" | "triceps_lateral" | "forearms"
+  | "lats" | "traps_upper" | "mid_back" | "lower_back"
+  | "abs" | "obliques"
+  | "glute_max" | "glute_med" | "hip_flexors" | "adductors"
+  | "rectus_femoris" | "vasti" | "hamstrings" | "gastrocnemius" | "soleus";
+
+/** Muscle ids from before the split (v2 data). Only read by the migration. */
+export type LegacyMuscle = "chest" | "shoulders" | "triceps" | "biceps" | "upper_back" | "glutes" | "quads" | "calves";
 
 export type Pattern =
   | "squat" | "hinge" | "horizontal_push" | "vertical_push" | "horizontal_pull" | "vertical_pull" | "isolation";
@@ -15,8 +24,12 @@ export type Equipment = "barbell" | "dumbbell" | "machine" | "cable" | "bodyweig
 export interface Exercise {
   id: string;
   name: string;
+  /** Prime movers: each working set counts as 1 set. */
   primary: Muscle[];
+  /** Assist the movement: 0.5 set. */
   secondary: Muscle[];
+  /** Hold position isometrically (e.g. abs and lower back in a squat): 0.25 set. */
+  stabilizers?: Muscle[];
   equipment: Equipment;
   pattern: Pattern;
   /** Made by the user (id starts with cx_). Never offered as an automatic swap. */
@@ -67,6 +80,8 @@ export interface Program {
   customExercises?: Exercise[];
 }
 
+export type CalorieSplitMode = "flat" | "training" | "weekend";
+
 export interface Profile {
   name: string;
   units: Units;
@@ -84,11 +99,29 @@ export interface Profile {
   pledgedAt?: string | null;
   /** First-run tour: false = show it on Today; missing or true = done. Only new accounts start at false. */
   tourDone?: boolean;
+  /** The user's own maintenance calories (kcal/day). Replaces the BMR × activity estimate when set. */
+  maintenanceKcal?: number | null;
+  /**
+   * How daily calories vary across the week (the weekly total stays the same):
+   * flat = same every day · training = more on training days, less on rest days · weekend = more Sat–Sun, less Mon–Fri.
+   * amount = kcal added on the higher days. Missing = training, +150 (the original behaviour).
+   */
+  calorieSplit?: { mode: CalorieSplitMode; amount: number };
 }
 
+/** A drop set strips weight and keeps going; a rest-pause set rests ~15s and squeezes out mini-sets at the same weight. */
+export type SetKind = "drop" | "restpause";
+/** One drop (drop set) or one mini-set (rest-pause) after the main part of a set. */
+export interface SetPart { weight: number; reps: number }
+
 export interface SetLog {
+  /** The main (first) part of the set. Progression, e1RM and PRs only look at this. */
   weight: number;
   reps: number;
+  /** Missing or null = a normal straight set. */
+  kind?: SetKind | null;
+  /** Drops or mini-sets done right after the main part. Counted in volume, not in progression. */
+  parts?: SetPart[];
   rir?: number | null;
   /** Set quality 1–5: 1 grind / form broke down … 5 crisp, bar speed held. Optional. */
   quality?: number | null;
@@ -107,6 +140,16 @@ export interface ExerciseLog {
   extra?: boolean;
   /** Planned sets/reps for exercises outside the program (freestyle, saved workouts, added mid-workout). */
   plan?: { sets: number; repMin: number; repMax: number };
+  /** Exercises in the same workout sharing this id are a superset: do one set of each back to back, then rest. */
+  superset?: string | null;
+}
+
+/** What the user did to warm up before lifting (or that they skipped it). */
+export interface SessionWarmup {
+  status: "done" | "skipped";
+  /** Warm-up ids from the library; cardio items carry minutes. */
+  items: { id: string; min?: number }[];
+  ts: number;
 }
 
 export interface Session {
@@ -121,6 +164,7 @@ export interface Session {
   deload?: boolean;
   restEnd?: number | null;
   restTotal?: number;
+  warmup?: SessionWarmup;
 }
 
 export interface CheckIn {
@@ -243,6 +287,13 @@ export interface FeedPost {
   likes: string[];
   comments: FeedComment[];
   sessionId?: string;
+  /** Non-lifting posts: a run/ride/class/WOD, or a reached goal. Missing = a lifting workout. */
+  type?: "activity" | "goal";
+  /** Big line on the card ("5.02 MI", "AMRAP 12") and the line under it. */
+  headline?: string;
+  detail?: string;
+  /** Short badge in the card header ("RUN", "WOD", "GOAL"). */
+  badge?: string;
 }
 
 export interface Crew {
@@ -305,6 +356,71 @@ export interface SavedWorkout {
   exercises: ProgramExercise[];
 }
 
+/* ---------- non-lifting workouts ---------- */
+export type ActivityType =
+  | "run" | "walk" | "hike" | "cycle" | "row" | "swim" | "elliptical" | "stairs"
+  | "wod" | "hiit" | "yoga" | "pilates" | "sport" | "other";
+export type WodFormat = "for_time" | "amrap" | "emom" | "other";
+
+/** A run, ride, class, sport or CrossFit WOD. Distance is stored in km whatever the display units. */
+export interface Activity {
+  id: string;
+  type: ActivityType;
+  date: string; // YYYY-MM-DD
+  start: number; // ms
+  durationSec: number;
+  distanceKm?: number | null;
+  /** Effort 1–10 (RPE). */
+  rpe?: number | null;
+  avgHr?: number | null;
+  /** e.g. "Morning 5K", "Fran", or the sport for type "sport" ("Basketball"). */
+  name?: string;
+  notes?: string;
+  wod?: {
+    format: WodFormat;
+    /** AMRAP: full rounds + extra reps. */
+    rounds?: number | null;
+    reps?: number | null;
+    /** For time: the time cap, if any. */
+    capSec?: number | null;
+    /** Free-text score for other formats ("5 rounds + 12", "142 lb"). */
+    score?: string;
+    rx: boolean;
+    /** Exercise ids from the catalog, or "act:run" / "act:row" / "act:cycle" for cardio pieces. */
+    movements: string[];
+  };
+}
+
+export type HabitMetric = "workouts" | "protein" | "sleep" | "checkins";
+
+interface GoalBase {
+  id: string;
+  /** Optional name the user gave it; otherwise one is generated from the target. */
+  title?: string;
+  createdAt: string; // YYYY-MM-DD
+  deadline?: string | null;
+  /** Set when the goal is first met (or the user marks it done). */
+  achievedAt?: string | null;
+  /** Hidden from the active list (deleted goals are removed outright). */
+  archived?: boolean;
+}
+
+/** A personal target with a number to hit. Weights are in the profile's units. */
+export type PersonalGoal = GoalBase & (
+  | { kind: "bodyweight"; start: number; target: number }
+  | { kind: "lift"; exId: string; weight: number; reps: number; /** best estimated 1RM when the goal was set */ startE1rm: number }
+  | {
+      kind: "cardio"; activity: ActivityType;
+      /** time: cover distanceKm in timeSec or less · weekly: distanceKm per week · longest: one session of distanceKm */
+      metric: "time" | "weekly" | "longest";
+      distanceKm: number; timeSec?: number | null; weeks?: number | null;
+      /** time goals: predicted time for the distance when the goal was set */
+      startSec?: number | null;
+    }
+  | { kind: "habit"; metric: HabitMetric; perWeek: number; /** weeks in a row to finish it; none = ongoing */ weeks?: number | null; /** sleep metric only */ sleepHours?: number }
+);
+export type GoalKind = PersonalGoal["kind"];
+
 export interface AppState {
   version: number;
   profile: Profile | null;
@@ -326,6 +442,12 @@ export interface AppState {
   activeSession: Session | null;
   /** Reusable workouts outside the weekly schedule (e.g. "Arm day"). */
   savedWorkouts?: SavedWorkout[];
+  /** Show the warm-up step before each workout (default on). */
+  warmupPrompt?: boolean;
+  /** Runs, rides, classes, sports and WODs (lifting lives in sessions). */
+  activities?: Activity[];
+  /** Personal goals: bodyweight, lift targets, cardio, weekly habits. */
+  goals?: PersonalGoal[];
   /** Exercises the user made themselves (merged into EX at load). */
   customExercises?: Exercise[];
   /** Programs saved for later (copies, templates you wrote, ones you imported). */

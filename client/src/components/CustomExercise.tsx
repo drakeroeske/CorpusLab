@@ -1,12 +1,19 @@
-// Create or edit one of the user's own exercises: name, main and secondary muscles, equipment, compound vs isolation (+ movement pattern), notes.
+// Create or edit one of the user's own exercises: name, main / secondary / stabilizer muscles, equipment, compound vs isolation (+ movement pattern), notes.
 import { useState } from "react";
 import type { Equipment, Exercise, Muscle } from "@/lib/types";
 import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
-import { EQUIPMENT_LABEL, EQUIPMENT_LIST, MUSCLES, MUSCLE_LABEL, PATTERN_LABEL, allExercises, guessPattern, newId, registerCustomExercises } from "@/lib/exercises";
+import { EQUIPMENT_LABEL, EQUIPMENT_LIST, MUSCLE_GROUPS, MUSCLE_LABEL, PATTERN_LABEL, SMALL_MUSCLES, allExercises, guessPattern, newId, registerCustomExercises } from "@/lib/exercises";
 import { Seg, Sheet } from "./ui";
 
 const EQUIPMENT: { v: Equipment; l: string }[] = EQUIPMENT_LIST.map((v) => ({ v, l: EQUIPMENT_LABEL[v] }));
+type Tier = "primary" | "secondary" | "stabilizer";
+const TIERS: { v: Tier; l: string; help: string }[] = [
+  { v: "primary", l: "Main", help: "Main: the muscles doing the lift. Each set counts as 1 set." },
+  { v: "secondary", l: "Secondary", help: "Secondary: muscles that assist. Each set counts as half a set." },
+  { v: "stabilizer", l: "Stabilizer", help: "Stabilizer: muscles holding you steady without moving, like abs and lower back in a squat. Each set counts as a quarter set." },
+];
+const TIER_NAME: Record<Tier, string> = { primary: "main", secondary: "secondary", stabilizer: "stabilizer" };
 const COMPOUND_PATTERNS = (Object.keys(PATTERN_LABEL) as Exercise["pattern"][]).filter((p) => p !== "isolation");
 
 /** Where a custom exercise is still in use (blocks deleting). */
@@ -30,6 +37,8 @@ export function CustomExerciseSheet({ exercise, initialName = "", onClose, onSav
   const [name, setName] = useState(exercise?.name ?? initialName);
   const [primary, setPrimary] = useState<Muscle[]>(exercise?.primary ?? []);
   const [secondary, setSecondary] = useState<Muscle[]>(exercise?.secondary ?? []);
+  const [stabilizers, setStabilizers] = useState<Muscle[]>(exercise?.stabilizers ?? []);
+  const [tier, setTier] = useState<Tier>("primary");
   const [equipment, setEquipment] = useState<Equipment | null>(exercise?.equipment ?? null);
   const [notes, setNotes] = useState(exercise?.notes ?? "");
   // Compound vs isolation follows the muscles until the user picks; the finer movement pattern sits under Advanced.
@@ -44,19 +53,26 @@ export function CustomExerciseSheet({ exercise, initialName = "", onClose, onSav
   const missing = !trimmed ? "Give it a name." : !primary.length ? "Pick at least one main muscle." : !equipment ? "Pick the equipment." : clash ? `"${clash.name}" already exists.` : null;
   const guessed = guessPattern(primary);
   const effKind = kind ?? (guessed === "isolation" ? "isolation" : "compound");
-  const guessedCompound = guessed === "isolation" ? guessPattern(primary.filter((m) => !["biceps", "triceps", "forearms", "calves", "abs", "rear_delts"].includes(m))) : guessed;
+  const guessedCompound = guessed === "isolation" ? guessPattern(primary.filter((m) => !SMALL_MUSCLES.includes(m))) : guessed;
   const effPattern: Exercise["pattern"] = effKind === "isolation" ? "isolation" : (pattern ?? (guessedCompound === "isolation" ? "horizontal_push" : guessedCompound));
   const uses = exercise ? customExerciseUses(state, exercise.id) : [];
 
-  // Picking a main muscle also clears it from "Also works" so one muscle never counts twice.
-  const toggle = (m: Muscle) => { setPrimary((p) => (p.includes(m) ? p.filter((x) => x !== m) : [...p, m])); setSecondary((p) => p.filter((x) => x !== m)); };
-  const toggleSec = (m: Muscle) => setSecondary((p) => (p.includes(m) ? p.filter((x) => x !== m) : [...p, m]));
+  // A muscle sits in exactly one level, so it never counts twice. Tapping it in another level moves it there.
+  const tierList = (t: Tier) => (t === "primary" ? primary : t === "secondary" ? secondary : stabilizers);
+  const tierOf = (m: Muscle): Tier | null => (primary.includes(m) ? "primary" : secondary.includes(m) ? "secondary" : stabilizers.includes(m) ? "stabilizer" : null);
+  const tap = (m: Muscle) => {
+    const was = tierOf(m);
+    const without = (p: Muscle[]) => p.filter((x) => x !== m);
+    setPrimary(without); setSecondary(without); setStabilizers(without);
+    if (was === tier) return;
+    (tier === "primary" ? setPrimary : tier === "secondary" ? setSecondary : setStabilizers)((p) => [...without(p), m]);
+  };
 
   const save = () => {
     setTried(true);
     if (missing || !equipment) return;
     const ex: Exercise = {
-      id: exercise?.id ?? newId("cx"), name: trimmed, primary, secondary, equipment, pattern: effPattern,
+      id: exercise?.id ?? newId("cx"), name: trimmed, primary, secondary, ...(stabilizers.length ? { stabilizers } : {}), equipment, pattern: effPattern,
       ratio: 1, custom: true, ...(notes.trim() ? { notes: notes.trim() } : {}),
     };
     const prev = state.customExercises ?? [];
@@ -84,21 +100,26 @@ export function CustomExerciseSheet({ exercise, initialName = "", onClose, onSav
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Landmine Press" maxLength={60} autoFocus data-testid="input-custom-name" />
       </label>
 
-      <div className="label mt-5 mb-2">Main muscles</div>
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Main muscles">
-        {MUSCLES.map((m) => (
-          <button key={m} type="button" className="chip chip-pick" aria-pressed={primary.includes(m)} onClick={() => toggle(m)} data-testid={`chip-muscle-${m}`}>{MUSCLE_LABEL[m]}</button>
-        ))}
-      </div>
-      <p className="text-xs faint mt-2">Used for muscle fatigue and weekly sets.</p>
-
-      <div className="label mt-5 mb-2">Also works <span className="faint" style={{ textTransform: "none", letterSpacing: 0 }}>(optional)</span></div>
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Secondary muscles">
-        {MUSCLES.map((m) => (
-          <button key={m} type="button" className="chip chip-pick alt" disabled={primary.includes(m)} title={primary.includes(m) ? "Already a main muscle" : undefined} aria-pressed={secondary.includes(m)} onClick={() => toggleSec(m)} data-testid={`chip-secondary-${m}`}>{MUSCLE_LABEL[m]}</button>
-        ))}
-      </div>
-      <p className="text-xs faint mt-2">Secondary muscles count as half a set for fatigue.</p>
+      <div className="label mt-5 mb-2">Muscles worked</div>
+      <p className="text-xs muted mb-2">Pick a level, then tap every muscle it applies to. Tap again to remove. Add as many as the movement uses.</p>
+      <Seg value={tier} onChange={setTier} options={TIERS.map((t) => ({ v: t.v, l: `${t.l} · ${tierList(t.v).length}` }))} testId="seg-muscle-tier" />
+      <p className="text-xs faint mt-2 mb-1">{TIERS.find((t) => t.v === tier)!.help}</p>
+      {MUSCLE_GROUPS.map((g) => (
+        <div key={g.id} className="mt-3">
+          <div className="label mb-1">{g.label}</div>
+          <div className="flex flex-wrap gap-2" role="group" aria-label={`${g.label} muscles`}>
+            {g.muscles.map((m) => {
+              const at = tierOf(m);
+              return (
+                <button key={m} type="button" className={`chip chip-pick ${at === "secondary" ? "alt" : at === "stabilizer" ? "stab" : ""}`} aria-pressed={!!at}
+                  aria-label={`${MUSCLE_LABEL[m]}${at ? `: ${TIER_NAME[at]}` : ""}`} onClick={() => tap(m)} data-testid={`chip-muscle-${m}`}>
+                  {MUSCLE_LABEL[m]}{at && at !== "primary" ? <span style={{ marginLeft: 6, fontSize: 10, opacity: 0.75 }}>{at === "secondary" ? "2nd" : "stab"}</span> : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
 
       <div className="label mt-5 mb-2">Equipment</div>
       <div className="flex flex-wrap gap-2" role="group" aria-label="Equipment">
@@ -139,6 +160,7 @@ export function CustomExerciseSheet({ exercise, initialName = "", onClose, onSav
         <p className="text-sm">
           <b>{trimmed || "Unnamed exercise"}</b> · {primary.length ? primary.map((m) => MUSCLE_LABEL[m]).join(", ") : "no main muscle yet"}
           {secondary.length ? <span className="muted"> · also {secondary.map((m) => MUSCLE_LABEL[m]).join(", ")}</span> : null}
+          {stabilizers.length ? <span className="muted"> · stabilizes with {stabilizers.map((m) => MUSCLE_LABEL[m]).join(", ")}</span> : null}
           {equipment ? ` · ${EQUIPMENT_LABEL[equipment]}` : ""} · {effKind === "compound" ? `Compound (${PATTERN_LABEL[effPattern]})` : "Isolation"}
         </p>
       </div>

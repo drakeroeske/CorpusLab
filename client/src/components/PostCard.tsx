@@ -15,8 +15,10 @@ export const ago = (ts: number) => {
   return h < 24 ? `${h}H` : `${Math.round(h / 24)}D`;
 };
 
-export function PostCard({ id, author, mine, ts, title, durationMin, prNo, sets, prCount, liked, likes, comments, onLike, onComment, onChallenge, onPrCard, onDelete, extra, pending }: {
+export function PostCard({ id, author, mine, ts, title, durationMin, prNo, sets, prCount, liked, likes, comments, onLike, onComment, onChallenge, onPrCard, onDelete, extra, pending, badge, headline, detail }: {
   id: string; author: string; mine: boolean; ts: number; title: string; durationMin?: number; prNo?: number;
+  /** Runs, classes, WODs and reached goals: a header badge and a big line instead of a top set. */
+  badge?: string; headline?: string; detail?: string;
   sets: PostSet[]; prCount: number; liked: boolean; likes: number; comments: PostComment[];
   onLike: () => void; onComment: (text: string) => void; onChallenge?: () => void; onPrCard?: () => void; onDelete?: () => void; extra?: ReactNode; pending?: boolean;
 }) {
@@ -28,7 +30,7 @@ export function PostCard({ id, author, mine, ts, title, durationMin, prNo, sets,
     <article className="card" style={{ padding: 0 }} data-testid={`card-post-${id}`}>
       <div className="flex justify-between gap-2 px-3 py-2 label" style={{ borderBottom: "1px solid var(--line)" }}>
         <span className="truncate">{mine ? "@YOU" : handle(author)} · {pending ? "SENDING…" : ago(ts)}</span>
-        <span className="shrink-0">{prNo ? `PR CARD Nº ${pad3(prNo)}` : durationMin != null ? `${durationMin} MIN` : "CHECK-IN"}</span>
+        <span className="shrink-0">{badge ?? (prNo ? `PR CARD Nº ${pad3(prNo)}` : durationMin != null ? `${durationMin} MIN` : "CHECK-IN")}</span>
       </div>
       <div className="flex items-center gap-3 px-3 pt-3">
         <div className="shrink-0" style={{ border: "1px solid var(--line)", padding: 4, background: prCount ? "var(--bone-dark)" : "transparent" }}>
@@ -36,8 +38,17 @@ export function PostCard({ id, author, mine, ts, title, durationMin, prNo, sets,
         </div>
         <div className="min0">
           <div className="text-xs font-bold">{title} {prCount > 0 && <Tag signal>PR</Tag>}</div>
-          {top && <div className="num-big mt-1" style={{ fontSize: 44 }} data-testid={`text-headline-${id}`}>{top.weight > 0 ? `${fmtW(top.weight)} ${top.units.toUpperCase()}` : `BW × ${top.reps}`}</div>}
-          {top && <div className="text-xs">{top.name}</div>}
+          {headline ? (
+            <>
+              <div className="num-big mt-1" style={{ fontSize: headline.length > 9 ? 32 : 44 }} data-testid={`text-headline-${id}`}>{headline}</div>
+              {detail && <div className="text-xs" data-testid={`text-detail-${id}`}>{detail}</div>}
+            </>
+          ) : (
+            <>
+              {top && <div className="num-big mt-1" style={{ fontSize: 44 }} data-testid={`text-headline-${id}`}>{top.weight > 0 ? `${fmtW(top.weight)} ${top.units.toUpperCase()}` : `BW × ${top.reps}`}</div>}
+              {top && <div className="text-xs">{top.name}</div>}
+            </>
+          )}
         </div>
       </div>
       <div className="px-3 pt-2 text-xs">

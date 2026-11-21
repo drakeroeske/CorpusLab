@@ -4,7 +4,7 @@ import { useStore } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import type { UI } from "@/App";
 import { addDays, dateKey, dayForDate, userStreak } from "@/lib/engine";
-import { DEFAULT_PREFS, clearDeepLink, currentSubscription, disablePush, enablePush, permissionState, pushSupport, readDeepLink, savePrefs, sendTest, type NotifPrefs } from "@/lib/push";
+import { DEFAULT_PREFS, clearDeepLink, currentSubscription, disablePush, enablePush, permissionState, pushSupport, readDeepLink, refreshPushKey, savePrefs, sendTest, type NotifPrefs } from "@/lib/push";
 
 const HOURS = Array.from({ length: 24 }, (_, h) => ({ v: h, l: h === 0 ? "12 am" : h < 12 ? `${h} am` : h === 12 ? "12 pm" : `${h - 12} pm` }));
 
@@ -13,6 +13,8 @@ const HOURS = Array.from({ length: 24 }, (_, h) => ({ v: h, l: h === 0 ? "12 am"
 export function NotifPlanSync() {
   const { state, set, targets, mode } = useStore();
   const last = useRef("");
+  // Once per app open: move this device to the server's current push key if it changed.
+  useEffect(() => { if (mode === "remote") refreshPushKey().catch(() => undefined); }, [mode]);
   useEffect(() => {
     if (mode !== "remote") return;
     const today = dateKey();
