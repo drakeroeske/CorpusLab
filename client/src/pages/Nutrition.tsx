@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { Plus, Star, Trash2, Search, ScanLine, X, ChevronDown, Check } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
-import { dateKey, dayForDate } from "@/lib/engine";
+import { dateKey, dayForDate, calTargetFor } from "@/lib/engine";
 import { newId } from "@/lib/exercises";
 import { api } from "@/lib/api";
 import { LOCAL_FOODS } from "@/lib/foods";
@@ -68,7 +68,7 @@ export function NutritionSheet({ onClose }: { onClose: () => void }) {
   const meals = state.meals.filter((x) => x.date === today).sort((a, b) => a.time - b.time);
   const tot = meals.reduce((a, x) => ({ cal: a.cal + x.cal, p: a.p + x.p, c: a.c + x.c, f: a.f + x.f }), { cal: 0, p: 0, c: 0, f: 0 });
   const training = !!dayForDate(state.program, today);
-  const calT = training ? targets.trainingCal : targets.restCal;
+  const calT = calTargetFor(targets, today, training);
   const session = state.sessions.find((s) => s.date === today) ?? state.activeSession;
   const recents = state.recentFoods ?? [];
 

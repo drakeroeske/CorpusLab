@@ -95,3 +95,34 @@ describe("maintenance: logged activities and the user's own number", async () =>
     expect(nutritionTargets({ ...p, maintenanceKcal: 300 }, 4).customMaintenance).toBe(false);
   });
 });
+
+describe("weekly calorie split", async () => {
+  const { calTargetFor, splitDescription } = await import("./engine");
+  const week = ["2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20", "2026-11-21", "2026-11-22"]; // Mon..Sun
+  const lift = new Set(["2026-11-16", "2026-11-17", "2026-11-19", "2026-11-20"]); // 4 training days
+  const total = (t: ReturnType<typeof nutritionTargets>) => week.reduce((a, d) => a + calTargetFor(t, d, lift.has(d)), 0);
+  it("default is the original training/rest split (+150)", () => {
+    const t = nutritionTargets(p, 4);
+    expect(t.split).toEqual({ mode: "training", amount: 150 });
+    expect(t.trainingCal - t.cal).toBe(150);
+    expect(calTargetFor(t, "2026-11-16", true)).toBe(t.trainingCal);
+    expect(calTargetFor(t, "2026-11-18", false)).toBe(t.restCal);
+  });
+  it("same every day", () => {
+    const t = nutritionTargets({ ...p, calorieSplit: { mode: "flat", amount: 300 } }, 4);
+    expect(week.every((d) => calTargetFor(t, d, lift.has(d)) === t.cal)).toBe(true);
+    expect(splitDescription(t)).toBe(`${t.cal.toLocaleString()} every day`);
+  });
+  it("weekends higher, weekdays lower", () => {
+    const t = nutritionTargets({ ...p, calorieSplit: { mode: "weekend", amount: 400 } }, 4);
+    expect(calTargetFor(t, "2026-11-21", false)).toBe(t.cal + 400); // Sat
+    expect(calTargetFor(t, "2026-11-22", false)).toBe(t.cal + 400); // Sun
+    expect(calTargetFor(t, "2026-11-18", true)).toBe(t.cal - 160); // 800 / 5 = 160 off each weekday
+  });
+  it("every split keeps the weekly total (within rounding)", () => {
+    const flat = total(nutritionTargets({ ...p, calorieSplit: { mode: "flat", amount: 0 } }, 4));
+    for (const mode of ["training", "weekend"] as const) for (const amount of [100, 250, 500]) {
+      expect(Math.abs(total(nutritionTargets({ ...p, calorieSplit: { mode, amount } }, 4)) - flat)).toBeLessThanOrEqual(30);
+    }
+  });
+});

@@ -80,6 +80,8 @@ export interface Program {
   customExercises?: Exercise[];
 }
 
+export type CalorieSplitMode = "flat" | "training" | "weekend";
+
 export interface Profile {
   name: string;
   units: Units;
@@ -99,6 +101,12 @@ export interface Profile {
   tourDone?: boolean;
   /** The user's own maintenance calories (kcal/day). Replaces the BMR × activity estimate when set. */
   maintenanceKcal?: number | null;
+  /**
+   * How daily calories vary across the week (the weekly total stays the same):
+   * flat = same every day · training = more on training days, less on rest days · weekend = more Sat–Sun, less Mon–Fri.
+   * amount = kcal added on the higher days. Missing = training, +150 (the original behaviour).
+   */
+  calorieSplit?: { mode: CalorieSplitMode; amount: number };
 }
 
 /** A drop set strips weight and keeps going; a rest-pause set rests ~15s and squeezes out mini-sets at the same weight. */

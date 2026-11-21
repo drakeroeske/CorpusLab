@@ -3,7 +3,7 @@
  * Every function here takes plain data and returns plain data.
  */
 import type {
-  Activity, AppState, CheckIn, Exercise, ExerciseLog, Goal, Meal, Muscle, Profile, Program, ProgramDay,
+  Activity, AppState, CalorieSplitMode, CheckIn, Exercise, ExerciseLog, Goal, Meal, Muscle, Profile, Program, ProgramDay,
   ProgramExercise, Session, SetLog, Sex, Spotter, Units, Experiment,
 } from "./types";
 import { EX, EXERCISES, MUSCLES, MUSCLE_LABEL, MAIN_LIFTS, allExercises, isCompound, muscleShares } from "./exercises";
@@ -476,6 +476,10 @@ export interface NutritionTargets {
   activityKcal: number;
   /** Maintenance is the number the user entered, not the estimate. */
   customMaintenance: boolean;
+  /** How calories vary across the week; the per-day numbers below follow it. */
+  split: { mode: CalorieSplitMode; amount: number };
+  /** Higher days (training days, or Sat–Sun) and lower days. Equal to cal when the split is flat. */
+  highCal: number; lowCal: number;
   /** Set when an active bodyweight goal is driving the numbers instead of the profile goal. */
   weightPlan?: WeightPlanResult | null;
 }
@@ -504,13 +508,20 @@ export function nutritionTargets(p: Profile, daysPerWeek: number, plan?: WeightP
   const custom = !!(p.maintenanceKcal && p.maintenanceKcal >= 800);
   const activityKcal = custom ? 0 : Math.max(0, Math.round(opts.activityKcalPerDay ?? 0));
   const tdee = custom ? p.maintenanceKcal! : bmr * activity + activityKcal;
-  // training-day bump, rest-day trim, weekly average preserved
-  const bump = 150;
-  const restDays = 7 - daysPerWeek;
-  const restTrim = restDays > 0 ? Math.round((bump * daysPerWeek) / restDays / 10) * 10 : 0;
+  // Weekly shape: move calories from lower days to higher days; the weekly total (and so the goal) is unchanged.
+  const split = p.calorieSplit ?? { mode: "training" as const, amount: 150 };
+  const highDays = split.mode === "training" ? daysPerWeek : split.mode === "weekend" ? 2 : 0;
+  const lowDays = 7 - highDays;
+  const bump = split.mode === "flat" || highDays === 0 || lowDays === 0 ? 0 : Math.max(0, Math.min(1000, split.amount));
+  const trim = bump ? Math.round((bump * highDays) / lowDays / 10) * 10 : 0;
   const pack = (calRaw: number, goalAdj: number, protein: number, weightPlan: WeightPlanResult | null = null): NutritionTargets => {
     const cal = Math.round(calRaw / 10) * 10;
-    return { bmr: Math.round(bmr), tdee: Math.round(tdee), cal, trainingCal: cal + bump, restCal: cal - restTrim, protein, proteinPerKg: Math.round((protein / kg) * 10) / 10, activity, goalAdj: Math.round(goalAdj), weightPlan, activityKcal, customMaintenance: custom };
+    const highCal = cal + bump, lowCal = cal - trim;
+    return {
+      bmr: Math.round(bmr), tdee: Math.round(tdee), cal, highCal, lowCal,
+      trainingCal: split.mode === "training" ? highCal : cal, restCal: split.mode === "training" ? lowCal : cal,
+      split: { mode: split.mode, amount: bump }, protein, proteinPerKg: Math.round((protein / kg) * 10) / 10, activity, goalAdj: Math.round(goalAdj), weightPlan, activityKcal, customMaintenance: custom,
+    };
   };
 
   if (plan) {
@@ -537,6 +548,20 @@ export function nutritionTargets(p: Profile, daysPerWeek: number, plan?: WeightP
   const perKg: Record<Goal, number> = { muscle: 1.8, strength: 1.6, fatloss: 2.2, recomp: 2.0 };
   const t = pack(tdee + goalAdj[p.goal], goalAdj[p.goal], Math.round(kg * perKg[p.goal]));
   return { ...t, proteinPerKg: perKg[p.goal] };
+}
+
+/** The calorie target for a given day, following the user's weekly split. */
+export function calTargetFor(t: NutritionTargets, date: string, isTrainingDay: boolean): number {
+  if (t.split.mode === "training") return isTrainingDay ? t.highCal : t.lowCal;
+  if (t.split.mode === "weekend") { const wd = new Date(date + "T12:00:00").getDay(); return wd === 0 || wd === 6 ? t.highCal : t.lowCal; }
+  return t.cal;
+}
+
+/** "2,900 on training days, 2,550 on rest days" / "2,750 every day" / "3,100 Sat–Sun, 2,610 Mon–Fri". */
+export function splitDescription(t: NutritionTargets): string {
+  const f = (n: number) => n.toLocaleString();
+  if (t.split.mode === "flat" || t.highCal === t.lowCal) return `${f(t.cal)} every day`;
+  return t.split.mode === "training" ? `${f(t.highCal)} on training days, ${f(t.lowCal)} on rest days` : `${f(t.highCal)} Sat–Sun, ${f(t.lowCal)} Mon–Fri`;
 }
 
 /* =========================== DOTS =========================== */
@@ -700,7 +725,7 @@ export function weeklyReport(state: AppState, from: string, targets: NutritionTa
     if (prot[d] == null) continue;
     loggedDays++;
     if (prot[d] >= targets.protein * 0.95) proteinDays++;
-    const tgt = dayForDate(state.program, d) ? targets.trainingCal : targets.restCal;
+    const tgt = calTargetFor(targets, d, !!dayForDate(state.program, d));
     if (Math.abs(cals[d] - tgt) <= tgt * 0.1) calorieDays++;
   }
   const prs = inWeek.flatMap((s) => sessionPRs(state.sessions, s).map((p) => ({ ...p, date: s.date })));
@@ -899,7 +924,7 @@ export function coachAnswer(q: string, ctx: CoachCtx): string {
     return dl.recommend ? `Yes — a deload is recommended: ${dl.reasons.join(" and ")}. Run one week at 60% of your sets with the same weights. You can start it from the Train tab.` : `No deload needed yet. 5-day readiness avg ${dl.avg5 != null ? Math.round(dl.avg5) : "—"} (trigger < 55) and ${dl.plateaus} lift${dl.plateaus === 1 ? "" : "s"} in plateau (trigger ≥ 3).`;
   }
   if (/(protein|eat|calorie|food|macro|nutrition|diet)/.test(ql)) {
-    return `Your targets: ${targets.cal} kcal (${targets.trainingCal} on training days, ${targets.restCal} on rest days) and ${targets.protein} g protein (${targets.proteinPerKg} g/kg). Over 14 days you hit protein on ${Math.round(ph * 100)}% of logged days. ${ph < 0.7 ? "Closing that gap is the cheapest gain available — add one 40 g protein meal on days you're short." : "That's solid; keep it consistent."}`;
+    return `Your targets: ${targets.cal} kcal a day on average (${splitDescription(targets)}) and ${targets.protein} g protein (${targets.proteinPerKg} g/kg). Over 14 days you hit protein on ${Math.round(ph * 100)}% of logged days. ${ph < 0.7 ? "Closing that gap is the cheapest gain available — add one 40 g protein meal on days you're short." : "That's solid; keep it consistent."}`;
   }
   if (/(sleep|tired|hrv|recover)/.test(ql)) {
     const ins = weeklyReport(state, weekStart(today), targets).insights.find((i) => i.text.includes("sleep"));
