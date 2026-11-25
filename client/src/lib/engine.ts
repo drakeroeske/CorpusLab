@@ -389,6 +389,22 @@ export function weeklySets(sessions: Session[], from: string, to: string): Recor
   );
   return out;
 }
+/** How many times a program day comes around in a week. A day with no weekdays picked yet counts once. */
+export const dayTimesPerWeek = (_program: Program, day: ProgramDay) => day.weekdays.length || 1;
+
+/** Sets a program schedules per muscle per week: main 1, secondary 0.5, stabilizer 0.25, times how often each day runs. */
+export function programWeeklySets(program: Program): Record<Muscle, number> {
+  const out = Object.fromEntries(MUSCLES.map((m) => [m, 0])) as Record<Muscle, number>;
+  for (const d of program.days) {
+    const times = dayTimesPerWeek(program, d);
+    for (const pe of d.exercises) {
+      const ex = EX[pe.exId];
+      if (!ex) continue;
+      for (const [m, w] of muscleShares(ex)) out[m] += pe.sets * w * times;
+    }
+  }
+  return out;
+}
 /** Weight × reps for a whole set, including any drops or rest-pause mini-sets. */
 export const setVolume = (x: SetLog) => x.weight * x.reps + (x.parts ?? []).reduce((a, p) => a + p.weight * p.reps, 0);
 /** Weight × reps lifted. Timed sets (carries, holds) aren't reps, so they're left out. */
