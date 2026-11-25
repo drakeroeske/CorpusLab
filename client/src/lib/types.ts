@@ -76,6 +76,9 @@ export interface Program {
   name: string;
   startDate: string; // YYYY-MM-DD
   days: ProgramDay[];
+  /** Rotating split: the cycle in order, each entry a day id or null for a rest day (e.g. 8 entries for an 8-day split).
+   *  Missing or empty = a weekly program that goes by each day's weekdays. */
+  rotation?: (string | null)[] | null;
   deloadUntil?: string | null;
   /** set by the server when a coach edits this program */
   coachEditedAt?: number;

@@ -19,7 +19,7 @@ export function NotifPlanSync() {
     if (mode !== "remote") return;
     const today = dateKey();
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-    const plannedDates = Array.from({ length: 14 }, (_, i) => addDays(today, i)).filter((d) => !!dayForDate(state.program, d));
+    const plannedDates = Array.from({ length: 14 }, (_, i) => addDays(today, i)).filter((d) => !!dayForDate(state.program, d, state.sessions));
     const plan = { tz, plannedDates, proteinTarget: Math.round(targets.protein || 0), streak: userStreak(state, today) };
     const sig = JSON.stringify(plan);
     const prevSig = JSON.stringify({ tz: state.notifPlan?.tz, plannedDates: state.notifPlan?.plannedDates, proteinTarget: state.notifPlan?.proteinTarget, streak: state.notifPlan?.streak });

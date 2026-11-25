@@ -117,7 +117,7 @@ function Crews() {
   const streakOf = (id: string) => (id === "me" ? myStreak : state.spotters.find((s) => s.id === id)?.streak ?? 0);
   const myLog = Array.from({ length: 14 }, (_, i) => {
     const date = addDays(today, i - 13);
-    const planned = !!dayForDate(state.program, date);
+    const planned = !!dayForDate(state.program, date, state.sessions);
     const done = state.sessions.some((s) => s.date === date && s.end);
     return { date, planned: planned && !done && date < today, done };
   });

@@ -57,7 +57,7 @@ export function missedPlannedThisWeek(state: AppState, today: string): boolean {
   const done = trainedDates(state.sessions, state.activities);
   for (let i = 1; i <= back; i++) {
     const d = addDays(today, -i);
-    if (dayForDate(state.program, d) && !done.has(d)) return true;
+    if (dayForDate(state.program, d, state.sessions) && !done.has(d)) return true;
   }
   return false;
 }
@@ -80,7 +80,7 @@ export function clientFromState(id: string, name: string, state: AppState, notes
   const readiness = rs.map((x) => (x == null ? fill : x));
   let missed = 0;
   const done = trainedDates(state.sessions, state.activities);
-  for (let i = 1; i <= 7; i++) { const d = addDays(today, -i); if (dayForDate(state.program, d) && !done.has(d)) missed++; }
+  for (let i = 1; i <= 7; i++) { const d = addDays(today, -i); if (dayForDate(state.program, d, state.sessions) && !done.has(d)) missed++; }
   const ended = state.sessions.filter((s) => s.end).sort((a, b) => b.start - a.start);
   const last = ended[0];
   const target = state.profile ? nutritionTargets(state.profile, trainingDaysPerWeek(state.program)).protein : 0;
