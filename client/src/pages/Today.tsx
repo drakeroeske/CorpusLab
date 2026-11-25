@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
 import { YearPlanNote } from "@/components/YearPlan";
+import { WeekOverviewCard } from "@/components/WeekOverview";
 import { calTargetToday, newSession, prescriptionsFor, rebalanceNote, sessionSummary, useToday } from "@/lib/derived";
 import { StartWorkoutSheet } from "@/components/StartWorkout";
 import { TodayGoals } from "@/components/Goals";
@@ -240,6 +241,8 @@ export default function Today() {
           </div>
           <span className="icon-btn" aria-hidden style={{ width: 40, height: 40 }}><Plus size={18} /></span>
         </button>
+
+        <WeekOverviewCard today={t.today} />
 
         {/* Setup nudges: at most one, at the bottom so they never push the day down. */}
         <div className="mt-6">{notifNudge ? <NotifNudge onOpenSettings={() => ui.setTab("profile")} /> : <InstallBanner />}</div>
