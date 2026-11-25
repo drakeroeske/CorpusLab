@@ -2,10 +2,12 @@ import { useState } from "react";
 import { ArrowDown, ArrowUp, BookmarkPlus, ChevronDown, ChevronRight, Copy, GripVertical, Plus, Trash2 } from "lucide-react";
 import { moveItem, useDragReorder } from "./DragList";
 import type { Program, ProgramDay, ProgramExercise, Units } from "@/lib/types";
-import { EX, isCompound, newId, isTimed } from "@/lib/exercises";
+import { EX, MUSCLES, MUSCLE_LABEL, isCompound, newId, isTimed } from "@/lib/exercises";
 import { ExerciseCatalog } from "./ExerciseCatalog";
 import { NumInput, Seg, Sheet } from "./ui";
-import { DEFAULT_INC_PCT, fmtW, jumpFor } from "@/lib/engine";
+import { DEFAULT_INC_PCT, fmtW, jumpFor, programWeeklySets, r1, VOLUME_RANGE } from "@/lib/engine";
+
+import { volumeStatus, WeeklySetsBars } from "./WeeklySetsBars";
 
 const WD = ["S", "M", "T", "W", "T", "F", "S"];
 const WD_LONG = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -103,6 +105,45 @@ export function DayExercises({ exercises, units, onChange, addTestId }: { exerci
   );
 }
 
+/** Live tally of what the program schedules each week, so you can balance muscles while you build. */
+function ScheduledSets({ program }: { program: Program }) {
+  const [open, setOpen] = useState(false);
+  const sets = programWeeklySets(program);
+  const by = (st: string) => MUSCLES.filter((m) => volumeStatus(m, sets[m]) === st).sort((a, b) => sets[a] - sets[b]);
+  const low = by("low"), high = by("high"), ok = by("ok");
+  const unscheduled = program.days.filter((d) => d.exercises.length && !d.weekdays.length);
+  const empty = !program.days.some((d) => d.exercises.length);
+  return (
+    <div className="card mb-3" style={{ position: "sticky", top: 0, zIndex: 5 }} data-testid="card-scheduled-sets">
+      <button className="w-full text-left flex items-center gap-2" onClick={() => setOpen(!open)} data-testid="toggle-scheduled-sets">
+        <div className="flex-1 min0">
+          <div className="label">Scheduled sets per muscle / week</div>
+          {empty ? <div className="text-sm muted mt-1">Add exercises and this fills in as you go.</div> : (
+            <div className="text-sm mt-1" data-testid="text-scheduled-summary">
+              <span className="lime">{ok.length} on target</span>
+              {low.length > 0 && <> · <span className="orange">{low.length} under {VOLUME_RANGE.min}</span></>}
+              {high.length > 0 && <> · <span className="blue">{high.length} over {VOLUME_RANGE.max}</span></>}
+            </div>
+          )}
+          {!empty && !open && (low.length > 0 || high.length > 0) && (
+            <div className="text-xs muted mt-1 truncate" data-testid="text-scheduled-flags">
+              {[...low.slice(0, 4).map((m) => `${MUSCLE_LABEL[m]} ${r1(sets[m])}`), ...high.slice(0, 2).map((m) => `${MUSCLE_LABEL[m]} ${r1(sets[m])}`)].join(" · ")}
+            </div>
+          )}
+        </div>
+        {open ? <ChevronDown size={16} className="muted shrink-0" /> : <ChevronRight size={16} className="muted shrink-0" />}
+      </button>
+      {open && (
+        <div className="mt-3" style={{ maxHeight: "55vh", overflowY: "auto" }}>
+          <WeeklySetsBars sets={sets} testPrefix="scheduled-sets" />
+          <p className="text-[11px] faint mt-2">Planned working sets × how many days a week each day runs. Main muscle = 1 set, secondary = 0.5, stabilizer = 0.25. Target {VOLUME_RANGE.min}–{VOLUME_RANGE.max} for main muscles.</p>
+        </div>
+      )}
+      {unscheduled.length > 0 && <p className="text-[11px] faint mt-2" data-testid="text-scheduled-unassigned">{unscheduled.map((d) => d.name).join(", ")} {unscheduled.length === 1 ? "has" : "have"} no days picked yet, counted once a week.</p>}
+    </div>
+  );
+}
+
 export function ProgramEditor({ program, units, onChange, onSaveDay }: { program: Program; units: Units; onChange: (p: Program) => void; onSaveDay?: (d: ProgramDay) => void }) {
   const [openDay, setOpenDay] = useState<string | null>(program.days[0]?.id ?? null);
   const setDay = (id: string, fn: (d: ProgramDay) => ProgramDay) => onChange({ ...program, days: program.days.map((d) => (d.id === id ? fn(d) : d)) });
@@ -122,6 +163,7 @@ export function ProgramEditor({ program, units, onChange, onSaveDay }: { program
         <span className="label">Program name</span>
         <input className="input" value={program.name} onChange={(e) => onChange({ ...program, name: e.target.value })} data-testid="input-program-name" />
       </label>
+      <ScheduledSets program={program} />
       {program.days.length > 1 && <p className="text-xs muted mb-2">Hold the grip to drag days or exercises into a new order.</p>}
       <div className="stack" ref={dayDrag.containerRef}>
         {program.days.map((d, di) => {
