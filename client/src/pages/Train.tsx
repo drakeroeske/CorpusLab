@@ -5,6 +5,7 @@ import { EditWorkoutSheet, fmtSet } from "@/components/SetEditor";
 import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
 import Logger from "./Logger";
+import { YearPlanCard } from "@/components/YearPlan";
 import { ProgramEditor } from "@/components/ProgramEditor";
 import { SaveAsWorkoutSheet, SavedWorkoutsCard } from "@/components/SavedWorkouts";
 import { ImportProgramSheet, ProgramInbox, ProgramLibrary } from "@/components/ProgramLibrary";
@@ -81,6 +82,7 @@ function ProgramTab() {
       )}
       <div className="mt-6 mb-6"><SavedWorkoutsCard /></div>
       <ProgramLibrary onImport={() => setImportOpen(true)} />
+      <YearPlanCard />
       {tplOpen && (
         <Sheet title="Choose a program" onClose={() => setTplOpen(false)}>
           <p className="text-sm muted mb-3">Replaces your current program (save a copy first in My programs if you want it back). Logged history is kept.</p>

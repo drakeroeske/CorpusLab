@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
+import { YearPlanNote } from "@/components/YearPlan";
 import { calTargetToday, newSession, prescriptionsFor, rebalanceNote, sessionSummary, useToday } from "@/lib/derived";
 import { StartWorkoutSheet } from "@/components/StartWorkout";
 import { TodayGoals } from "@/components/Goals";
@@ -76,6 +77,7 @@ export default function Today() {
         right={<><InboxButton /><button className="btn btn-sm btn-outline" onClick={() => ui.open("coach")} data-testid="button-open-coach">Coach</button></>}
         sub={<span className="muted" data-testid="text-phase">{dateLine}{state.program ? ` · Week ${t.phase.week}` : ""}</span>} />
       <div className="screen">
+        <YearPlanNote />
 
         {/* 1. Readiness: the ring is empty until today's check-in, then shows the score. Tap it for the breakdown. */}
         <section className="card" data-testid="card-readiness">
