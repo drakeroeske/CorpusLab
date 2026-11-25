@@ -15,7 +15,7 @@ import { ActivitySheet } from "@/components/Activity";
 import { SaveAsWorkoutSheet } from "@/components/SavedWorkouts";
 import { ExercisePicker } from "@/components/ProgramEditor";
 import { Tag } from "@/components/riso";
-import { e1rm, fmtDate, fmtW, jumpFor, logsForPe, platesPerSide, prescribe, restDefault, substitutes, warmupSets, type Prescription } from "@/lib/engine";
+import { e1rm, fmtDate, fmtW, jumpFor, progressionLogs, platesPerSide, prescribe, restDefault, substitutes, warmupSets, type Prescription } from "@/lib/engine";
 import { EX, MUSCLE_LABEL, isCompound, newId, fmtReps, isTimed } from "@/lib/exercises";
 import type { ExerciseLog, FeedPost, ProgramExercise, Session, SetKind, SetPart, Units } from "@/lib/types";
 import { Seg, Sheet, Stepper } from "@/components/ui";
@@ -328,7 +328,7 @@ export default function Logger() {
   const rxMap = useMemo(() => {
     const m: Record<string, { pe: ProgramExercise; rx: Prescription }> = {};
     if (!day) return m;
-    day.exercises.forEach((pe) => (m[pe.id] = { pe, rx: prescribe(pe, logsForPe(state.sessions, pe.id), t.readiness.score, !!s?.deload, u) }));
+    day.exercises.forEach((pe) => (m[pe.id] = { pe, rx: prescribe(pe, progressionLogs(state.sessions, pe, state.program), t.readiness.score, !!s?.deload, u) }));
     return m;
   }, [day, state.sessions, t.readiness.score, s?.deload, u]);
 

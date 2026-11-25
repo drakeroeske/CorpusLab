@@ -80,7 +80,7 @@ export function newProgramExercise(exId: string, units: Units): ProgramExercise 
   const comp = isCompound(EX[exId]);
   return {
     id: newId("pe"), exId, sets: 3, repMin: isTimed(exId) ? 30 : comp ? 6 : 10, repMax: isTimed(exId) ? 60 : comp ? 10 : 15, startWeight: 0,
-    increment: units === "lb" ? (["back_squat", "deadlift", "leg_press", "hip_thrust"].includes(exId) ? 10 : 5) : (comp ? 2.5 : 1.25),
+    increment: units === "lb" ? 5 : (comp ? 2.5 : 1.25),
     style: "double", technique: null,
   };
 }
