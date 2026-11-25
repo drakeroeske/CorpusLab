@@ -140,6 +140,12 @@ export default function Profile() {
             )}
           </div>
           <div className="flex items-center justify-between gap-3 mt-4">
+            <span className="text-sm">Balance over the week</span>
+            <Seg value={profile.calorieRebalance === false ? "off" : "on"} onChange={(v) => upd({ calorieRebalance: v === "on" })}
+              options={[{ v: "on", l: "On" }, { v: "off", l: "Off" }]} testId="seg-calorie-rebalance" />
+          </div>
+          <p className="text-xs muted mt-1">Go over or under one day and the rest of the week (through Sunday) adjusts to keep your weekly total. Each day moves at most 15%.</p>
+          <div className="flex items-center justify-between gap-3 mt-4">
             <span className="text-sm">Maintenance <Info k="tdee" size={13} /></span>
             <Seg value={ownMaint ? "own" : "calc"} onChange={(v) => { setOwnMaint(v === "own"); upd({ maintenanceKcal: v === "own" ? Math.round(targets.tdee / 10) * 10 : null }); }}
               options={[{ v: "calc", l: "Calculated" }, { v: "own", l: "My own" }]} testId="seg-maintenance-mode" />

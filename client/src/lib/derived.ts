@@ -4,7 +4,7 @@ import {
   computeReadiness, trainingLoad, loadSessionsOf, dateKey, dayForDate, dayMuscles, deloadCheck, hrvBaseline, logsForPe, muscleFatigue,
   phaseInfo, plateauFlags, prescribe, setProteinTarget, fatiguePct, sessionPRs, e1rmSeries, avgSleep, proteinHitRate,
   addDays, daysBetween, mean, r1, proteinByDate, fmtDate, fmtW, readinessEffect, roundTo, type Prescription,
-  setVolume,
+  setVolume, balancedCalTarget, caloriesByDate, type BalancedCalTarget, type NutritionTargets,
 } from "./engine";
 import type { AppState, ExerciseLog, Muscle, ProgramDay, ProgramExercise, SavedWorkout, Session, Units } from "./types";
 import { EX, isCompound, newId, fmtReps, isTimed } from "./exercises";
@@ -179,4 +179,16 @@ export function savedFromSession(s: Session, name: string, units: Units): SavedW
       return { id: newId("pe"), exId: l.exId, sets: l.sets.length, repMin: Math.max(1, Math.min(...reps)), repMax: Math.max(...reps), startWeight: Math.max(...l.sets.map((x) => x.weight)), increment: units === "lb" ? 5 : 2.5, style: "double" as const, technique: null };
     }),
   };
+}
+
+/** Today's calorie target from the weekly split, rebalanced for how the week has gone so far (unless turned off). */
+export function calTargetToday(state: AppState, targets: NutritionTargets, today: string): BalancedCalTarget {
+  return balancedCalTarget(targets, today, (d) => !!dayForDate(state.program, d, state.sessions, today), caloriesByDate(state.meals), state.profile?.calorieRebalance !== false);
+}
+
+/** "−150 today to balance +450 earlier this week" — null when there's nothing to balance. */
+export function rebalanceNote(b: BalancedCalTarget): string | null {
+  if (!b.adjust) return null;
+  const f = (n: number) => `${n > 0 ? "+" : "−"}${Math.abs(n).toLocaleString()}`;
+  return `${f(b.adjust)} today to balance ${f(b.weekDiff)} earlier this week${b.daysLeft > 1 ? `, spread over ${b.daysLeft} days` : ""}${b.capped ? " (capped)" : ""}`;
 }
