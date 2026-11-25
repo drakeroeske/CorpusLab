@@ -323,10 +323,9 @@ function pe(spec: Spec, units: Units, scale: number): ProgramExercise {
   const [exId, sets, repMin, repMax, startLb] = spec;
   const ex = EX[exId];
   const compound = isCompound(ex);
-  const big = ["back_squat", "deadlift", "trap_bar_dl", "leg_press", "hip_thrust", "rdl"].includes(exId);
   let inc: number;
-  if (units === "lb") inc = big ? 10 : ex.equipment === "dumbbell" ? 5 : compound ? 5 : 5;
-  else inc = big ? 5 : ex.equipment === "dumbbell" ? 2 : 2.5;
+  if (units === "lb") inc = 5; // 2.5 lb a side; the % rule makes heavy lifts jump more
+  else inc = ex.equipment === "dumbbell" ? 2 : 2.5;
   const raw = startLb * scale;
   const w = units === "lb" ? raw : raw * 0.4536;
   const startWeight = Math.max(0, Math.round(w / inc) * inc);

@@ -62,6 +62,10 @@ export interface ProgressionState {
   missStreak: number;
   decision: Decision;
   last?: { weight: number; reps: number };
+  /** Why an earned-looking session didn't add weight: a later set fell short ("partial") or a set was a grind. */
+  note?: "partial" | "grind";
+  /** The weakest working set last time, when it held the increase back. */
+  short?: { set: number; reps: number };
 }
 
 export const DEFAULT_INC_PCT = 2.5;
@@ -75,21 +79,31 @@ export function jumpFor(pe: ProgramExercise, weight: number): number {
 /** Low set quality (≤ 2) on the top set means the weight was a grind: earn the reps again before adding load. */
 export const grindy = (s: { quality?: number | null }) => s.quality != null && s.quality <= 2;
 
+/** Round a weight you actually lifted down to the plate step, so an odd 137.5 never becomes a heavier 140 baseline. */
+const floorTo = (x: number, inc: number) => (inc > 0 ? Math.floor(x / inc + 1e-6) * inc : x);
+
 /**
- * Progression on the FIRST working set:
- * reps ≥ top → +increment · reps within range → same weight, +1 rep ·
- * below range → hold; below range 2 sessions in a row → −10% (rounded to increment)
+ * Double progression, judged on every working set (sets at the first set's weight or heavier; lighter back-off sets are ignored):
+ * every working set at the top of the range (and none a grind) → +jump · first set within range → same weight, +1 rep ·
+ * first set below range → hold; below range 2 sessions in a row → −10% (rounded to the plate step)
  */
 export function progressionState(pe: ProgramExercise, logs: ExerciseLog[]): ProgressionState {
   let st: ProgressionState = { weight: pe.startWeight, repGoal: pe.style === "straight" ? pe.repMax : pe.repMin, baseWeight: pe.startWeight, missStreak: 0, decision: "start" };
+  const step = pe.increment || 1;
   for (const log of logs) {
     const s = log.sets[0];
     if (!s) continue;
-    const w = roundTo(s.weight * log.equivFactor, pe.increment || 1) || s.weight * log.equivFactor;
+    const raw = s.weight * log.equivFactor;
+    const w = floorTo(raw, step) || raw;
     const reps = s.reps;
-    st = { ...st, baseWeight: w, last: { weight: w, reps } };
-    if (reps >= pe.repMax && grindy(s)) {
-      st.weight = w; st.repGoal = pe.repMax; st.missStreak = 0; st.decision = "add_rep";
+    const work = log.sets.filter((x) => x.weight * log.equivFactor >= raw - 0.01);
+    const weakest = work.reduce((m, x, i) => (x.reps < m.reps ? { set: log.sets.indexOf(x) + 1, reps: x.reps } : m), { set: 1, reps: reps });
+    st = { ...st, baseWeight: w, last: { weight: w, reps }, note: undefined, short: undefined };
+    if (reps >= pe.repMax && work.some(grindy)) {
+      st.weight = w; st.repGoal = pe.repMax; st.missStreak = 0; st.decision = "add_rep"; st.note = "grind";
+    } else if (reps >= pe.repMax && weakest.reps < pe.repMax) {
+      // Set 1 got there but a later set didn't: earn it on every set before adding load.
+      st.weight = w; st.repGoal = pe.repMax; st.missStreak = 0; st.decision = "add_rep"; st.note = "partial"; st.short = weakest;
     } else if (reps >= pe.repMax) {
       st.weight = w + jumpFor(pe, w); st.repGoal = pe.style === "straight" ? pe.repMax : pe.repMin; st.missStreak = 0; st.decision = "increase";
     } else if (reps >= pe.repMin) {
@@ -135,8 +149,15 @@ export function prescribe(pe: ProgramExercise, logs: ExerciseLog[], readiness: n
   const last = st.last ? `${fmtW(st.last.weight)}×${fmtReps(ex, st.last.reps)}` : "";
   switch (st.decision) {
     case "start": why = `First session — start conservative at ${fmtW(weight)} ${u}`; break;
-    case "increase": why = `Hit ${last} (top of range) → +${fmtW(jumpFor(pe, st.baseWeight))} ${u} (${pe.incrementPct ?? DEFAULT_INC_PCT}%)`; break;
-    case "add_rep": why = st.last && st.last.reps >= pe.repMax ? `Hit ${last} but it was a grind → same weight, make it clean first` : `Last ${last} within range → same weight, aim ${timed ? fmtReps(ex, st.repGoal) : `${st.repGoal} reps`}`; break;
+    case "increase": {
+      const jump = jumpFor(pe, st.baseWeight);
+      const pct = st.baseWeight > 0 ? (jump / st.baseWeight) * 100 : 0;
+      why = `Every set hit the top (${last}) → +${fmtW(jump)} ${u}` + (pct > (pe.incrementPct ?? DEFAULT_INC_PCT) * 1.5 ? ` (smallest step you can load; expect ${timed ? "shorter holds" : "fewer reps"} for a week or two)` : ` (${pe.incrementPct ?? DEFAULT_INC_PCT}%)`);
+      break;
+    }
+    case "add_rep": why = st.note === "grind" ? `Hit ${last} but it was a grind → same weight, make it clean first`
+      : st.note === "partial" && st.short ? `Set 1 hit ${last}, set ${st.short.set} got ${fmtReps(ex, st.short.reps)} → same weight until every set reaches ${fmtReps(ex, pe.repMax)}`
+      : `Last ${last} within range → same weight, aim ${timed ? fmtReps(ex, st.repGoal) : `${st.repGoal} reps`}`; break;
     case "hold": why = `Last ${last} below range → hold; one more miss triggers −10%`; break;
     case "reduce": why = `Below range 2 sessions running → reset −10% to ${fmtW(weight)} ${u}`; break;
   }
@@ -266,6 +287,27 @@ export function phaseInfo(program: Program | null, today: string, deloadRecommen
 }
 
 /* =========================== exercise history =========================== */
+/**
+ * History that drives one program slot's progression, oldest first. Deload sessions are skipped (lighter on purpose).
+ * Besides the slot's own logs it counts the same lift done anywhere else (free or saved workouts, an older program),
+ * but not other slots of the current program, which run their own rep ranges, and only when the reps were in a
+ * comparable range, so a heavy triple elsewhere doesn't read as a missed set of 10.
+ */
+export function progressionLogs(sessions: Session[], pe: ProgramExercise, program: Program | null): ExerciseLog[] {
+  const otherSlots = new Set((program?.days ?? []).flatMap((d) => d.exercises.map((x) => x.id)).filter((id) => id !== pe.id));
+  const lo = pe.repMin * 0.75, hi = pe.repMax * 1.25;
+  return sessions
+    .filter((s) => s.end && !s.deload)
+    .sort((a, b) => a.start - b.start)
+    .flatMap((s) => s.exercises.filter((e) => {
+      if (!e.sets.length) return false;
+      if (e.peId === pe.id) return true;
+      if (otherSlots.has(e.peId) || (e.originalExId ?? e.exId) !== pe.exId) return false;
+      const r = e.sets[0].reps;
+      return r >= lo && r <= hi;
+    }));
+}
+
 export function logsForPe(sessions: Session[], peId: string): ExerciseLog[] {
   return sessions
     .filter((s) => s.end)

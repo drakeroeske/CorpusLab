@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useStore } from "./store";
 import {
-  computeReadiness, trainingLoad, loadSessionsOf, dateKey, dayForDate, dayMuscles, deloadCheck, hrvBaseline, logsForPe, muscleFatigue,
+  computeReadiness, trainingLoad, loadSessionsOf, dateKey, dayForDate, dayMuscles, deloadCheck, hrvBaseline, progressionLogs, muscleFatigue,
   phaseInfo, plateauFlags, prescribe, setProteinTarget, fatiguePct, sessionPRs, e1rmSeries, avgSleep, proteinHitRate,
   addDays, daysBetween, mean, r1, proteinByDate, fmtDate, fmtW, readinessEffect, roundTo, type Prescription,
   setVolume,
@@ -31,7 +31,7 @@ export function useToday() {
 }
 
 export function prescriptionsFor(state: AppState, day: ProgramDay, readiness: number | null, inDeload: boolean, units: Units) {
-  return day.exercises.map((pe) => ({ pe, ex: EX[pe.exId], rx: prescribe(pe, logsForPe(state.sessions, pe.id), readiness, inDeload, units) }));
+  return day.exercises.map((pe) => ({ pe, ex: EX[pe.exId], rx: prescribe(pe, progressionLogs(state.sessions, pe, state.program), readiness, inDeload, units) }));
 }
 
 export function newSession(state: AppState, day: ProgramDay, readiness: number | null, inDeload: boolean, units: Units): Session {
@@ -126,11 +126,17 @@ const e1rmOf = (x: { weight: number; reps: number }, timed = false) => (timed ? 
 
 const defaultPlan = (exId: string) => (isTimed(exId) ? { sets: 3, repMin: 30, repMax: 60 } : isCompound(EX[exId]) ? { sets: 3, repMin: 6, repMax: 10 } : { sets: 3, repMin: 10, repMax: 15 });
 
-/** Targets for an exercise outside the program: last time's top set, adjusted for today's readiness. New exercises start blank. */
+/** A lift outside the program runs the same double progression on its own history, in the plan's rep range. */
+function freeProgress(sessions: Session[], peId: string, exId: string, plan: { sets: number; repMin: number; repMax: number }, startWeight: number, units: Units) {
+  const pe: ProgramExercise = { id: peId, exId, sets: plan.sets, repMin: plan.repMin, repMax: plan.repMax, startWeight, increment: units === "lb" ? 5 : 2.5, style: "double", technique: null };
+  return { pe, hist: progressionLogs(sessions, pe, null) };
+}
+
+/** Targets for an exercise outside the program: progression on its history when there is some in this rep range, otherwise last time's top set. New exercises start blank. */
 export function freeRx(sessions: Session[], log: ExerciseLog, readiness: number | null, units: Units): { pe: ProgramExercise; rx: Prescription } {
   const plan = log.plan ?? defaultPlan(log.originalExId);
-  const inc = units === "lb" ? 5 : 2.5;
-  const pe: ProgramExercise = { id: log.peId, exId: log.originalExId, sets: plan.sets, repMin: plan.repMin, repMax: plan.repMax, startWeight: log.targetWeight, increment: inc, style: "double", technique: null };
+  const { pe, hist } = freeProgress(sessions, log.peId, log.originalExId, plan, log.targetWeight, units);
+  if (hist.length) return { pe, rx: prescribe(pe, hist, readiness, false, units) };
   const last = lastTopSet(sessions, log.exId);
   const effect = readinessEffect(readiness);
   const rir = isCompound(EX[log.exId]) ? 2 : 1;
@@ -142,13 +148,17 @@ export function freeRx(sessions: Session[], log: ExerciseLog, readiness: number 
   return { pe, rx: { weight, sets: plan.sets, repMin: plan.repMin, repMax: plan.repMax, repGoal: last ? last.reps : plan.repMin, rir, why, decision: last ? "add_rep" : "start", effect, deload: false } };
 }
 
-/** A log for an exercise outside the program, pre-filled from history (−10% when readiness says reduce). */
+/** A log for an exercise outside the program, pre-filled from history (progressed when earned, −10% when readiness says reduce). */
 export function freeLog(sessions: Session[], exId: string, readiness: number | null, units: Units, opts: { extra?: boolean; plan?: ExerciseLog["plan"] } = {}): ExerciseLog {
+  const plan = opts.plan ?? defaultPlan(exId);
+  const peId = newId("pe");
   const last = lastTopSet(sessions, exId);
   const inc = units === "lb" ? 5 : 2.5;
   let w = last?.weight ?? 0;
-  if (last && readinessEffect(readiness) === "reduce") w = Math.max(0, roundTo(w * 0.9, inc));
-  return { peId: newId("pe"), exId, originalExId: exId, equivFactor: 1, targetWeight: w, sets: [], extra: opts.extra, plan: opts.plan ?? defaultPlan(exId) };
+  const { pe, hist } = freeProgress(sessions, peId, exId, plan, w, units);
+  if (hist.length) w = prescribe(pe, hist, readiness, false, units).weight;
+  else if (last && readinessEffect(readiness) === "reduce") w = Math.max(0, roundTo(w * 0.9, inc));
+  return { peId, exId, originalExId: exId, equivFactor: 1, targetWeight: w, sets: [], extra: opts.extra, plan };
 }
 
 /** Start a workout that isn't a program day: empty ("Freestyle") or from a saved workout. */
@@ -163,7 +173,7 @@ export function sessionFromSaved(state: AppState, w: SavedWorkout, readiness: nu
     const plan = { sets: sp.sets, repMin: sp.repMin, repMax: sp.repMax };
     const log = freeLog(state.sessions, sp.exId, readiness, units, { plan });
     const pe = programPe(sp.exId);
-    if (pe) log.targetWeight = prescribe(pe, logsForPe(state.sessions, pe.id), readiness, inDeload, units).weight;
+    if (pe) log.targetWeight = prescribe(pe, progressionLogs(state.sessions, pe, state.program), readiness, inDeload, units).weight;
     else if (!log.targetWeight && sp.startWeight) log.targetWeight = sp.startWeight;
     return log;
   });
