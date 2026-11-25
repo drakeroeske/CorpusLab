@@ -185,9 +185,35 @@ function RotationEditor({ program, sessions, onChange }: { program: Program; ses
   );
 }
 
-export function ProgramEditor({ program, units, onChange, onSaveDay, sessions = [] }: { program: Program; units: Units; onChange: (p: Program) => void; onSaveDay?: (d: ProgramDay) => void; sessions?: Session[] }) {
+/** Name and schedule (weekly or rotating cycle). Inline in the saved-program editor; a sheet behind the gear on the Program tab. */
+export function ProgramSettings({ program, onChange, sessions = [] }: { program: Program; onChange: (p: Program) => void; sessions?: Session[] }) {
   const rotating = !!program.rotation?.length;
-  const [openDay, setOpenDay] = useState<string | null>(program.days[0]?.id ?? null);
+  return (
+    <>
+      <label className="field mb-3">
+        <span className="label">Program name</span>
+        <input className="input" value={program.name} onChange={(e) => onChange({ ...program, name: e.target.value })} data-testid="input-program-name" />
+      </label>
+      <div className="field mb-3">
+        <span className="label">Schedule</span>
+        <Seg value={rotating ? "rotation" : "weekly"} onChange={(v) => onChange({ ...program, rotation: v === "rotation" ? defaultRotation(program) : null })}
+          options={[{ v: "weekly", l: "Same days each week" }, { v: "rotation", l: "Rotating cycle" }]} testId="seg-program-schedule" />
+        <p className="text-xs faint mt-1">{rotating ? "Days run in order with rest days built in, like a 6- or 8-day split, regardless of the weekday." : "Open a day to pick its weekdays."}</p>
+      </div>
+      {rotating && <RotationEditor program={program} sessions={sessions} onChange={onChange} />}
+    </>
+  );
+}
+
+/** "Mon · Thu", "2× per 8-day cycle", or what's missing. */
+export function dayScheduleText(program: Program, d: ProgramDay): string {
+  if (program.rotation?.length) { const n = program.rotation.filter((x) => x === d.id).length; return n ? `${n}× per ${program.rotation.length}-day cycle` : "Not in the cycle"; }
+  return d.weekdays.length ? [...d.weekdays].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map((i) => WD_LONG[i].slice(0, 3)).join(" · ") : "No days picked";
+}
+
+export function ProgramEditor({ program, units, onChange, onSaveDay, sessions = [], settings = "inline" }: { program: Program; units: Units; onChange: (p: Program) => void; onSaveDay?: (d: ProgramDay) => void; sessions?: Session[]; settings?: "inline" | "none" }) {
+  const rotating = !!program.rotation?.length;
+  const [openDay, setOpenDay] = useState<string | null>(null);
   const setDay = (id: string, fn: (d: ProgramDay) => ProgramDay) => onChange({ ...program, days: program.days.map((d) => (d.id === id ? fn(d) : d)) });
   const usedWeekdays = (except: string) => new Set(program.days.filter((d) => d.id !== except).flatMap((d) => d.weekdays));
 
@@ -201,19 +227,12 @@ export function ProgramEditor({ program, units, onChange, onSaveDay, sessions = 
 
   return (
     <div>
-      <label className="field mb-3">
-        <span className="label">Program name</span>
-        <input className="input" value={program.name} onChange={(e) => onChange({ ...program, name: e.target.value })} data-testid="input-program-name" />
-      </label>
-      <div className="field mb-3">
-        <span className="label">Schedule</span>
-        <Seg value={rotating ? "rotation" : "weekly"} onChange={(v) => onChange({ ...program, rotation: v === "rotation" ? defaultRotation(program) : null })}
-          options={[{ v: "weekly", l: "Same days each week" }, { v: "rotation", l: "Rotating cycle" }]} testId="seg-program-schedule" />
-        <p className="text-xs faint mt-1">{rotating ? "Days run in order with rest days built in, like a 6- or 8-day split, regardless of the weekday." : "Each day is tied to weekdays."}</p>
-      </div>
-      {rotating && <RotationEditor program={program} sessions={sessions} onChange={onChange} />}
+      {settings === "inline" && <ProgramSettings program={program} onChange={onChange} sessions={sessions} />}
       <ScheduledSets program={program} />
-      {program.days.length > 1 && <p className="text-xs muted mb-2">Hold the grip to drag days or exercises into a new order.</p>}
+      <div className="flex items-baseline justify-between mb-2 mt-1">
+        <span className="label">{rotating ? "Days in the cycle" : "Training days"}</span>
+        {program.days.length > 1 && <span className="text-[11px] faint">Hold ⠿ to reorder</span>}
+      </div>
       <div className="stack" ref={dayDrag.containerRef}>
         {program.days.map((d, di) => {
           const taken = usedWeekdays(d.id);
@@ -223,11 +242,21 @@ export function ProgramEditor({ program, units, onChange, onSaveDay, sessions = 
             <div key={d.id} {...ip} className={`card ${ip.className}`} data-testid={`program-day-${d.id}`}>
               <div className="flex items-center gap-1">
                 <span className="drag-handle" {...dayDrag.handleProps(di)} data-testid={`drag-day-${d.id}`}><GripVertical size={18} /></span>
-                <button className="icon-btn" onClick={() => setOpenDay(open ? null : d.id)} aria-label="Toggle day" data-testid={`toggle-day-${d.id}`}>{open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</button>
-                <input className="input font-semibold min0" value={d.name} onChange={(e) => setDay(d.id, (x) => ({ ...x, name: e.target.value }))} data-testid={`input-day-name-${d.id}`} />
+                <button className="flex-1 min0 text-left flex items-center gap-2" style={{ minHeight: 44 }} onClick={() => setOpenDay(open ? null : d.id)} aria-expanded={open} data-testid={`toggle-day-${d.id}`}>
+                  <span className="min0 flex-1">
+                    <span className="font-semibold block truncate">{d.name || "Untitled day"}</span>
+                    <span className="mono text-[11px] muted block truncate" data-testid={`text-day-schedule-${d.id}`}>{dayScheduleText(program, d)} · {d.exercises.length} ex · {d.exercises.reduce((a, e) => a + e.sets, 0)} sets</span>
+                  </span>
+                  {open ? <ChevronDown size={16} className="muted shrink-0" /> : <ChevronRight size={16} className="muted shrink-0" />}
+                </button>
               </div>
+              {open && (<>
+              <label className="field mt-3">
+                <span className="label">Day name</span>
+                <input className="input font-semibold min0" value={d.name} onChange={(e) => setDay(d.id, (x) => ({ ...x, name: e.target.value }))} data-testid={`input-day-name-${d.id}`} />
+              </label>
               {rotating ? (
-                <p className="text-xs muted mt-2" data-testid={`text-day-cycle-${d.id}`}>{(() => { const n = program.rotation!.filter((x) => x === d.id).length; return n ? `${n}× per ${program.rotation!.length}-day cycle` : "Not in the cycle yet"; })()}</p>
+                <p className="text-xs muted mt-2" data-testid={`text-day-cycle-${d.id}`}>{dayScheduleText(program, d)}. Change where it falls in the cycle under the program settings.</p>
               ) : (
               <div className="grid grid-cols-7 gap-1 mt-3">
                 {WD.map((w, i) => {
@@ -242,17 +271,15 @@ export function ProgramEditor({ program, units, onChange, onSaveDay, sessions = 
                 })}
               </div>
               )}
-              <div className="flex items-center justify-between gap-2 mt-2">
-                <span className="text-xs muted">{d.exercises.length} exercises · {d.exercises.reduce((a, e) => a + e.sets, 0)} sets</span>
+              <div className="flex items-center justify-end gap-2 mt-2">
                 <span className="flex items-center gap-1">
                   {onSaveDay && <button className="icon-btn" aria-label={`Save ${d.name} as a workout`} title="Save as workout" disabled={!d.exercises.length} onClick={() => onSaveDay(d)} data-testid={`button-save-day-${d.id}`}><BookmarkPlus size={16} /></button>}
                   <button className="icon-btn" aria-label="Duplicate day" title="Duplicate day" onClick={() => duplicateDay(d)} data-testid={`button-duplicate-day-${d.id}`}><Copy size={16} /></button>
                   <button className="icon-btn" aria-label="Delete day" title="Delete day" onClick={() => { if (!d.exercises.length || confirm(`Delete ${d.name}?`)) onChange({ ...program, days: program.days.filter((x) => x.id !== d.id), rotation: program.rotation ? program.rotation.map((x) => (x === d.id ? null : x)) : program.rotation }); }} data-testid={`button-delete-day-${d.id}`}><Trash2 size={16} /></button>
                 </span>
               </div>
-              {open && (
-                <div className="mt-3"><DayExercises exercises={d.exercises} units={units} onChange={(x) => setDay(d.id, (dd) => ({ ...dd, exercises: x }))} addTestId={`button-add-exercise-${d.id}`} /></div>
-              )}
+              <div className="mt-3"><DayExercises exercises={d.exercises} units={units} onChange={(x) => setDay(d.id, (dd) => ({ ...dd, exercises: x }))} addTestId={`button-add-exercise-${d.id}`} /></div>
+              </>)}
             </div>
           );
         })}

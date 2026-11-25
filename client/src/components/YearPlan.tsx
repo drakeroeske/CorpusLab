@@ -104,12 +104,11 @@ export function YearPlanCard() {
   const progName = (id?: string | null) => (id ? (state.savedPrograms ?? []).find((x) => x.id === id)?.name ?? "missing program" : null);
   const add = () => setEdit({ id: newId("blk"), name: "", start: nextFreeStart(state.yearPlan, today), weeks: 8, programId: null, diet: null });
   return (
-    <div className="card mt-3" data-testid="card-year-plan">
-      <div className="flex items-start justify-between gap-2">
-        <div><div className="label flex items-center gap-1"><CalendarRange size={13} /> Year plan</div>
-          <p className="text-xs mt-1">Schedule bulks, cuts and programs ahead. Each block switches on its start date, with a heads-up the day before.</p></div>
-      </div>
-      {blocks.length > 0 && <Strip blocks={blocks} today={today} />}
+    <div data-testid="card-year-plan">
+      <div className="section-title" style={{ marginTop: 8 }}><h2>Year plan</h2><CalendarRange size={16} className="muted" /></div>
+      <p className="text-sm muted mb-3">Schedule bulks, cuts and programs ahead. Each block switches on its start date, with a heads-up the day before.</p>
+      <div className="card">
+      {blocks.length > 0 ? <Strip blocks={blocks} today={today} /> : <p className="text-sm muted">No blocks yet. Plan one, like an 8-week cut on your current program, or a 12-week bulk on a program from your Library.</p>}
       {visible.length > 0 && (
         <div className="mt-2">
           {visible.map((b) => {
@@ -126,7 +125,8 @@ export function YearPlanCard() {
           })}
         </div>
       )}
-      <button className="btn btn-sm btn-block mt-3" onClick={add} data-testid="button-add-block"><Plus size={14} /> Plan a block</button>
+      </div>
+      <button className="btn btn-outline btn-block mt-3" onClick={add} data-testid="button-add-block"><Plus size={16} /> Plan a block</button>
       {edit && <BlockSheet block={edit} onClose={() => setEdit(null)} />}
     </div>
   );

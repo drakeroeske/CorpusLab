@@ -10,72 +10,55 @@ import { Tag, shortDate } from "./riso";
 import { EX, TEMPLATES, buildTemplate, allExercises, customExercisesIn, isKnownExercise, newId, registerCustomExercises, upgradeExerciseMuscles } from "@/lib/exercises";
 import { dateKey } from "@/lib/engine";
 import { ProgramEditor } from "./ProgramEditor";
-import { programFromSaved } from "@/lib/yearPlan";
+import { programFromSaved, stashCurrentProgram } from "@/lib/yearPlan";
 import { daysToProgram, ocrImage, parseProgramText, toProgramDays, type ParsedDay } from "@/lib/programImport";
 import type { Exercise, Program, SavedProgram } from "@/lib/types";
 
 const copyText = async (t: string) => { try { await navigator.clipboard.writeText(t); return true; } catch { return false; } };
 
-/** "My programs" card: save a copy of the current one, load, share, delete. */
-export function ProgramLibrary({ onImport }: { onImport: () => void }) {
+/** Library → My programs: switch to, edit, share or delete saved programs; start a new one now or for later. */
+export function ProgramLibrary({ onImport, onUsed }: { onImport: () => void; onUsed?: () => void }) {
   const { state, set } = useStore();
   const auth = useAuth();
   const ui = useUI();
-  const [share, setShare] = useState<{ name: string; code: string } | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
+  const { doShare, busy, shareSheet } = useProgramSharing();
   const [editing, setEditing] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [when, setWhen] = useState<"now" | "later">("now");
+  /** Switch programs, keeping the outgoing one in My programs so nothing is lost. */
+  const useProgram = (next: Program, name: string) => {
+    const outgoing = state.program?.name;
+    set((s) => ({ ...s, savedPrograms: stashCurrentProgram(s), program: next }));
+    ui.toast(`Now on ${name}${outgoing && outgoing !== name ? ` · ${outgoing} kept in My programs` : ""}`);
+    onUsed?.();
+  };
   const editSp = (state.savedPrograms ?? []).find((x) => x.id === editing) ?? null;
   const putSaved = (sp: SavedProgram) => set((s) => ({ ...s, savedPrograms: (s.savedPrograms ?? []).map((x) => (x.id === sp.id ? sp : x)) }));
   const createFor = (program: Program) => {
+    if (when === "now") { setCreating(false); useProgram({ ...program, startDate: dateKey(), deloadUntil: null }, program.name); return; }
     const sp: SavedProgram = { id: newId("sp"), name: program.name, savedAt: Date.now(), source: "mine", program: { ...program, deloadUntil: null } };
     set((s) => ({ ...s, savedPrograms: [sp, ...(s.savedPrograms ?? [])].slice(0, 30) }));
     setCreating(false); setEditing(sp.id);
   };
   const saved = state.savedPrograms ?? [];
-  const live = auth.live && !auth.viewing && !auth.me?.isDemo;
 
-  const saveCopy = () => {
-    if (!state.program) return;
-    const name = window.prompt("Name this program", state.program.name) ?? "";
-    if (!name.trim()) return;
-    const sp: SavedProgram = { id: newId("sp"), name: name.trim(), savedAt: Date.now(), source: "mine", program: { ...state.program, name: name.trim(), deloadUntil: null } };
-    set((s) => ({ ...s, savedPrograms: [sp, ...(s.savedPrograms ?? [])].slice(0, 30) }));
-    ui.toast("Saved to My programs");
-  };
   const load = (sp: SavedProgram) => {
-    if (!window.confirm(`Switch to "${sp.name}"? Your current program is replaced (save a copy first if you want it back). Logged history is kept.`)) return;
-    set((s) => ({ ...s, program: programFromSaved(sp, dateKey()) }));
-    ui.toast(`Now on ${sp.name}`);
-  };
-  const doShare = async (p: Program, name: string) => {
-    if (!live) { ui.toast("Sign in to share programs"); return; }
-    setBusy(name);
-    try {
-      // Custom exercises ride along so the friend gets them too.
-      const custom = customExercisesIn(p).map(({ archived: _a, ...e }) => e);
-      const program: Program = custom.length ? { ...p, customExercises: custom } : p;
-      const r = await api<{ code: string; name: string }>("POST", "/api/programs/share", { program, name });
-      setShare({ name: r.name, code: r.code });
-    } catch (e) { ui.toast((e as Error).message || "Couldn't share"); } finally { setBusy(null); }
+    if (!window.confirm(`Switch to "${sp.name}"? ${state.program ? `${state.program.name} stays in My programs. ` : ""}Logged history is kept.`)) return;
+    useProgram(programFromSaved(sp, dateKey()), sp.name);
   };
 
   return (
-    <div className="card mt-3" data-testid="card-program-library">
-      <div className="flex items-start justify-between gap-2">
-        <div><div className="label">My programs</div><p className="text-xs mt-1">Save what you're running, switch between programs, share with a code.</p></div>
-        <Tag>{saved.length}</Tag>
-      </div>
-      <div className="flex gap-2 mt-3 flex-wrap">
-        <button className="btn btn-sm" onClick={saveCopy} disabled={!state.program} data-testid="button-save-copy"><Download size={14} /> Save a copy</button>
-        {state.program && <button className="btn btn-sm" onClick={() => doShare(state.program!, state.program!.name)} disabled={busy != null} data-testid="button-share-current"><Share2 size={14} /> Share current</button>}
+    <div data-testid="card-program-library">
+      <div className="section-title" style={{ marginTop: 8 }}><h2>My programs</h2><Tag>{saved.length}</Tag></div>
+      <p className="text-sm muted mb-3">Switch any time. The program you switch away from stays here, and your logged history carries over.</p>
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        <button className="btn btn-sm" onClick={() => { setWhen("now"); setCreating(true); }} data-testid="button-new-program"><Plus size={14} /> New program</button>
         <button className="btn btn-sm" onClick={onImport} data-testid="button-import-program"><Upload size={14} /> Import</button>
-        <button className="btn btn-sm" onClick={() => setCreating(true)} data-testid="button-new-saved-program"><Plus size={14} /> Build one for later</button>
       </div>
-      {saved.length > 0 && (
-        <div className="mt-3">
+      {saved.length === 0 ? <p className="empty text-sm">Nothing saved yet. Programs you switch away from land here automatically.</p> : (
+        <div className="card" style={{ padding: "2px 14px" }}>
           {saved.map((sp) => (
-            <div key={sp.id} className="flex items-center gap-2" style={{ minHeight: 48, borderTop: "1px solid var(--line)" }} data-testid={`row-saved-${sp.id}`}>
+            <div key={sp.id} className="flex items-center gap-2 rowline" style={{ minHeight: 52 }} data-testid={`row-saved-${sp.id}`}>
               <div className="min0 flex-1">
                 <div className="font-semibold text-sm truncate">{sp.name}</div>
                 <div className="mono text-[11px]">{sp.program.days.length} days · {sp.program.days.reduce((a, d) => a + d.exercises.length, 0)} exercises · {shortDate(new Date(sp.savedAt).toISOString().slice(0, 10))}{sp.source !== "mine" && ` · from ${sp.from ?? sp.source}`}</div>
@@ -89,8 +72,9 @@ export function ProgramLibrary({ onImport }: { onImport: () => void }) {
         </div>
       )}
       {creating && (
-        <Sheet title="Build a program for later" onClose={() => setCreating(false)} testId="sheet-new-saved-program">
-          <p className="text-sm muted mb-3">It goes to My programs without touching what you're running now. Put it in your Year plan, or tap Use when you're ready.</p>
+        <Sheet title="New program" onClose={() => setCreating(false)} testId="sheet-new-saved-program">
+          <Seg value={when} onChange={(v) => setWhen(v)} options={[{ v: "now", l: "Start it now" }, { v: "later", l: "Save for later" }]} testId="seg-new-program-when" />
+          <p className="text-xs muted mt-2 mb-3">{when === "now" ? `Replaces what you're running${state.program ? ` (${state.program.name} stays in My programs)` : ""}.` : "Goes to My programs without touching what you're running. Schedule it in your Year plan, or tap Use when you're ready."}</p>
           <button className="btn btn-outline btn-block" onClick={() => { const name = window.prompt("Name it", "New program")?.trim(); if (name) createFor({ name, startDate: dateKey(), days: [{ id: newId("day"), name: "Day 1", weekdays: [1], exercises: [] }] }); }} data-testid="button-new-blank">Start blank</button>
           {state.program && <button className="btn btn-outline btn-block mt-2" onClick={() => createFor({ ...state.program!, name: `${state.program!.name} v2` })} data-testid="button-new-from-current">Start from my current program</button>}
           <div className="label mt-4 mb-2">Or a template</div>
@@ -102,6 +86,7 @@ export function ProgramLibrary({ onImport }: { onImport: () => void }) {
           ))}
         </Sheet>
       )}
+      {shareSheet}
       {editSp && (
         <Sheet title={editSp.name} onClose={() => setEditing(null)} full testId="sheet-edit-saved-program">
           <p className="text-xs muted mb-3">Editing a saved program. What you're running now isn't affected. Changes save automatically.</p>
@@ -109,6 +94,31 @@ export function ProgramLibrary({ onImport }: { onImport: () => void }) {
             onChange={(p) => putSaved({ ...editSp, name: p.name || editSp.name, savedAt: Date.now(), program: p })} />
         </Sheet>
       )}
+    </div>
+  );
+}
+
+
+/** Share a program with a code; returns the sheet to render. */
+export function useProgramSharing() {
+  const auth = useAuth();
+  const ui = useUI();
+  const [share, setShare] = useState<{ name: string; code: string } | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const live = auth.live && !auth.viewing && !auth.me?.isDemo;
+  const doShare = async (p: Program, name: string) => {
+    if (!live) { ui.toast("Sign in to share programs"); return; }
+    setBusy(name);
+    try {
+      // Custom exercises ride along so the friend gets them too.
+      const custom = customExercisesIn(p).map(({ archived: _a, ...e }) => e);
+      const program: Program = custom.length ? { ...p, customExercises: custom } : p;
+      const r = await api<{ code: string; name: string }>("POST", "/api/programs/share", { program, name });
+      setShare({ name: r.name, code: r.code });
+    } catch (e) { ui.toast((e as Error).message || "Couldn't share"); } finally { setBusy(null); }
+  };
+  const shareSheet = (
+    <>
       {share && (
         <Sheet title="Share program" onClose={() => setShare(null)} testId="sheet-share-program">
           <p className="text-sm">Anyone with Corpus can load <b>{share.name}</b> with this code — Spotters, clients, your coach. It copies the exercises, sets, reps and starting weights; their history stays theirs.</p>
@@ -124,8 +134,23 @@ export function ProgramLibrary({ onImport }: { onImport: () => void }) {
           <p className="text-xs mt-3">Codes you've shared keep working until you delete them (Profile → Data).</p>
         </Sheet>
       )}
-    </div>
+    </>
   );
+  return { doShare, busy, shareSheet };
+}
+
+/** Snapshot the running program into My programs under a name you pick. */
+export function useSaveCopy() {
+  const { state, set } = useStore();
+  const ui = useUI();
+  return () => {
+    if (!state.program) return;
+    const name = window.prompt("Name this program", state.program.name) ?? "";
+    if (!name.trim()) return;
+    const sp: SavedProgram = { id: newId("sp"), name: name.trim(), savedAt: Date.now(), source: "mine", program: { ...state.program, name: name.trim(), deloadUntil: null } };
+    set((s) => ({ ...s, savedPrograms: [sp, ...(s.savedPrograms ?? [])].slice(0, 30) }));
+    ui.toast("Saved to My programs");
+  };
 }
 
 /** Coach-sent programs waiting for a decision. */

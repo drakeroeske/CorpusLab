@@ -1,22 +1,23 @@
 import { Info } from "@/components/Term";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, FlaskConical, Lightbulb, Pencil, Target } from "lucide-react";
+import { ChevronLeft, ChevronRight, CopyPlus, FlaskConical, Lightbulb, Pencil, Settings2, Share2, Target } from "lucide-react";
 import { EditWorkoutSheet, fmtSet } from "@/components/SetEditor";
 import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
 import Logger from "./Logger";
 import { YearPlanCard } from "@/components/YearPlan";
-import { ProgramEditor } from "@/components/ProgramEditor";
+import { ProgramEditor, ProgramSettings } from "@/components/ProgramEditor";
 import { SaveAsWorkoutSheet, SavedWorkoutsCard } from "@/components/SavedWorkouts";
-import { ImportProgramSheet, ProgramInbox, ProgramLibrary } from "@/components/ProgramLibrary";
+import { ImportProgramSheet, ProgramInbox, ProgramLibrary, useProgramSharing, useSaveCopy } from "@/components/ProgramLibrary";
+import { blockCovering, nextBlock } from "@/lib/yearPlan";
 import { Bar, Empty, Seg, Sheet } from "@/components/ui";
 import { EngineHeader } from "@/components/riso";
 import { Sectioned } from "@/components/Sections";
 import {
-  addDays, dateKey, EXPERIMENT_TEMPLATES, experimentPhase, experimentReport, fmtDate, fmtW, r1, weekStart, weeklyReport, VOLUME_RANGE,
+  addDays, dateKey, daysBetween, isRotating, EXPERIMENT_TEMPLATES, experimentPhase, experimentReport, fmtDate, fmtW, r1, weekStart, weeklyReport, VOLUME_RANGE,
   sessionVolume, sessionPRs,
 } from "@/lib/engine";
-import { EX, MUSCLE_LABEL, MUSCLES, TEMPLATES, buildTemplate, newId } from "@/lib/exercises";
+import { EX, MUSCLE_LABEL, MUSCLES, newId } from "@/lib/exercises";
 import { convertProgram } from "@/lib/actions";
 import { ExerciseCatalog } from "@/components/ExerciseCatalog";
 import type { Activity, Experiment, Program, ProgramDay, Session } from "@/lib/types";
@@ -45,56 +46,85 @@ function ExercisesTab() {
   );
 }
 
+const WD3 = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+/** "4 days · Mon Tue Thu Fri" or "8-day cycle · 5 training". */
+function scheduleSummary(p: Program): string {
+  if (isRotating(p)) { const L = p.rotation.length; return `${L}-day cycle · ${p.rotation.filter(Boolean).length} training`; }
+  const wds = [...new Set(p.days.flatMap((d) => d.weekdays))].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7));
+  return `${p.days.length} day${p.days.length === 1 ? "" : "s"}${wds.length ? ` · ${wds.map((i) => WD3[i]).join(" ")}` : ""}`;
+}
+
+/** Program tab: the program you're running, your library of programs and workouts, and the year plan. */
 function ProgramTab() {
   const { state, set, profile } = useStore();
   const ui = useUI();
-  const [tplOpen, setTplOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const program = state.program;
+  const [section, setSection] = useState<"current" | "library" | "plan">(program ? "current" : "library");
+  const go = (x: "current" | "library" | "plan") => { setSection(x); window.scrollTo({ top: 0 }); };
+  const { doShare, busy, shareSheet } = useProgramSharing();
+  const saveCopy = useSaveCopy();
   // Edits save straight into your program (no separate Save step), so the next workout always follows what you see here.
   const [saveDay, setSaveDay] = useState<ProgramDay | null>(null);
   const update = (p: Program) => { set((s) => ({ ...s, program: p })); setSavedAt(Date.now()); };
   useEffect(() => { if (savedAt == null) return; const id = setTimeout(() => setSavedAt(null), 1800); return () => clearTimeout(id); }, [savedAt]);
   const today = dateKey();
-  const inDeload = program?.deloadUntil && today <= program.deloadUntil;
+  const inDeload = !!(program?.deloadUntil && today <= program.deloadUntil);
   const live = state.activeSession && program?.days.some((d) => d.id === state.activeSession!.dayId);
+  const week = program ? Math.max(1, Math.floor(daysBetween(program.startDate, today) / 7) + 1) : 0;
+  const block = blockCovering(state.yearPlan, today);
+  const upcoming = nextBlock(state.yearPlan, today);
   return (
-    <div>
+    <div data-testid="view-program">
       <ProgramInbox />
-      {!program ? (
-        <Empty>No program yet. <div className="flex gap-2 justify-center mt-3"><button className="btn btn-sm" onClick={() => setTplOpen(true)}>Choose or build one</button><button className="btn btn-sm" onClick={() => setImportOpen(true)}>Import</button></div></Empty>
+      <Seg value={section} onChange={go} options={[{ v: "current", l: "This program" }, { v: "library", l: "Library" }, { v: "plan", l: "Year plan" }]} testId="seg-program-section" />
+      <div className="mt-4">
+      {section === "current" && (!program ? (
+        <Empty>No program yet. <div className="flex gap-2 justify-center mt-3"><button className="btn btn-sm" onClick={() => go("library")} data-testid="button-go-library">Choose or build one</button></div></Empty>
       ) : (
         <>
-          <div className="flex gap-2 mb-3">
-            <button className="btn btn-outline btn-sm flex-1" onClick={() => setTplOpen(true)} data-testid="button-load-template">Change program</button>
-            {inDeload
-              ? <button className="btn btn-warn btn-sm flex-1" onClick={() => update({ ...program, deloadUntil: null })} data-testid="button-end-deload">End deload</button>
-              : <button className="btn btn-outline btn-sm flex-1" onClick={() => { update({ ...program, deloadUntil: addDays(today, 6) }); ui.toast("Deload week: 60% volume, same weights"); }} data-testid="button-deload-now">Start deload week</button>}
+          <div className="card mb-3" data-testid="card-current-program">
+            <div className="flex items-start gap-2">
+              <div className="min0 flex-1">
+                <div className="font-bold text-[19px] truncate" data-testid="text-program-title">{program.name || "My program"}</div>
+                <div className="mono text-[12px] muted mt-0.5" data-testid="text-program-summary">{scheduleSummary(program)} · week {week}</div>
+                {(inDeload || block) && <div className="text-xs mt-1">{inDeload ? <span className="label orange">Deload until {fmtDate(program.deloadUntil!, { month: "short", day: "numeric" })}</span> : <span className="muted">{block!.name} · week {Math.floor(daysBetween(block!.start, today) / 7) + 1} of {block!.weeks}</span>}</div>}
+              </div>
+              <button className="icon-btn" aria-label="Share program" disabled={busy != null} onClick={() => doShare(program, program.name)} data-testid="button-share-current"><Share2 size={16} /></button>
+              <button className="icon-btn" aria-label="Save a copy" onClick={saveCopy} data-testid="button-save-copy"><CopyPlus size={16} /></button>
+              <button className="icon-btn" aria-label="Program settings" onClick={() => setSettingsOpen(true)} data-testid="button-program-settings"><Settings2 size={16} /></button>
+            </div>
+            <div className="grid grid-cols-2 gap-2 mt-3">
+              {inDeload
+                ? <button className="btn btn-warn btn-sm" onClick={() => update({ ...program, deloadUntil: null })} data-testid="button-end-deload">End deload</button>
+                : <button className="btn btn-outline btn-sm" onClick={() => { update({ ...program, deloadUntil: addDays(today, 6) }); ui.toast("Deload week: 60% volume, same weights"); }} data-testid="button-deload-now">Deload week</button>}
+              <button className="btn btn-outline btn-sm" onClick={() => go("library")} data-testid="button-load-template">Switch program</button>
+            </div>
+            <div className="mono text-[11px] faint mt-2 text-right" aria-live="polite" data-testid="text-autosave">{savedAt ? "Saved" : "Edits save automatically"}</div>
           </div>
           {live && <p className="note mb-2" data-testid="text-live-edit-hint">A workout is in progress. Changes here show up in it — tap "Update workout" on the Workout tab, or they apply automatically if you haven't logged a set yet.</p>}
-          <div className="flex items-center justify-between mb-1" style={{ minHeight: 20 }}>
-            <span className="label">Program</span>
-            <span className="mono text-[11px]" aria-live="polite" data-testid="text-autosave">{savedAt ? "Saved" : "Edits save automatically"}</span>
-          </div>
-          <ProgramEditor program={program} units={profile.units} onChange={update} onSaveDay={setSaveDay} sessions={state.sessions} />
+          <ProgramEditor program={program} units={profile.units} onChange={update} onSaveDay={setSaveDay} sessions={state.sessions} settings="none" />
+          {settingsOpen && (
+            <Sheet title="Program settings" onClose={() => setSettingsOpen(false)} testId="sheet-program-settings">
+              <ProgramSettings program={program} onChange={update} sessions={state.sessions} />
+            </Sheet>
+          )}
+          {shareSheet}
+        </>
+      ))}
+      {section === "library" && (
+        <>
+          <ProgramLibrary onImport={() => setImportOpen(true)} onUsed={() => go("current")} />
+          <div className="mt-2"><SavedWorkoutsCard /></div>
         </>
       )}
-      <div className="mt-6 mb-6"><SavedWorkoutsCard /></div>
-      <ProgramLibrary onImport={() => setImportOpen(true)} />
-      <YearPlanCard />
-      {tplOpen && (
-        <Sheet title="Choose a program" onClose={() => setTplOpen(false)}>
-          <p className="text-sm muted mb-3">Replaces your current program (save a copy first in My programs if you want it back). Logged history is kept.</p>
-          {TEMPLATES.map((t) => (
-            <button key={t.id} className="card w-full text-left" onClick={() => { update(buildTemplate(t.id, profile.units, profile.experience, dateKey())); setTplOpen(false); }} data-testid={`button-template-${t.id}`}>
-              <div className="flex justify-between"><span className="font-semibold">{t.name}</span><span className="chip">{t.desc}</span></div>
-              <div className="text-xs muted mt-1">{t.days.map((d) => d.name).join(" · ")}</div>
-            </button>
-          ))}
-          <button className="btn btn-outline btn-block mt-3" onClick={() => { update({ name: "My Program", startDate: dateKey(), days: [{ id: newId("day"), name: "Day 1", weekdays: [1], exercises: [] }] }); setTplOpen(false); }} data-testid="button-build-scratch">Build my own</button>
-        </Sheet>
+      {section === "plan" && <YearPlanCard />}
+      {section !== "plan" && upcoming && !upcoming.appliedAt && daysBetween(today, upcoming.start) <= 14 && (
+        <button className="note mt-4 w-full text-left" onClick={() => go("plan")} data-testid="text-plan-upcoming">Year plan: {upcoming.name} starts {fmtDate(upcoming.start, { month: "short", day: "numeric" })} ›</button>
       )}
+      </div>
       {importOpen && <ImportProgramSheet onClose={() => setImportOpen(false)} />}
       {saveDay && <SaveAsWorkoutSheet defaultName={saveDay.name} make={(name) => ({ id: newId("sw"), name, exercises: saveDay.exercises.map((e) => ({ ...e, id: newId("pe") })) })} onClose={() => setSaveDay(null)} />}
     </div>
