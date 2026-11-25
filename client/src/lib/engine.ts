@@ -921,6 +921,70 @@ export interface WeeklyReport {
   sets: Record<Muscle, number>;
 }
 
+export interface WeekDayOverview {
+  date: string;
+  /** Program day planned (or due) that date, if any. */
+  planned: ProgramDay | null;
+  /** Finished workouts that date (program, freestyle or saved). */
+  done: Session[];
+  /** Logged runs, classes, sports and other activities. */
+  activities: number;
+  kcal: number | null;
+  kcalTarget: number;
+  protein: number | null;
+  state: "done" | "missed" | "today" | "planned" | "rest" | "extra";
+}
+export interface WeekOverview {
+  from: string;
+  to: string;
+  days: WeekDayOverview[];
+  workoutsDone: number;
+  workoutsPlanned: number;
+  activities: number;
+  /** Calories eaten Mon–today and the whole week's target (sum of each day's plan). */
+  kcalEaten: number;
+  kcalWeekTarget: number;
+  /** Eaten minus target over days already finished (Mon–yesterday) that have food logged. */
+  kcalPace: number;
+  daysLeft: number;
+  proteinHit: number;
+  proteinLogged: number;
+  /** Average weigh-in this week minus last week's, when both exist. */
+  weightChange: number | null;
+  weightAvg: number | null;
+}
+
+/** Monday–Sunday at a glance for the home tab: workouts planned vs done, calories against the week's budget, protein, weight. */
+export function weekOverview(state: AppState, targets: NutritionTargets, today = dateKey()): WeekOverview {
+  const from = weekStart(today), to = addDays(from, 6);
+  const prot = proteinByDate(state.meals), cals = caloriesByDate(state.meals);
+  const days: WeekDayOverview[] = [];
+  let kcalEaten = 0, kcalWeekTarget = 0, kcalPace = 0, proteinHit = 0, proteinLogged = 0, planned = 0, doneCount = 0, acts = 0;
+  for (let i = 0; i < 7; i++) {
+    const date = addDays(from, i);
+    const p = dayForDate(state.program, date, state.sessions, today);
+    const done = state.sessions.filter((x) => x.end && x.date === date);
+    const a = (state.activities ?? []).filter((x) => x.date === date).length;
+    const kcalTarget = calTargetFor(targets, date, !!p);
+    const kcal = cals[date] ?? null;
+    kcalWeekTarget += kcalTarget;
+    if (date <= today && kcal != null) kcalEaten += kcal;
+    if (date < today && kcal != null) kcalPace += kcal - kcalTarget;
+    if (date <= today && prot[date] != null) { proteinLogged++; if (prot[date] >= targets.protein * 0.95) proteinHit++; }
+    if (p) planned++;
+    doneCount += done.length; acts += a;
+    const st: WeekDayOverview["state"] = done.length ? (p ? "done" : "extra") : date === today ? (p ? "today" : "rest") : p ? (date < today ? "missed" : "planned") : "rest";
+    days.push({ date, planned: p, done, activities: a, kcal, kcalTarget, protein: prot[date] ?? null, state: st });
+  }
+  const avgW = (a: string, b: string) => { const w = state.checkins.filter((c) => c.date >= a && c.date <= b && c.bodyWeight).map((c) => c.bodyWeight as number); return w.length ? w.reduce((x, y) => x + y, 0) / w.length : null; };
+  const wNow = avgW(from, to), wPrev = avgW(addDays(from, -7), addDays(from, -1));
+  return {
+    from, to, days, workoutsDone: doneCount, workoutsPlanned: planned, activities: acts,
+    kcalEaten: Math.round(kcalEaten), kcalWeekTarget: Math.round(kcalWeekTarget), kcalPace: Math.round(kcalPace), daysLeft: daysBetween(today, to) + 1,
+    proteinHit, proteinLogged, weightAvg: wNow, weightChange: wNow != null && wPrev != null ? wNow - wPrev : null,
+  };
+}
+
 export function weeklyReport(state: AppState, from: string, targets: NutritionTargets): WeeklyReport {
   const to = addDays(from, 6);
   const today = dateKey();
