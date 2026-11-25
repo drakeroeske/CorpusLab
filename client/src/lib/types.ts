@@ -114,6 +114,8 @@ export interface Profile {
    * amount = kcal added on the higher days. Missing = training, +150 (the original behaviour).
    */
   calorieSplit?: { mode: CalorieSplitMode; amount: number };
+  /** Spread a day's over/under across the rest of the week (Mon–Sun). Missing = on. */
+  calorieRebalance?: boolean;
 }
 
 /** A drop set strips weight and keeps going; a rest-pause set rests ~15s and squeezes out mini-sets at the same weight. */

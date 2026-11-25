@@ -4,10 +4,10 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
-import { newSession, prescriptionsFor, sessionSummary, useToday } from "@/lib/derived";
+import { calTargetToday, newSession, prescriptionsFor, rebalanceNote, sessionSummary, useToday } from "@/lib/derived";
 import { StartWorkoutSheet } from "@/components/StartWorkout";
 import { TodayGoals } from "@/components/Goals";
-import { addDays, dayForDate, fmtDate, fmtW, proteinByDate, caloriesByDate, calTargetFor, isCutting, rotationPosition } from "@/lib/engine";
+import { addDays, dayForDate, fmtDate, fmtW, proteinByDate, caloriesByDate, isCutting, rotationPosition } from "@/lib/engine";
 import { EX, MUSCLE_LABEL, isTimed, newId } from "@/lib/exercises";
 import { Bar } from "@/components/ui";
 import { EngineHeader, Tag } from "@/components/riso";
@@ -51,8 +51,9 @@ export default function Today() {
   const day = t.day;
   const rxs = day ? prescriptionsFor(state, day, r.score, t.inDeload, u) : [];
   const totalSets = rxs.reduce((a, x) => a + x.rx.sets, 0);
-  const isTraining = !!t.day;
-  const calTarget = calTargetFor(targets, t.today, isTraining);
+  const calBal = calTargetToday(state, targets, t.today);
+  const calTarget = calBal.target;
+  const calNote = rebalanceNote(calBal);
   const cal = caloriesByDate(state.meals)[t.today] ?? 0;
   const prot = proteinByDate(state.meals)[t.today] ?? 0;
   const doneSum = t.doneToday ? sessionSummary(state, t.doneToday) : null;
@@ -227,6 +228,7 @@ export default function Today() {
               <div className="label">Calories</div>
               <div className="text-[15px] whitespace-nowrap"><b className="mono">{n(cal)}</b><span className="muted"> / {n(calTarget)}</span></div>
               <div className="mt-1.5"><Bar pct={calTarget ? (cal / calTarget) * 100 : 0} over={cal > calTarget * 1.08} /></div>
+              {calNote && <div className="text-[11px] faint mt-1" data-testid="text-cal-rebalance">{calNote}</div>}
             </div>
             <div data-testid="text-protein-today">
               <div className="label">Protein</div>

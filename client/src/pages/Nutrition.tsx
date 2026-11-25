@@ -4,7 +4,8 @@ import { createPortal } from "react-dom";
 import { Plus, Star, Trash2, Search, ScanLine, X, ChevronDown, Check } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useUI } from "@/App";
-import { dateKey, dayForDate, calTargetFor } from "@/lib/engine";
+import { dateKey } from "@/lib/engine";
+import { calTargetToday, rebalanceNote } from "@/lib/derived";
 import { newId } from "@/lib/exercises";
 import { api } from "@/lib/api";
 import { LOCAL_FOODS } from "@/lib/foods";
@@ -67,8 +68,9 @@ export function NutritionSheet({ onClose }: { onClose: () => void }) {
   const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   const meals = state.meals.filter((x) => x.date === today).sort((a, b) => a.time - b.time);
   const tot = meals.reduce((a, x) => ({ cal: a.cal + x.cal, p: a.p + x.p, c: a.c + x.c, f: a.f + x.f }), { cal: 0, p: 0, c: 0, f: 0 });
-  const training = !!dayForDate(state.program, today, state.sessions);
-  const calT = calTargetFor(targets, today, training);
+  const calBal = calTargetToday(state, targets, today);
+  const calT = calBal.target;
+  const calNote = rebalanceNote(calBal);
   const session = state.sessions.find((s) => s.date === today) ?? state.activeSession;
   const recents = state.recentFoods ?? [];
 
@@ -144,6 +146,7 @@ export function NutritionSheet({ onClose }: { onClose: () => void }) {
         <div className="flex flex-col items-center gap-1"><Ring value={tot.p} max={targets.protein} size={86} color="var(--blue)"><span className="mono font-semibold">{Math.round(tot.p)}</span><span className="mono text-[10px] muted">/{targets.protein}g</span></Ring><span className="label">protein</span></div>
         <div className="mono text-xs muted leading-6"><div>C {Math.round(tot.c)} g</div><div>F {Math.round(tot.f)} g</div><div>{meals.length} meals</div></div>
       </div>
+      {calNote && <p className="text-xs muted text-center mt-2" data-testid="text-cal-rebalance-fuel">{calNote}</p>}
       <WeightPlanNote className="mt-3 text-center" />
 
       {/* ---- search ---- */}

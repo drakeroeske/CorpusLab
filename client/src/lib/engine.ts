@@ -701,6 +701,46 @@ export function calTargetFor(t: NutritionTargets, date: string, isTrainingDay: b
   return t.cal;
 }
 
+export interface BalancedCalTarget {
+  /** What the weekly split plans for this day. */
+  planned: number;
+  /** Planned plus today's share of making up the week so far. */
+  target: number;
+  /** target − planned (negative = eat a bit less today). */
+  adjust: number;
+  /** Logged minus planned on earlier days this week (Mon–yesterday), counting only days with food logged. */
+  weekDiff: number;
+  /** Days left in the week including today, which share the difference. */
+  daysLeft: number;
+  /** True when the per-day cap kept part of the difference from being made up. */
+  capped: boolean;
+}
+/** Rebalancing caps: a day moves at most 15% from its plan, and never below BMR (or 1,200 kcal). Under 100 kcal off is ignored. */
+export const REBALANCE_CAP = 0.15;
+/**
+ * The day's calorie target with the week kept on track: whatever earlier days this week came in over or under is
+ * spread across the days left (today through Sunday), in proportion to each day's plan. Today's own meals don't move
+ * today's target, so it stays put while you eat. Days with nothing logged are treated as unknown, not as zero.
+ */
+export function balancedCalTarget(t: NutritionTargets, date: string, isTraining: (d: string) => boolean, kcalByDate: Record<string, number>, enabled = true): BalancedCalTarget {
+  const planned = (d: string) => calTargetFor(t, d, isTraining(d));
+  const p = planned(date);
+  const ws = weekStart(date);
+  let weekDiff = 0;
+  for (let d = ws; d < date; d = addDays(d, 1)) { const got = kcalByDate[d]; if (got) weekDiff += got - planned(d); }
+  let rest = 0, daysLeft = 0;
+  for (let d = date; d <= addDays(ws, 6); d = addDays(d, 1)) { rest += planned(d); daysLeft++; }
+  weekDiff = Math.round(weekDiff);
+  if (!enabled || Math.abs(weekDiff) < 100 || !rest) return { planned: p, target: p, adjust: 0, weekDiff, daysLeft, capped: false };
+  const want = (-weekDiff * p) / rest;
+  const cap = p * REBALANCE_CAP;
+  let adjust = Math.max(-cap, Math.min(cap, want));
+  const floor = Math.max(t.bmr, 1200);
+  if (p + adjust < floor) adjust = Math.min(0, floor - p);
+  adjust = Math.round(adjust / 10) * 10;
+  return { planned: p, target: p + adjust, adjust, weekDiff, daysLeft, capped: Math.abs(adjust) + 10 < Math.abs(want) };
+}
+
 /** "2,900 on training days, 2,550 on rest days" / "2,750 every day" / "3,100 Sat–Sun, 2,610 Mon–Fri". */
 export function splitDescription(t: NutritionTargets): string {
   const f = (n: number) => n.toLocaleString();
