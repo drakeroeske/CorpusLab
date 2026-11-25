@@ -341,6 +341,21 @@ export interface ChatMsg {
   ts: number;
 }
 
+/** One block of the year plan: a stretch of weeks on a program and/or a diet phase (bulk, cut, …). */
+export interface PlanBlock {
+  id: string;
+  name: string;
+  /** First day, YYYY-MM-DD. The block runs `weeks` × 7 days. */
+  start: string;
+  weeks: number;
+  /** A program from My programs to switch to on the start date. Missing/null = keep whatever you're running. */
+  programId?: string | null;
+  /** Diet phase to switch to on the start date. Missing/null = leave the nutrition goal alone. */
+  diet?: Goal | null;
+  /** When the app made the switch (or skipped a block that ended while the app wasn't opened). */
+  appliedAt?: number | null;
+}
+
 export interface SavedProgram {
   id: string;
   name: string;
@@ -462,6 +477,8 @@ export interface AppState {
   customExercises?: Exercise[];
   /** Programs saved for later (copies, templates you wrote, ones you imported). */
   savedPrograms?: SavedProgram[];
+  /** Year plan: future program and diet blocks that switch automatically on their start dates. */
+  yearPlan?: PlanBlock[];
   /** Programs a coach sent you, waiting for a decision. */
   programInbox?: ProgramInboxItem[];
   /** Inbox ids you dismissed (so the server doesn't re-add them). */

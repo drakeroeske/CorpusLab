@@ -1,4 +1,5 @@
 import { GoalWatcher } from "@/components/Goals";
+import { YearPlanWatcher } from "@/components/YearPlan";
 import { createContext, useContext, useEffect, useState } from "react";
 import { Eye } from "lucide-react";
 import { StoreProvider, useStore } from "@/lib/store";
@@ -91,6 +92,7 @@ function Shell() {
         <ViewBanner />
         {!viewing && <NotifPlanSync />}
         {!viewing && <GoalWatcher />}
+        {!viewing && <YearPlanWatcher />}
         {tab === "today" && <Today />}
         {tab === "train" && <Train />}
         {tab === "progress" && <Progress />}

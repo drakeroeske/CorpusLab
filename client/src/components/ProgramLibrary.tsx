@@ -1,14 +1,16 @@
 // Saved programs, share codes, coach inbox, and import (code / screenshot / pasted text).
 import { useEffect, useRef, useState } from "react";
-import { Camera, ClipboardPaste, Copy, Download, Share2, Trash2, Upload } from "lucide-react";
+import { Camera, ClipboardPaste, Copy, Download, Pencil, Plus, Share2, Trash2, Upload } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { useUI } from "@/App";
 import { api } from "@/lib/api";
 import { Seg, Sheet } from "./ui";
 import { Tag, shortDate } from "./riso";
-import { EX, allExercises, customExercisesIn, isKnownExercise, newId, registerCustomExercises, upgradeExerciseMuscles } from "@/lib/exercises";
+import { EX, TEMPLATES, buildTemplate, allExercises, customExercisesIn, isKnownExercise, newId, registerCustomExercises, upgradeExerciseMuscles } from "@/lib/exercises";
 import { dateKey } from "@/lib/engine";
+import { ProgramEditor } from "./ProgramEditor";
+import { programFromSaved } from "@/lib/yearPlan";
 import { daysToProgram, ocrImage, parseProgramText, toProgramDays, type ParsedDay } from "@/lib/programImport";
 import type { Exercise, Program, SavedProgram } from "@/lib/types";
 
@@ -21,6 +23,15 @@ export function ProgramLibrary({ onImport }: { onImport: () => void }) {
   const ui = useUI();
   const [share, setShare] = useState<{ name: string; code: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const editSp = (state.savedPrograms ?? []).find((x) => x.id === editing) ?? null;
+  const putSaved = (sp: SavedProgram) => set((s) => ({ ...s, savedPrograms: (s.savedPrograms ?? []).map((x) => (x.id === sp.id ? sp : x)) }));
+  const createFor = (program: Program) => {
+    const sp: SavedProgram = { id: newId("sp"), name: program.name, savedAt: Date.now(), source: "mine", program: { ...program, deloadUntil: null } };
+    set((s) => ({ ...s, savedPrograms: [sp, ...(s.savedPrograms ?? [])].slice(0, 30) }));
+    setCreating(false); setEditing(sp.id);
+  };
   const saved = state.savedPrograms ?? [];
   const live = auth.live && !auth.viewing && !auth.me?.isDemo;
 
@@ -34,7 +45,7 @@ export function ProgramLibrary({ onImport }: { onImport: () => void }) {
   };
   const load = (sp: SavedProgram) => {
     if (!window.confirm(`Switch to "${sp.name}"? Your current program is replaced (save a copy first if you want it back). Logged history is kept.`)) return;
-    set((s) => ({ ...s, program: { ...sp.program, name: sp.name, startDate: dateKey(), deloadUntil: null, days: sp.program.days.map((d) => ({ ...d, id: newId("day"), exercises: d.exercises.map((e) => ({ ...e, id: newId("pe") })) })) } }));
+    set((s) => ({ ...s, program: programFromSaved(sp, dateKey()) }));
     ui.toast(`Now on ${sp.name}`);
   };
   const doShare = async (p: Program, name: string) => {
@@ -59,6 +70,7 @@ export function ProgramLibrary({ onImport }: { onImport: () => void }) {
         <button className="btn btn-sm" onClick={saveCopy} disabled={!state.program} data-testid="button-save-copy"><Download size={14} /> Save a copy</button>
         {state.program && <button className="btn btn-sm" onClick={() => doShare(state.program!, state.program!.name)} disabled={busy != null} data-testid="button-share-current"><Share2 size={14} /> Share current</button>}
         <button className="btn btn-sm" onClick={onImport} data-testid="button-import-program"><Upload size={14} /> Import</button>
+        <button className="btn btn-sm" onClick={() => setCreating(true)} data-testid="button-new-saved-program"><Plus size={14} /> Build one for later</button>
       </div>
       {saved.length > 0 && (
         <div className="mt-3">
@@ -69,11 +81,33 @@ export function ProgramLibrary({ onImport }: { onImport: () => void }) {
                 <div className="mono text-[11px]">{sp.program.days.length} days · {sp.program.days.reduce((a, d) => a + d.exercises.length, 0)} exercises · {shortDate(new Date(sp.savedAt).toISOString().slice(0, 10))}{sp.source !== "mine" && ` · from ${sp.from ?? sp.source}`}</div>
               </div>
               <button className="btn btn-sm btn-primary" onClick={() => load(sp)} data-testid={`button-load-saved-${sp.id}`}>Use</button>
+              <button className="icon-btn" aria-label="Edit" onClick={() => setEditing(sp.id)} data-testid={`button-edit-saved-${sp.id}`}><Pencil size={15} /></button>
               <button className="icon-btn" aria-label="Share" onClick={() => doShare(sp.program, sp.name)} data-testid={`button-share-saved-${sp.id}`}><Share2 size={15} /></button>
               <button className="icon-btn" aria-label="Delete" onClick={() => { if (window.confirm(`Delete "${sp.name}" from My programs?`)) set((s) => ({ ...s, savedPrograms: (s.savedPrograms ?? []).filter((x) => x.id !== sp.id) })); }} data-testid={`button-delete-saved-${sp.id}`}><Trash2 size={15} /></button>
             </div>
           ))}
         </div>
+      )}
+      {creating && (
+        <Sheet title="Build a program for later" onClose={() => setCreating(false)} testId="sheet-new-saved-program">
+          <p className="text-sm muted mb-3">It goes to My programs without touching what you're running now. Put it in your Year plan, or tap Use when you're ready.</p>
+          <button className="btn btn-outline btn-block" onClick={() => { const name = window.prompt("Name it", "New program")?.trim(); if (name) createFor({ name, startDate: dateKey(), days: [{ id: newId("day"), name: "Day 1", weekdays: [1], exercises: [] }] }); }} data-testid="button-new-blank">Start blank</button>
+          {state.program && <button className="btn btn-outline btn-block mt-2" onClick={() => createFor({ ...state.program!, name: `${state.program!.name} v2` })} data-testid="button-new-from-current">Start from my current program</button>}
+          <div className="label mt-4 mb-2">Or a template</div>
+          {TEMPLATES.map((t) => (
+            <button key={t.id} className="card w-full text-left" onClick={() => createFor(buildTemplate(t.id, state.profile?.units ?? "lb", state.profile?.experience ?? "intermediate", dateKey()))} data-testid={`button-new-template-${t.id}`}>
+              <div className="flex justify-between"><span className="font-semibold">{t.name}</span><span className="chip">{t.desc}</span></div>
+              <div className="text-xs muted mt-1">{t.days.map((d) => d.name).join(" · ")}</div>
+            </button>
+          ))}
+        </Sheet>
+      )}
+      {editSp && (
+        <Sheet title={editSp.name} onClose={() => setEditing(null)} full testId="sheet-edit-saved-program">
+          <p className="text-xs muted mb-3">Editing a saved program. What you're running now isn't affected. Changes save automatically.</p>
+          <ProgramEditor program={editSp.program} units={state.profile?.units ?? "lb"} sessions={state.sessions}
+            onChange={(p) => putSaved({ ...editSp, name: p.name || editSp.name, savedAt: Date.now(), program: p })} />
+        </Sheet>
       )}
       {share && (
         <Sheet title="Share program" onClose={() => setShare(null)} testId="sheet-share-program">
