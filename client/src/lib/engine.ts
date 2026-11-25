@@ -264,10 +264,73 @@ export function computeReadiness(ci: CheckIn | undefined, baseline: number | nul
 }
 
 /* =========================== program helpers =========================== */
-export function dayForDate(program: Program | null, date: string): ProgramDay | null {
+/**
+ * The program day planned for a date. Weekly programs go by weekday. Rotating programs (a cycle of days and rest days,
+ * e.g. 8 days long) need the workout history: pass `sessions` so the cycle follows what you actually did.
+ */
+export function dayForDate(program: Program | null, date: string, sessions: Session[] = [], today = dateKey()): ProgramDay | null {
   if (!program) return null;
+  if (isRotating(program)) {
+    const id = rotationSchedule(program, sessions, date, today).get(date) ?? null;
+    return id ? program.days.find((d) => d.id === id) ?? null : null;
+  }
   const wd = weekdayOf(date);
   return program.days.find((d) => d.weekdays.includes(wd)) ?? null;
+}
+
+export const isRotating = (p: Program | null | undefined): p is Program & { rotation: (string | null)[] } =>
+  !!p?.rotation?.length && p.rotation.some((x) => x && p.days.some((d) => d.id === x));
+
+const rotationCache = new WeakMap<Program, { sessions: Session[]; today: string; upTo: string; map: Map<string, string | null> }>();
+
+/**
+ * Replays a rotating program from its start date. Each date is either a rest slot or the next training slot.
+ * A training slot stays due until you do it (a missed day pushes the cycle back); rest slots pass with the calendar.
+ * Doing any day of the cycle (even early, on a rest day) moves the cycle to that day. Future dates assume you train on time.
+ * Returns date → day id (null = rest) for every date from the start through `to`.
+ */
+export function rotationSchedule(program: Program, sessions: Session[], to: string, today = dateKey()): Map<string, string | null> {
+  const hit = rotationCache.get(program);
+  if (hit && hit.sessions === sessions && hit.today === today && hit.upTo >= to) return hit.map;
+  const ahead = addDays(today, 62);
+  if (to < ahead) to = ahead; // compute two months ahead once, so week and calendar views reuse it
+  const cycle = (program.rotation ?? []).map((x) => (x && program.days.some((d) => d.id === x) ? x : null));
+  const L = cycle.length;
+  const map = new Map<string, string | null>();
+  const ids = new Set(cycle.filter(Boolean) as string[]);
+  const doneOn = new Map<string, string>();
+  for (const s of [...sessions].filter((s) => s.end && ids.has(s.dayId) && s.date >= program.startDate).sort((a, b) => a.start - b.start)) doneOn.set(s.date, s.dayId);
+  let pos = -1;
+  let last = addDays(program.startDate, -1);
+  const restAfter = (p: number) => { let r = 0; while (r < L && !cycle[(p + 1 + r + L) % L]) r++; return r; };
+  for (let cur = program.startDate; cur <= to && L; cur = addDays(cur, 1)) {
+    const r = restAfter(pos);
+    const k = daysBetween(last, cur);
+    const due = r >= L ? -1 : (pos + r + 1) % L;
+    const done = doneOn.get(cur);
+    if (done) {
+      // Which slot was done: the first slot with that day at or after the one that was due.
+      let q = due < 0 ? 0 : due;
+      for (let i = 0; i < L; i++) if (cycle[(q + i) % L] === done) { q = (q + i) % L; break; }
+      map.set(cur, done); pos = q; last = cur;
+    } else if (k <= r || due < 0) {
+      map.set(cur, null);
+    } else {
+      map.set(cur, cycle[due]);
+      if (cur >= today) { pos = due; last = cur; } // assume today and later happen on time
+    }
+  }
+  rotationCache.set(program, { sessions, today, upTo: to, map });
+  return map;
+}
+
+/** Where today sits in a rotating cycle, for "Day 3 of 8". */
+export function rotationPosition(program: Program, sessions: Session[], date = dateKey()): { slot: number; length: number } | null {
+  if (!isRotating(program)) return null;
+  const map = rotationSchedule(program, sessions, date, date);
+  const id = map.get(date);
+  if (!id) return null;
+  return { slot: program.rotation.indexOf(id) + 1, length: program.rotation.length };
 }
 export function dayMuscles(day: ProgramDay | null): Muscle[] {
   if (!day) return [];
@@ -275,7 +338,8 @@ export function dayMuscles(day: ProgramDay | null): Muscle[] {
   day.exercises.forEach((pe) => EX[pe.exId]?.primary.forEach((m) => s.add(m)));
   return [...s];
 }
-export const trainingDaysPerWeek = (p: Program | null) => (p ? new Set(p.days.flatMap((d) => d.weekdays)).size : 3);
+export const trainingDaysPerWeek = (p: Program | null) =>
+  !p ? 3 : isRotating(p) ? Math.round((p.rotation.filter((x) => x && p.days.some((d) => d.id === x)).length * 7 / p.rotation.length) * 10) / 10 : new Set(p.days.flatMap((d) => d.weekdays)).size;
 
 export function phaseInfo(program: Program | null, today: string, deloadRecommended: boolean) {
   if (!program) return { week: 0, phase: "No program", blockWeek: 0 };
@@ -432,7 +496,8 @@ export function weeklySets(sessions: Session[], from: string, to: string): Recor
   return out;
 }
 /** How many times a program day comes around in a week. A day with no weekdays picked yet counts once. */
-export const dayTimesPerWeek = (_program: Program, day: ProgramDay) => day.weekdays.length || 1;
+export const dayTimesPerWeek = (program: Program, day: ProgramDay) =>
+  isRotating(program) ? (program.rotation.filter((x) => x === day.id).length * 7) / program.rotation.length : day.weekdays.length || 1;
 
 /** Sets a program schedules per muscle per week: main 1, secondary 0.5, stabilizer 0.25, times how often each day runs. */
 export function programWeeklySets(program: Program): Record<Muscle, number> {
@@ -698,7 +763,7 @@ export function readinessSeries(state: AppState, today: string, days = 56): { da
   for (let i = days - 1; i >= 0; i--) {
     const d = addDays(today, -i);
     const ci = state.checkins.find((c) => c.date === d);
-    const r = computeReadiness(ci, hrvBaseline(state.checkins, d), dayMuscles(dayForDate(state.program, d)), trainingLoad(loadSessionsOf(state), d));
+    const r = computeReadiness(ci, hrvBaseline(state.checkins, d), dayMuscles(dayForDate(state.program, d, state.sessions)), trainingLoad(loadSessionsOf(state), d));
     out.push({ date: d, score: r.score });
   }
   return out;
@@ -822,7 +887,7 @@ export function weeklyReport(state: AppState, from: string, targets: NutritionTa
   const end = to < today ? to : today;
   const inWeek = state.sessions.filter((s) => s.end && s.date >= from && s.date <= to);
   let planned = 0;
-  for (let i = 0; i <= daysBetween(from, end); i++) if (dayForDate(state.program, addDays(from, i))) planned++;
+  for (let i = 0; i <= daysBetween(from, end); i++) if (dayForDate(state.program, addDays(from, i), state.sessions)) planned++;
   const rs = readinessSeries(state, end, daysBetween(from, end) + 1).map((x) => x.score).filter((x): x is number => x != null);
   const sleeps = state.checkins.filter((c) => c.date >= from && c.date <= to && c.sleepH != null).map((c) => c.sleepH as number);
   const prot = proteinByDate(state.meals), cals = caloriesByDate(state.meals);
@@ -832,7 +897,7 @@ export function weeklyReport(state: AppState, from: string, targets: NutritionTa
     if (prot[d] == null) continue;
     loggedDays++;
     if (prot[d] >= targets.protein * 0.95) proteinDays++;
-    const tgt = calTargetFor(targets, d, !!dayForDate(state.program, d));
+    const tgt = calTargetFor(targets, d, !!dayForDate(state.program, d, state.sessions));
     if (Math.abs(cals[d] - tgt) <= tgt * 0.1) calorieDays++;
   }
   const prs = inWeek.flatMap((s) => sessionPRs(state.sessions, s).map((p) => ({ ...p, date: s.date })));
@@ -981,7 +1046,7 @@ export function userStreak(state: AppState, today: string) {
   const done = trainedDates(state.sessions, state.activities);
   for (let i = 0; i < 120; i++) {
     const d = addDays(today, -i);
-    if (!dayForDate(state.program, d)) continue;
+    if (!dayForDate(state.program, d, state.sessions)) continue;
     if (done.has(d)) streak++;
     else if (i === 0) continue;
     else break;

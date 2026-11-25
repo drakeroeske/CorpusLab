@@ -76,7 +76,7 @@ function ProgramTab() {
             <span className="label">Program</span>
             <span className="mono text-[11px]" aria-live="polite" data-testid="text-autosave">{savedAt ? "Saved" : "Edits save automatically"}</span>
           </div>
-          <ProgramEditor program={program} units={profile.units} onChange={update} onSaveDay={setSaveDay} />
+          <ProgramEditor program={program} units={profile.units} onChange={update} onSaveDay={setSaveDay} sessions={state.sessions} />
         </>
       )}
       <div className="mt-6 mb-6"><SavedWorkoutsCard /></div>

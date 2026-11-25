@@ -177,7 +177,7 @@ function Crews({ goFriends }: { goFriends: () => void }) {
   const today = dateKey();
   const myLog = Array.from({ length: 14 }, (_, i) => {
     const date = addDays(today, i - 13);
-    const planned = !!dayForDate(state.program, date);
+    const planned = !!dayForDate(state.program, date, state.sessions);
     const done = state.sessions.some((x) => x.date === date && x.end);
     return { date, planned: planned && !done && date < today, done };
   });

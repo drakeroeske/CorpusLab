@@ -14,7 +14,7 @@ export function useToday() {
   setProteinTarget(targets.protein);
   const today = dateKey();
   return useMemo(() => {
-    const day = dayForDate(state.program, today);
+    const day = dayForDate(state.program, today, state.sessions);
     const checkin = state.checkins.find((c) => c.date === today);
     const muscles = dayMuscles(day);
     const readiness = computeReadiness(checkin, hrvBaseline(state.checkins, today), muscles, trainingLoad(loadSessionsOf(state), today));

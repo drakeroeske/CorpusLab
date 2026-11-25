@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { ArrowDown, ArrowUp, BookmarkPlus, ChevronDown, ChevronRight, Copy, GripVertical, Plus, Trash2 } from "lucide-react";
 import { moveItem, useDragReorder } from "./DragList";
-import type { Program, ProgramDay, ProgramExercise, Units } from "@/lib/types";
+import type { Program, ProgramDay, ProgramExercise, Session, Units } from "@/lib/types";
 import { EX, MUSCLES, MUSCLE_LABEL, isCompound, newId, isTimed } from "@/lib/exercises";
 import { ExerciseCatalog } from "./ExerciseCatalog";
 import { NumInput, Seg, Sheet } from "./ui";
-import { DEFAULT_INC_PCT, fmtW, jumpFor, programWeeklySets, r1, VOLUME_RANGE } from "@/lib/engine";
+import { DEFAULT_INC_PCT, fmtW, isRotating, jumpFor, programWeeklySets, r1, rotationPosition, VOLUME_RANGE } from "@/lib/engine";
 
 import { volumeStatus, WeeklySetsBars } from "./WeeklySetsBars";
 
@@ -111,7 +111,8 @@ function ScheduledSets({ program }: { program: Program }) {
   const sets = programWeeklySets(program);
   const by = (st: string) => MUSCLES.filter((m) => volumeStatus(m, sets[m]) === st).sort((a, b) => sets[a] - sets[b]);
   const low = by("low"), high = by("high"), ok = by("ok");
-  const unscheduled = program.days.filter((d) => d.exercises.length && !d.weekdays.length);
+  const rot = isRotating(program);
+  const unscheduled = program.days.filter((d) => d.exercises.length && (rot ? !program.rotation!.includes(d.id) : !d.weekdays.length));
   const empty = !program.days.some((d) => d.exercises.length);
   return (
     <div className="card mb-3" style={{ position: "sticky", top: 0, zIndex: 5 }} data-testid="card-scheduled-sets">
@@ -136,15 +137,56 @@ function ScheduledSets({ program }: { program: Program }) {
       {open && (
         <div className="mt-3" style={{ maxHeight: "55vh", overflowY: "auto" }}>
           <WeeklySetsBars sets={sets} testPrefix="scheduled-sets" />
-          <p className="text-[11px] faint mt-2">Planned working sets × how many days a week each day runs. Main muscle = 1 set, secondary = 0.5, stabilizer = 0.25. Target {VOLUME_RANGE.min}–{VOLUME_RANGE.max} for main muscles.</p>
+          <p className="text-[11px] faint mt-2">Planned working sets × how many times a week each day comes around{rot ? ` (a ${program.rotation!.length}-day cycle runs each day ${"7"}/${program.rotation!.length} times a week)` : ""}. Main muscle = 1 set, secondary = 0.5, stabilizer = 0.25. Target {VOLUME_RANGE.min}–{VOLUME_RANGE.max} for main muscles.</p>
         </div>
       )}
-      {unscheduled.length > 0 && <p className="text-[11px] faint mt-2" data-testid="text-scheduled-unassigned">{unscheduled.map((d) => d.name).join(", ")} {unscheduled.length === 1 ? "has" : "have"} no days picked yet, counted once a week.</p>}
+      {unscheduled.length > 0 && <p className="text-[11px] faint mt-2" data-testid="text-scheduled-unassigned">{unscheduled.map((d) => d.name).join(", ")} {rot ? `${unscheduled.length === 1 ? "isn't" : "aren't"} in the cycle, so not counted.` : `${unscheduled.length === 1 ? "has" : "have"} no days picked yet, counted once a week.`}</p>}
     </div>
   );
 }
 
-export function ProgramEditor({ program, units, onChange, onSaveDay }: { program: Program; units: Units; onChange: (p: Program) => void; onSaveDay?: (d: ProgramDay) => void }) {
+/** Default cycle when switching to rotating: this week's pattern from Monday, or every day in order then a rest day. */
+function defaultRotation(program: Program): (string | null)[] {
+  const byWd = [1, 2, 3, 4, 5, 6, 0].map((wd) => program.days.find((d) => d.weekdays.includes(wd))?.id ?? null);
+  if (byWd.some(Boolean)) return byWd;
+  return [...program.days.map((d) => d.id), null];
+}
+
+function RotationEditor({ program, sessions, onChange }: { program: Program; sessions: Session[]; onChange: (p: Program) => void }) {
+  const cycle = program.rotation ?? [];
+  const set = (c: (string | null)[]) => onChange({ ...program, rotation: c });
+  const training = cycle.filter(Boolean).length;
+  const pos = rotationPosition(program, sessions);
+  return (
+    <div className="card mb-3" data-testid="card-rotation">
+      <div className="label">Cycle · {cycle.length} days</div>
+      <p className="text-xs muted mt-1" data-testid="text-rotation-summary">
+        {training} training, {cycle.length - training} rest, then it repeats. {pos ? `Today is day ${pos.slot} of ${pos.length}.` : "Today is a rest day."} Miss a training day and the cycle waits for you.
+      </p>
+      <div className="stack mt-3" style={{ gap: 6 }}>
+        {cycle.map((id, i) => (
+          <div key={i} className="flex items-center gap-2" data-testid={`rotation-slot-${i}`}>
+            <span className="mono text-xs muted" style={{ width: 22 }}>{i + 1}</span>
+            <select className="input flex-1 min0" value={id ?? ""} onChange={(e) => set(cycle.map((x, j) => (j === i ? e.target.value || null : x)))} data-testid={`select-rotation-${i}`}>
+              <option value="">Rest</option>
+              {program.days.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+            <button className="icon-btn" aria-label="Move up" disabled={i === 0} onClick={() => set(moveItem(cycle, i, i - 1))} data-testid={`button-rotation-up-${i}`}><ArrowUp size={14} /></button>
+            <button className="icon-btn" aria-label="Move down" disabled={i === cycle.length - 1} onClick={() => set(moveItem(cycle, i, i + 1))} data-testid={`button-rotation-down-${i}`}><ArrowDown size={14} /></button>
+            <button className="icon-btn" aria-label="Remove from cycle" disabled={cycle.length <= 1} onClick={() => set(cycle.filter((_, j) => j !== i))} data-testid={`button-rotation-remove-${i}`}><Trash2 size={14} /></button>
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-2 mt-3">
+        <button className="btn btn-outline" onClick={() => set([...cycle, program.days.find((d) => !cycle.includes(d.id))?.id ?? program.days[0]?.id ?? null])} data-testid="button-rotation-add-day"><Plus size={16} /> Training day</button>
+        <button className="btn btn-outline" onClick={() => set([...cycle, null])} data-testid="button-rotation-add-rest"><Plus size={16} /> Rest day</button>
+      </div>
+    </div>
+  );
+}
+
+export function ProgramEditor({ program, units, onChange, onSaveDay, sessions = [] }: { program: Program; units: Units; onChange: (p: Program) => void; onSaveDay?: (d: ProgramDay) => void; sessions?: Session[] }) {
+  const rotating = !!program.rotation?.length;
   const [openDay, setOpenDay] = useState<string | null>(program.days[0]?.id ?? null);
   const setDay = (id: string, fn: (d: ProgramDay) => ProgramDay) => onChange({ ...program, days: program.days.map((d) => (d.id === id ? fn(d) : d)) });
   const usedWeekdays = (except: string) => new Set(program.days.filter((d) => d.id !== except).flatMap((d) => d.weekdays));
@@ -163,6 +205,13 @@ export function ProgramEditor({ program, units, onChange, onSaveDay }: { program
         <span className="label">Program name</span>
         <input className="input" value={program.name} onChange={(e) => onChange({ ...program, name: e.target.value })} data-testid="input-program-name" />
       </label>
+      <div className="field mb-3">
+        <span className="label">Schedule</span>
+        <Seg value={rotating ? "rotation" : "weekly"} onChange={(v) => onChange({ ...program, rotation: v === "rotation" ? defaultRotation(program) : null })}
+          options={[{ v: "weekly", l: "Same days each week" }, { v: "rotation", l: "Rotating cycle" }]} testId="seg-program-schedule" />
+        <p className="text-xs faint mt-1">{rotating ? "Days run in order with rest days built in, like a 6- or 8-day split, regardless of the weekday." : "Each day is tied to weekdays."}</p>
+      </div>
+      {rotating && <RotationEditor program={program} sessions={sessions} onChange={onChange} />}
       <ScheduledSets program={program} />
       {program.days.length > 1 && <p className="text-xs muted mb-2">Hold the grip to drag days or exercises into a new order.</p>}
       <div className="stack" ref={dayDrag.containerRef}>
@@ -177,6 +226,9 @@ export function ProgramEditor({ program, units, onChange, onSaveDay }: { program
                 <button className="icon-btn" onClick={() => setOpenDay(open ? null : d.id)} aria-label="Toggle day" data-testid={`toggle-day-${d.id}`}>{open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</button>
                 <input className="input font-semibold min0" value={d.name} onChange={(e) => setDay(d.id, (x) => ({ ...x, name: e.target.value }))} data-testid={`input-day-name-${d.id}`} />
               </div>
+              {rotating ? (
+                <p className="text-xs muted mt-2" data-testid={`text-day-cycle-${d.id}`}>{(() => { const n = program.rotation!.filter((x) => x === d.id).length; return n ? `${n}× per ${program.rotation!.length}-day cycle` : "Not in the cycle yet"; })()}</p>
+              ) : (
               <div className="grid grid-cols-7 gap-1 mt-3">
                 {WD.map((w, i) => {
                   const on = d.weekdays.includes(i);
@@ -189,12 +241,13 @@ export function ProgramEditor({ program, units, onChange, onSaveDay }: { program
                   );
                 })}
               </div>
+              )}
               <div className="flex items-center justify-between gap-2 mt-2">
                 <span className="text-xs muted">{d.exercises.length} exercises · {d.exercises.reduce((a, e) => a + e.sets, 0)} sets</span>
                 <span className="flex items-center gap-1">
                   {onSaveDay && <button className="icon-btn" aria-label={`Save ${d.name} as a workout`} title="Save as workout" disabled={!d.exercises.length} onClick={() => onSaveDay(d)} data-testid={`button-save-day-${d.id}`}><BookmarkPlus size={16} /></button>}
                   <button className="icon-btn" aria-label="Duplicate day" title="Duplicate day" onClick={() => duplicateDay(d)} data-testid={`button-duplicate-day-${d.id}`}><Copy size={16} /></button>
-                  <button className="icon-btn" aria-label="Delete day" title="Delete day" onClick={() => { if (!d.exercises.length || confirm(`Delete ${d.name}?`)) onChange({ ...program, days: program.days.filter((x) => x.id !== d.id) }); }} data-testid={`button-delete-day-${d.id}`}><Trash2 size={16} /></button>
+                  <button className="icon-btn" aria-label="Delete day" title="Delete day" onClick={() => { if (!d.exercises.length || confirm(`Delete ${d.name}?`)) onChange({ ...program, days: program.days.filter((x) => x.id !== d.id), rotation: program.rotation ? program.rotation.map((x) => (x === d.id ? null : x)) : program.rotation }); }} data-testid={`button-delete-day-${d.id}`}><Trash2 size={16} /></button>
                 </span>
               </div>
               {open && (
@@ -204,7 +257,7 @@ export function ProgramEditor({ program, units, onChange, onSaveDay }: { program
           );
         })}
       </div>
-      <button className="btn btn-block mt-3" onClick={() => { const id = newId("day"); onChange({ ...program, days: [...program.days, { id, name: `Day ${program.days.length + 1}`, weekdays: [], exercises: [] }] }); setOpenDay(id); }} data-testid="button-add-day"><Plus size={16} /> Add training day</button>
+      <button className="btn btn-block mt-3" onClick={() => { const id = newId("day"); onChange({ ...program, days: [...program.days, { id, name: `Day ${program.days.length + 1}`, weekdays: [], exercises: [] }], rotation: rotating ? [...program.rotation!, id] : program.rotation }); setOpenDay(id); }} data-testid="button-add-day"><Plus size={16} /> Add training day</button>
     </div>
   );
 }

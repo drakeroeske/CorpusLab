@@ -7,7 +7,7 @@ import { useUI } from "@/App";
 import { newSession, prescriptionsFor, sessionSummary, useToday } from "@/lib/derived";
 import { StartWorkoutSheet } from "@/components/StartWorkout";
 import { TodayGoals } from "@/components/Goals";
-import { addDays, fmtDate, fmtW, proteinByDate, caloriesByDate, calTargetFor, isCutting } from "@/lib/engine";
+import { addDays, dayForDate, fmtDate, fmtW, proteinByDate, caloriesByDate, calTargetFor, isCutting, rotationPosition } from "@/lib/engine";
 import { EX, MUSCLE_LABEL, isTimed, newId } from "@/lib/exercises";
 import { Bar } from "@/components/ui";
 import { EngineHeader, Tag } from "@/components/riso";
@@ -35,6 +35,11 @@ export default function Today() {
   const { state, set, profile, targets } = useStore();
   const ui = useUI();
   const t = useToday();
+  const cyclePos = state.program ? rotationPosition(state.program, state.sessions, t.today) : null;
+  const nextUp = (() => {
+    for (let i = 1; i <= 14; i++) { const d = dayForDate(state.program, addDays(t.today, i), state.sessions, t.today); if (d) return { day: d, inDays: i }; }
+    return null;
+  })();
   const notifNudge = useNotifNudgeVisible();
   const [why, setWhy] = useState(false);
   const [showList, setShowList] = useState(false);
@@ -167,7 +172,7 @@ export default function Today() {
           <section className="card" data-testid="card-today-session">
             <div className="flex items-start justify-between gap-2">
               <div className="font-bold text-[17px]">{day.name}</div>
-              {t.inDeload && <Tag>Deload week</Tag>}
+              {t.inDeload ? <Tag>Deload week</Tag> : cyclePos && <span className="label" data-testid="text-cycle-day">Day {cyclePos.slot} of {cyclePos.length}</span>}
             </div>
             <div className="text-sm muted mt-0.5 flex items-center flex-wrap">
               {rxs.length} exercises ·&nbsp;<Term k="workingSets">{totalSets} working sets</Term>&nbsp;· ~{estMinutes(totalSets)} min
@@ -202,6 +207,7 @@ export default function Today() {
           <section className="card" data-testid="card-rest-day">
             <div className="font-bold text-[17px]">Rest day</div>
             <p className="text-sm muted mt-1">Fatigue is clearing. Hitting your protein and sleep is today's training.</p>
+            {nextUp && <p className="text-sm mt-1" data-testid="text-next-up">Next up: <b>{nextUp.day.name}</b> {nextUp.inDays === 1 ? "tomorrow" : `in ${nextUp.inDays} days`}</p>}
             <button className="btn btn-outline btn-block mt-3" onClick={() => (state.activeSession ? start() : setStartOpen(true))} data-testid="button-train-anyway">{state.activeSession ? "Resume workout" : "Train anyway"}</button>
           </section>
         )}
